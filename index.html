@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pacclone Multi</title>
+    <style>
+        :root {
+            --dpad-size: clamp(120px, 25vmin, 160px);
+            --dash-btn-size: clamp(70px, 18vmin, 85px);
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: monospace; /* Fallback to monospace for a retro feel */
+            overflow: hidden; /* Prevent scrollbars */
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 600px; /* Set a max-width for larger screens */
+        }
+        canvas {
+            background-color: #000;
+            border: 2px solid #fff;
+            display: block;
+            margin-bottom: 20px;
+            width: 100%; /* Make canvas responsive */
+            height: auto; /* Maintain aspect ratio */
+            aspect-ratio: 1 / 1; /* Enforce 1:1 aspect ratio */
+            image-rendering: pixelated; /* Keep pixels sharp when scaling */
+        }
+        /* Hide game elements by default until the game starts */
+        #game-info, #gameCanvas, #controls-info {
+            display: none;
+        }
+        #game-info {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 10px;
+            font-size: clamp(0.75rem, 2.5vw, 1.2rem);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        #player-scores {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .player-hud {
+            border: 1px solid;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            min-width: 120px;
+            position: relative;
+        }
+        .player-hud.inactive {
+            opacity: 0.4;
+            border-style: dashed;
+        }
+        .player-hud .winner-text {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: black;
+            padding: 0 5px;
+            font-size: 0.9em;
+            font-weight: bold;
+            color: lime;
+        }
+        #control-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            color: #aaa; /* Default color for the icon */
+        }
+        #control-status svg {
+            width: 100%;
+            height: 100%;
+            fill: currentColor; /* Use the color from the parent */
+        }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: clamp(1rem, 3vw, 2rem);
+            color: yellow;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.85);
+            padding: 20px 40px;
+            border-radius: 10px;
+            border: 2px solid #fff;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 90%;
+            max-width: 500px;
+        }
+        #message h1 {
+            font-size: clamp(1.8rem, 8vw, 2.5rem);
+            margin: 0 0 15px 0;
+            color: yellow;
+            text-shadow: 3px 3px 0px #f00;
+            letter-spacing: 4px;
+        }
+        #high-scores {
+            width: 100%;
+        }
+        #high-scores table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: clamp(0.5rem, 2.2vw, 0.6em);
+            margin-bottom: 20px;
+        }
+        #high-scores th, #high-scores td {
+            padding: 5px;
+            text-align: center;
+        }
+        #high-scores th {
+            color: cyan;
+            border-bottom: 1px solid cyan;
+        }
+        #high-scores td:nth-child(1) { text-align: right; padding-right: 15px; color: #ccc; } /* Rank */
+        #high-scores td:nth-child(2) { text-align: right; padding-right: 15px; } /* Score */
+        #high-scores td:nth-child(3) { text-align: left; } /* Name */
+
+        #message-buttons {
+            display: flex;
+            gap: 15px;
+        }
+        #message-buttons button {
+            padding: 10px 20px;
+            font-size: 0.8em;
+            font-family: monospace;
+            color: #000;
+            background-color: #fff;
+            border: 2px solid yellow;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        #message-buttons button:hover:not(:disabled) {
+            background-color: yellow;
+            color: #000;
+        }
+        #message-buttons button:disabled {
+            background-color: #333;
+            color: #777;
+            border-color: #777;
+            cursor: not-allowed;
+        }
+        #highscore-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+        }
+        #highscore-form input {
+            width: 4em;
+            height: 1.5em;
+            font-size: 1em;
+            text-align: center;
+            background-color: #111;
+            color: #fff;
+            border: 2px solid yellow;
+            font-family: monospace;
+            text-transform: uppercase;
+        }
+        #highscore-form button {
+            font-size: 0.6em;
+            padding: 8px 16px;
+        }
+        #mute-button {
+            background-color: #111;
+            color: #fff;
+            border: 1px solid #fff;
+            font-family: monospace;
+            cursor: pointer;
+            padding: 5px 10px;
+            font-size: 0.8em;
+        }
+        #mute-button:hover {
+            background-color: #333;
+        }
+        #speed-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.8em;
+        }
+        #speed-control input[type="range"] {
+            vertical-align: middle;
+        }
+        #speed-value {
+            width: 3em;
+            text-align: right;
+        }
+        #controls-info {
+            margin-top: 10px;
+            font-size: clamp(0.7rem, 2vw, 0.9rem);
+            color: #aaa;
+            text-align: center;
+        }
+        /* --- Lobby Styles --- */
+        #lobby-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            gap: 10px;
+        }
+        .player-slot {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border: 2px solid #555;
+            border-radius: 5px;
+            font-size: 0.8em;
+            transition: border-color 0.3s;
+        }
+        .player-slot.joined {
+            border-style: solid;
+        }
+        .player-slot.local-player {
+            box-shadow: 0 0 8px yellow;
+        }
+        .player-slot .player-name {
+            font-weight: bold;
+        }
+        .player-slot button {
+            padding: 5px 15px;
+            font-size: 0.9em;
+            font-family: monospace;
+            cursor: pointer;
+        }
+        #network-status {
+            font-size: 0.6em;
+            color: #aaa;
+            margin-top: 15px;
+            height: 1.2em;
+        }
+        /* --- Touch Controls --- */
+        #touch-controls {
+            display: none; /* Hidden by default, JS will show it */
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            height: var(--dpad-size);
+            pointer-events: none; /* Container doesn't block clicks, children will override */
+            z-index: 10;
+        }
+        #dpad {
+            position: absolute;
+            bottom: 0;
+            width: var(--dpad-size);
+            height: var(--dpad-size);
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: 1fr 1fr 1fr;
+            pointer-events: auto; /* This area is interactive */
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            font-size: clamp(8px, 2vmin, 12px); /* Base for em units in arrows */
+        }
+        .dpad-btn {
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            position: relative;
+        }
+        .dpad-btn:active {
+            background-color: rgba(255, 255, 255, 0.5);
+        }
+        #dpad-up {
+            grid-column: 2;
+            grid-row: 1;
+            border-radius: 5px 5px 0 0;
+        }
+        #dpad-down {
+            grid-column: 2;
+            grid-row: 3;
+            border-radius: 0 0 5px 5px;
+        }
+        #dpad-left {
+            grid-column: 1;
+            grid-row: 2;
+            border-radius: 5px 0 0 5px;
+        }
+        #dpad-right {
+            grid-column: 3;
+            grid-row: 2;
+            border-radius: 0 5px 5px 0;
+        }
+        .dpad-btn::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border-style: solid;
+            border-color: transparent;
+        }
+        #dpad-up::after {
+            border-width: 0 1.25em 1.875em 1.25em;
+            border-bottom-color: rgba(255, 255, 255, 0.8);
+            transform: translate(-50%, -60%);
+        }
+        #dpad-down::after {
+            border-width: 1.875em 1.25em 0 1.25em;
+            border-top-color: rgba(255, 255, 255, 0.8);
+            transform: translate(-50%, -40%);
+        }
+        #dpad-left::after {
+            border-width: 1.25em 1.875em 1.25em 0;
+            border-right-color: rgba(255, 255, 255, 0.8);
+            transform: translate(-60%, -50%);
+        }
+        #dpad-right::after {
+            border-width: 1.25em 0 1.25em 1.875em;
+            border-left-color: rgba(255, 255, 255, 0.8);
+            transform: translate(-40%, -50%);
+        }
+        #dash-button-touch {
+            position: absolute;
+            bottom: 15px; /* Aligned with joystick area */
+            width: var(--dash-btn-size);
+            height: var(--dash-btn-size);
+            border-radius: 50%;
+            background-color: rgba(255, 255, 0, 0.4);
+            border: 2px solid yellow;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(0.9rem, 3vmin, 1.2rem);
+            font-family: monospace;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: auto; /* Interactive */
+            user-select: none; /* Prevent text selection */
+            -webkit-user-select: none; /* for iOS */
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+        }
+        #dash-button-touch:active {
+            background-color: rgba(255, 255, 0, 0.7);
+        }
+        
+        /* --- Touch Controls Layout --- */
+        /* Default (Right-handed) Layout */
+        #touch-controls:not(.left-hand-layout) #dpad {
+            left: 0;
+        }
+        #touch-controls:not(.left-hand-layout) #dash-button-touch {
+            right: 15px;
+        }
+        /* Swapped (Left-handed) Layout */
+        #touch-controls.left-hand-layout #dpad {
+            right: 0;
+        }
+        #touch-controls.left-hand-layout #dash-button-touch {
+            left: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="game-info">
+            <div id="player-scores"></div>
+            <div id="control-status" title="Active Control Method"></div>
+            <div id="speed-control">
+                <label for="speed-slider">Speed:</label>
+                <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1" title="Adjust Game Speed">
+                <span id="speed-value">1.0x</span>
+            </div>
+            <button id="mute-button" title="Toggle Sound (M)">Mute</button>
+        </div>
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
+        <div id="controls-info">
+            P1: Arrows, Space | P2: WASD, Shift | P: Pause | R: Reset
+        </div>
+    </div>
+    <div id="message">
+        <div id="message-text"></div>
+        <div id="message-buttons"></div>
+    </div>
+    <div id="touch-controls">
+        <div id="dpad">
+            <div id="dpad-up" class="dpad-btn"></div>
+            <div id="dpad-down" class="dpad-btn"></div>
+            <div id="dpad-left" class="dpad-btn"></div>
+            <div id="dpad-right" class="dpad-btn"></div>
+        </div>
+        <div id="dash-button-touch">DASH</div>
+    </div>
+
+    <script>
+        // --- Game Constants ---
+        const TILE_SIZE = 30;
+        const MAP_WIDTH = 20;
+        const MAP_HEIGHT = 20;
+        const DASH_DURATION = 200;
+        const DASH_TILES = 3;
+        const CONTROLS_PREFERENCE_KEY = 'paccloneControlsPref';
+        const HIGH_SCORES_KEY = 'paccloneHighScores';
+        const MAX_HIGH_SCORES = 10;
+        const FRIGHTENED_DURATION = 8000;
+
+        const ICONS = {
+            keyboard: `<svg viewBox="0 0 24 24" fill="currentColor" title="Keyboard"><path d="M15.5 13.5h-7v-3h7v3z M12 3L9.5 7h5L12 3zm0 18l2.5-4h-5L12 21zM21 12l-4 2.5v-5L21 12zM3 12l4-2.5v5L3 12z"/></svg>`,
+            touch: `<svg viewBox="0 0 24 24" fill="currentColor" title="Touch Controls"><path d="M15 9v-4h-6v4H5v6h4v4h6v-4h4V9h-4z"/></svg>`,
+            gamepad: `<svg viewBox="0 0 24 24" fill="currentColor" title="Gamepad"><path d="M9.5,5.5 C 5.5,5.5 5.5,9 2,9 L 2,15 C 5.5,15 5.5,18.5 9.5,18.5 H 14.5 C 18.5,18.5 18.5,15 22,15 V 9 C 18.5,9 18.5,5.5 14.5,5.5 H 9.5 Z M8 11H5v2h3v3h2v-3h3v-2h-3V8h-2v3z M 15,10 a 1 1 0 1 0 2 0 a 1 1 0 1 0 -2 0 z M 17,12 a 1 1 0 1 0 2 0 a 1 1 0 1 0 -2 0 z"/></svg>`
+        };
+
+        class Player {
+            constructor(id, color, controls) {
+                this.id = id;
+                this.color = color;
+                this.controls = controls; // Keep controls for client-side input mapping
+                this.radius = TILE_SIZE / 2 - 2;
+                
+                // State will be synced from server
+                this.x = 0;
+                this.y = 0;
+                this.dx = 0;
+                this.dy = 0;
+                this.mouthOpen = true;
+                this.mouthAngle = 0;
+                this.animationFrame = 0;
+                this.lastDx = 0;
+                this.lastDy = 0;
+                this.phaseDashAvailable = true;
+                this.isDashing = false;
+                this.powerUpTimer = 0;
+                this.invulnerabilityTimer = 0;
+                this.score = 0;
+                this.lives = 0;
+                this.isActive = false;
+                this.isSpectator = false;
+                this.isWinner = false;
+            }
+        }
+
+        /**
+         * Manages real-time network communication for the game using WebSockets.
+         */
+        class NetworkManager {
+            constructor() {
+                this.eventHandlers = new Map();
+                this.ws = null;
+                this.connected = false;
+                this.serverUrl = 'ws://localhost:8080'; // Standard local dev WebSocket port
+                this.clientId = null;
+            }
+
+            connect() {
+                console.log(`[NETWORK] Attempting to connect to ${this.serverUrl}...`);
+                this.updateNetworkStatus(`Connecting to ${this.serverUrl}...`, '#aaa');
+
+                try {
+                    this.ws = new WebSocket(this.serverUrl);
+                } catch (error) {
+                    console.error('[NETWORK] WebSocket constructor failed:', error);
+                    this.updateNetworkStatus('Connection Failed (Invalid URL?)', 'red');
+                    return;
+                }
+
+                this.ws.onopen = () => {
+                    this.connected = true;
+                    console.log('[NETWORK] WebSocket connection established.');
+                    this.updateNetworkStatus('Connected', 'lime');
+                };
+
+                this.ws.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        // console.log('[NETWORK_RECV]', message);
+                        if (message.event && this.eventHandlers.has(message.event)) {
+                             if (message.event === 'connected') {
+                                this.clientId = message.payload.clientId;
+                            }
+                            this.eventHandlers.get(message.event).forEach(callback => callback(message.payload));
+                        }
+                    } catch (e) {
+                        console.error('[NETWORK] Error parsing message from server:', event.data, e);
+                    }
+                };
+
+                this.ws.onclose = (event) => {
+                    const wasConnected = this.connected;
+                    this.connected = false;
+                    const reason = event.reason || (event.code === 1006 ? 'Abnormal closure; server may be down.' : 'No reason given.');
+                    console.warn(`[NETWORK] WebSocket connection closed. Code: ${event.code}. Reason: ${reason}`);
+
+                    if (!wasConnected) {
+                        this.updateNetworkStatus('Connection Failed. Is the server running?', 'red');
+                    } else {
+                        this.updateNetworkStatus('Connection Closed.', 'orange');
+                    }
+                    this.ws = null;
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error('[NETWORK] WebSocket error occurred. This typically means the connection to the server could not be established. Please ensure the server is running and accessible at the specified URL.');
+                };
+            }
+
+            on(eventName, callback) {
+                if (!this.eventHandlers.has(eventName)) {
+                    this.eventHandlers.set(eventName, []);
+                }
+                this.eventHandlers.get(eventName).push(callback);
+            }
+
+            send(eventName, payload) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    const message = JSON.stringify({ event: eventName, payload: payload });
+                    // console.log(`[NETWORK_SEND] Event: ${eventName}`, payload);
+                    this.ws.send(message);
+                } else {
+                    console.warn('[NETWORK] Could not send message, WebSocket is not open.');
+                }
+            }
+            
+            updateNetworkStatus(text, color) {
+                const statusEl = document.getElementById('network-status');
+                if (statusEl) {
+                    statusEl.textContent = text;
+                    statusEl.style.color = color;
+                }
+                 if (game && game.paused) {
+                    const messageContainer = document.getElementById('message');
+                    const messageText = document.getElementById('message-text');
+                    let pauseHTML = `PAUSED<br><div id="network-status" style="font-size: 0.6em; color: ${color};">${text}</div>`;
+                    messageText.innerHTML = pauseHTML;
+                }
+            }
+        }
+
+        /**
+         * Manages the pre-game lobby screen where players can join.
+         */
+        class GameLobby {
+            constructor(networkManager) {
+                this.networkManager = networkManager;
+                this.lobbyState = {
+                    slots: [
+                        { id: 1, color: 'yellow', joined: false, clientId: null },
+                        { id: 2, color: '#4ade80', joined: false, clientId: null },
+                    ],
+                };
+            }
+
+            init() {
+                document.getElementById('game-container').style.display = 'flex';
+                document.getElementById('game-info').style.display = 'none';
+                document.getElementById('gameCanvas').style.display = 'none';
+                document.getElementById('controls-info').style.display = 'none';
+
+                const messageContainer = document.getElementById('message');
+                const messageText = document.getElementById('message-text');
+                const messageButtons = document.getElementById('message-buttons');
+
+                messageText.innerHTML = `<h1>PACCLONE MULTI</h1><div id="lobby-container"></div><div id="network-status">Connecting...</div>`;
+                messageButtons.innerHTML = `<button id="start-game-btn" disabled>Start Game</button>`;
+                
+                this.render();
+
+                const lobbyContainer = document.getElementById('lobby-container');
+                lobbyContainer.addEventListener('click', (e) => {
+                    if (e.target.matches('.join-btn')) {
+                        const playerId = parseInt(e.target.dataset.playerId, 10);
+                        this.handleJoin(playerId);
+                    }
+                });
+                
+                document.getElementById('start-game-btn').addEventListener('click', () => this.handleStart());
+                messageContainer.style.display = 'flex';
+            }
+            
+            updateState(newLobbyState) {
+                this.lobbyState = newLobbyState;
+                this.render();
+            }
+
+            render() {
+                const lobbyContainer = document.getElementById('lobby-container');
+                if (!lobbyContainer) return;
+                
+                let lobbyHTML = '';
+                this.lobbyState.slots.forEach(slot => {
+                    const isLocalPlayer = slot.clientId === this.networkManager.clientId;
+                    const joinedClass = slot.joined ? 'joined' : '';
+                    const localClass = isLocalPlayer ? 'local-player' : '';
+
+                    const buttonHTML = slot.joined 
+                        ? `<span>${isLocalPlayer ? 'YOU' : 'JOINED'}</span>` 
+                        : `<button class="join-btn" data-player-id="${slot.id}">Join</button>`;
+
+                    lobbyHTML += `
+                        <div class="player-slot ${joinedClass} ${localClass}" style="border-color: ${slot.color};">
+                            <span class="player-name" style="color: ${slot.color};">PLAYER ${slot.id}</span>
+                            ${buttonHTML}
+                        </div>
+                    `;
+                });
+                lobbyContainer.innerHTML = lobbyHTML;
+
+                const joinedPlayers = this.lobbyState.slots.filter(p => p.joined).length;
+                const localPlayerIsJoined = this.lobbyState.slots.some(p => p.clientId === this.networkManager.clientId);
+                document.getElementById('start-game-btn').disabled = joinedPlayers < 1 || !localPlayerIsJoined;
+            }
+
+            handleJoin(playerId) {
+                this.networkManager.send('joinLobby', { slotId: playerId });
+            }
+            
+            handleStart() {
+                this.networkManager.send('startGame', {});
+            }
+        }
+        
+        // --- Game State Variables ---
+        let game = null;
+        let networkManager = null;
+        let lobby = null;
+        let localPlayerId = null;
+
+        let highScores = [];
+        let animationFrameId;
+
+        // --- Gamepad State ---
+        let gamepadIndex = null;
+        let lastButtons = [];
+        let isTouchDevice = 'ontouchstart' in window;
+
+        // --- Audio Context & Sounds ---
+        let audioContext;
+        let isMuted = false;
+        let muteButton;
+
+        function toggleMute() { isMuted = !isMuted; updateMuteButtonDisplay(); }
+        function updateMuteButtonDisplay() { if (muteButton) { muteButton.textContent = isMuted ? 'Unmute' : 'Mute'; muteButton.title = isMuted ? 'Toggle Sound On (M)' : 'Toggle Sound Off (M)'; } }
+        function initializeAudio() { if (audioContext) { if (audioContext.state === 'suspended') { audioContext.resume(); } return; } try { audioContext = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { console.error("Web Audio API is not supported in this browser."); } }
+        function playChompSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = 0.05; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'square'; const baseFreq = 300; oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 50 - 25), now); gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.1, now + 0.02); gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration ); oscillator.start(now); oscillator.stop(now + duration); }
+        function playMoveSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = 0.15; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'square'; const baseFreq = 30; oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 20 - 10), now ); gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.09, now + 0.02); gainNode.gain.exponentialRampToValueAtTime(0.005, now + duration ); oscillator.start(now); oscillator.stop(now + duration ); }
+        function playPowerupSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = 0.4; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); const lfo = audioContext.createOscillator(); const lfoGain = audioContext.createGain(); lfo.type = 'sine'; lfo.frequency.setValueAtTime(10, now); lfoGain.gain.setValueAtTime(50, now); lfo.connect(lfoGain); lfoGain.connect(oscillator.frequency); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(440, now); gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.3, now + 0.05); gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); lfo.start(now); lfo.stop(now + duration); oscillator.start(now); oscillator.stop(now + duration); }
+        function playEatGhostSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = 0.2; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'square'; oscillator.frequency.setValueAtTime(500, now); oscillator.frequency.exponentialRampToValueAtTime(1200, now + duration); gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.4, now + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); oscillator.start(now); oscillator.stop(now + duration); }
+        function playDeathSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = .9; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'sawtooth'; oscillator.frequency.setValueAtTime(400, now); oscillator.frequency.exponentialRampToValueAtTime(50, now + duration); gainNode.gain.setValueAtTime(0.5, now); gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); oscillator.start(now); oscillator.stop(now + duration); }
+        function playGameOverSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const durationPerNote = 0.25; const notes = [330, 220, 165, 110, 55]; const volume = 0.4; notes.forEach((freq, index) => { const startTime = now + index * durationPerNote; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(freq, startTime); gainNode.gain.setValueAtTime(0, startTime); gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.02); gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durationPerNote); oscillator.start(startTime); oscillator.stop(startTime + durationPerNote); }); }
+        function playWinSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const durationPerNote = 0.08; const notes = [ { freq: 523.25, dur: durationPerNote * 1.5 }, { freq: 659.25, dur: durationPerNote * 1.5 }, { freq: 783.99, dur: durationPerNote * 1.5 }, { freq: 1046.50, dur: durationPerNote * 3 } ]; const volume = 0.4; let cumulativeTime = now; notes.forEach(({ freq, dur }) => { const noteStartTime = cumulativeTime; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(freq, noteStartTime); gainNode.gain.setValueAtTime(0, noteStartTime); gainNode.gain.linearRampToValueAtTime(volume, noteStartTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + dur * 0.9); oscillator.start(noteStartTime); oscillator.stop(noteStartTime + dur); cumulativeTime += dur; }); }
+        function playDashSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = 0.4; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'sawtooth'; oscillator.frequency.setValueAtTime(2500, now); oscillator.frequency.exponentialRampToValueAtTime(150, now + duration); gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.2, now + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); oscillator.start(now); oscillator.stop(now + duration); const bufferSize = audioContext.sampleRate * duration; const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate); const output = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; } const noiseSource = audioContext.createBufferSource(); noiseSource.buffer = buffer; const noiseGain = audioContext.createGain(); noiseSource.connect(noiseGain); noiseGain.connect(audioContext.destination); noiseGain.gain.setValueAtTime(0, now); noiseGain.gain.linearRampToValueAtTime(0.15, now + 0.02); noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration); noiseSource.start(now); noiseSource.stop(now + duration); }
+        function playCelebrateSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const durationPerNote = 0.1; const notes = [261.63, 329.63, 392.00, 523.25]; const volume = 0.35; notes.forEach((freq, index) => { const startTime = now + index * durationPerNote; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(freq, startTime); gainNode.gain.setValueAtTime(0, startTime); gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durationPerNote); oscillator.start(startTime); oscillator.stop(startTime + durationPerNote); }); }
+        function playHighScoreSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const noteDuration = 0.08; const gap = 0.02; const startTime = now + 0.1; const volume = 0.35; const notes = [523.25, 659.25, 783.99, 1046.50, 783.99, 659.25, 523.25]; notes.forEach((freq, index) => { const noteStartTime = startTime + index * (noteDuration + gap); const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'square'; oscillator.frequency.setValueAtTime(freq, noteStartTime); gainNode.gain.setValueAtTime(0, noteStartTime); gainNode.gain.linearRampToValueAtTime(volume, noteStartTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + noteDuration); oscillator.start(noteStartTime); oscillator.stop(noteStartTime + noteDuration); }); }
+        function playExtraLifeSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const durationPerNote = 0.09; const notes = [523.25, 659.25, 783.99, 1046.50]; const volume = 0.4; notes.forEach((freq, index) => { const startTime = now + index * durationPerNote; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'square'; oscillator.frequency.setValueAtTime(freq, startTime); gainNode.gain.setValueAtTime(0, startTime); gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durationPerNote); oscillator.start(startTime); oscillator.stop(startTime + durationPerNote); }); }
+        function playStartSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const startTime = now + 0.1; const volume = 0.35; const tempo = 180; const eighthNote = 60 / tempo / 2; const notes = [ { freq: 932.33, dur: eighthNote }, { freq: 0, dur: eighthNote/2 }, { freq: 932.33, dur: eighthNote }, { freq: 783.99, dur: eighthNote }, { freq: 698.46, dur: eighthNote }, { freq: 622.25, dur: eighthNote }, { freq: 0, dur: eighthNote/2 }, { freq: 698.46, dur: eighthNote }, { freq: 622.25, dur: eighthNote }, { freq: 523.25, dur: eighthNote }, { freq: 466.16, dur: eighthNote }, { freq: 0, dur: eighthNote/2 }, { freq: 523.25, dur: eighthNote }, { freq: 466.16, dur: eighthNote }, { freq: 392.00, dur: eighthNote }, { freq: 523.25, dur: eighthNote *8 } ]; let cumulativeTime = startTime; notes.forEach(({ freq, dur }) => { if (freq > 0) { const noteStartTime = cumulativeTime; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(freq, noteStartTime); gainNode.gain.setValueAtTime(0, noteStartTime); gainNode.gain.linearRampToValueAtTime(volume, noteStartTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + dur * 0.9); oscillator.start(noteStartTime); oscillator.stop(noteStartTime + dur); } cumulativeTime += dur; }); }
+
+        // --- High Score Logic ---
+        function loadHighScores() { try { const storedScores = localStorage.getItem(HIGH_SCORES_KEY); if (storedScores) { highScores = JSON.parse(storedScores); } else { highScores = [ { name: 'TLP', score: 10000 }, { name: 'HOE', score: 8000 }, { name: 'ELN', score: 6000 }, { name: 'OLP', score: 4000 }, { name: '_YE', score: 2000 }, { name: 'E_N', score: 1000 }, ]; } highScores.sort((a, b) => b.score - a.score); highScores = highScores.slice(0, MAX_HIGH_SCORES); } catch (e) { console.error("Could not load high scores:", e); highScores = []; } }
+        function saveHighScore(name, score) { try { highScores.push({ name, score }); highScores.sort((a, b) => b.score - a.score); highScores = highScores.slice(0, MAX_HIGH_SCORES); localStorage.setItem(HIGH_SCORES_KEY, JSON.stringify(highScores)); } catch (e) { console.error("Could not save high scores:", e); } }
+        function checkHighScore(playerScore) { const lowestScore = highScores.length < MAX_HIGH_SCORES ? 0 : highScores[MAX_HIGH_SCORES - 1].score; return playerScore > lowestScore; }
+        function displayHighScores(containerElement) { let tableHTML = '<h2>HIGH SCORES</h2><div id="high-scores"><table>'; tableHTML += '<tr><th>RANK</th><th>SCORE</th><th>NAME</th></tr>'; highScores.forEach((entry, index) => { tableHTML += `<tr><td>${index + 1}</td><td>${entry.score}</td><td>${entry.name}</td></tr>`; }); for (let i = highScores.length; i < 5; i++) { tableHTML += `<tr><td>${i + 1}</td><td>---</td><td>---</td></tr>`; } tableHTML += '</table></div>'; containerElement.innerHTML = tableHTML; }
+        function promptForName(playerScore) { document.getElementById('game-container').style.display = 'none'; const messageContainer = document.getElementById('message'); const messageText = document.getElementById('message-text'); const messageButtons = document.getElementById('message-buttons'); messageText.innerHTML = `<h1>NEW HIGH SCORE!</h1><div style="font-size: 0.8em">${playerScore}</div><small style="font-size: 0.5em">Enter your initials:</small>`; messageText.style.color = 'lime'; messageButtons.innerHTML = `<form id="highscore-form"><input type="text" id="name-input" maxlength="3" required pattern="[A-Z_]{3}" title="3 uppercase letters or underscores" autocomplete="off"><button type="submit">OK</button></form>`; const form = document.getElementById('highscore-form'); const input = document.getElementById('name-input'); messageContainer.style.display = 'flex'; setTimeout(() => input.focus(), 0); input.addEventListener('input', () => { input.value = input.value.toUpperCase().replace(/[^A-Z_]/g, ''); }); form.addEventListener('submit', (e) => { e.preventDefault(); const playerName = input.value.padEnd(3, '_').substring(0, 3); saveHighScore(playerName, playerScore); lobby.init(); }); }
+
+        // --- Game Class ---
+        class PacCloneGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+
+                // Game state properties - these will be populated by the server
+                this.players = [];
+                this.ghosts = [];
+                this.map = [];
+                this.pelletsRemaining = 0;
+                this.gameRunning = false;
+                this.paused = false;
+                this.isGameOver = false;
+                this.gameOverTimer = 0;
+                this.ghostFrightenedTimer = 0;
+                this.lastFrameTime = 0;
+                this.gameSpeedMultiplier = 1.0;
+
+                // Client-side animation properties
+                this.playerInstances = new Map();
+                this.playerControls = [
+                    { up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright', dash: ' ' },
+                    { up: 'w', down: 's', left: 'a', right: 'd', dash: 'shift' }
+                ];
+                
+                this.soundState = {
+                    pelletEaten: false,
+                    powerupEaten: false,
+                    ghostEaten: false,
+                    playerDied: false,
+                };
+
+                // Bind methods
+                this.gameLoop = this.gameLoop.bind(this);
+            }
+
+            initFromState(initialState) {
+                document.getElementById('game-container').style.display = 'flex';
+                document.getElementById('game-info').style.display = 'flex';
+                this.canvas.style.display = 'block';
+                document.getElementById('controls-info').style.display = 'block';
+                document.getElementById('message').style.display = 'none';
+
+                this.updateStateFromServer(initialState);
+                
+                const localPlayer = this.players.find(p => p.clientId === networkManager.clientId);
+                if(localPlayer) {
+                    localPlayerId = localPlayer.id;
+                }
+
+                playStartSound();
+                
+                this.gameRunning = true;
+                this.paused = false;
+                this.isGameOver = false;
+            }
+            
+            updateStateFromServer(newState) {
+                // Update sounds based on state change
+                if (game && this.pelletsRemaining > 0 && newState.pelletsRemaining < this.pelletsRemaining) {
+                    const pelletsEaten = this.pelletsRemaining - newState.pelletsRemaining;
+                    // Simplistic check: assume a big drop is a powerup
+                    if (pelletsEaten > 1) { // Not perfect, but works for single powerup
+                       this.soundState.powerupEaten = true;
+                    } else {
+                       this.soundState.pelletEaten = true;
+                    }
+                }
+                
+                newState.ghosts.forEach((g, index) => {
+                    if (this.ghosts[index] && !this.ghosts[index].eaten && g.eaten) {
+                        this.soundState.ghostEaten = true;
+                    }
+                });
+                
+                newState.players.forEach((p, index) => {
+                    if (this.players[index] && this.players[index].lives > p.lives) {
+                        this.soundState.playerDied = true;
+                    }
+                });
+
+
+                // Update the state
+                this.players = newState.players;
+                this.ghosts = newState.ghosts;
+                this.map = newState.map;
+                this.pelletsRemaining = newState.pelletsRemaining;
+                this.ghostFrightenedTimer = newState.ghostFrightenedTimer;
+                
+                if (this.isGameOver !== newState.isGameOver && newState.isGameOver) {
+                    this.gameOver(newState);
+                }
+                this.isGameOver = newState.isGameOver;
+
+                // Update player instances for animations
+                this.players.forEach(pData => {
+                    if (!this.playerInstances.has(pData.id)) {
+                        this.playerInstances.set(pData.id, new Player(pData.id, pData.color, this.playerControls[pData.id - 1] || {}));
+                    }
+                    const pInstance = this.playerInstances.get(pData.id);
+                    Object.assign(pInstance, pData); // Copy server state to local instance
+                });
+
+                this.updatePlayersUI();
+            }
+
+            start() {
+                this.lastFrameTime = performance.now();
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                animationFrameId = requestAnimationFrame(this.gameLoop);
+            }
+
+            gameLoop(currentTime) {
+                const deltaTime = (currentTime - this.lastFrameTime) * this.gameSpeedMultiplier;
+                this.lastFrameTime = currentTime;
+                
+                if (!this.gameRunning) {
+                     // Still process gamepad input to allow restarting
+                     handleGamepadInput();
+                } else if (this.paused) {
+                    handleGamepadInput();
+                    this.draw();
+                } else if (this.gameRunning) {
+                    handleGamepadInput(); // Send inputs to server
+                    this.updateAnimations(deltaTime);
+                    this.playSounds();
+                    this.draw();
+                }
+                
+                animationFrameId = requestAnimationFrame(this.gameLoop);
+            }
+            
+            updateAnimations(deltaTime) {
+                // Animate player mouth
+                this.playerInstances.forEach(player => {
+                    player.animationFrame += deltaTime;
+                    if (player.animationFrame > 100) {
+                        player.mouthOpen = !player.mouthOpen;
+                        player.animationFrame = 0;
+                    }
+                    player.mouthAngle = player.mouthOpen ? Math.PI / 4 : 0;
+                });
+            }
+
+            playSounds() {
+                if (this.soundState.pelletEaten) playChompSound();
+                if (this.soundState.powerupEaten) playPowerupSound();
+                if (this.soundState.ghostEaten) playEatGhostSound();
+                if (this.soundState.playerDied) playDeathSound();
+                
+                // Reset sounds for next frame
+                Object.keys(this.soundState).forEach(key => this.soundState[key] = false);
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.drawMap();
+                this.drawPellets();
+                this.playerInstances.forEach(p => this.drawPlayer(p));
+                this.drawGhosts();
+
+                if (this.paused) {
+                    const messageContainer = document.getElementById('message');
+                    const messageText = document.getElementById('message-text');
+                    const netStatus = document.getElementById('network-status')?.cloneNode(true);
+                    let statusHTML = netStatus ? netStatus.outerHTML.replace('style="', 'style="font-size: 0.6em; margin-top: 10px; ') : '';
+                    let pauseHTML = `PAUSED<br>${statusHTML}`;
+                    messageText.innerHTML = pauseHTML;
+                    messageText.style.color = 'yellow';
+                    document.getElementById('message-buttons').innerHTML = '';
+                    messageContainer.style.display = 'flex';
+                }
+                
+                 if (this.isGameOver && this.gameOverTimer > 0) {
+                    this.ctx.font = '48px monospace';
+                    this.ctx.textAlign = 'center';
+                    const winner = this.players.find(p => p.isWinner);
+                    if (winner) {
+                        this.ctx.fillStyle = winner.color;
+                        this.ctx.fillText(`PLAYER ${winner.id} WINS!`, this.canvas.width / 2, this.canvas.height / 2);
+                    } else {
+                        this.ctx.fillStyle = 'red';
+                        this.ctx.fillText('GAME OVER', this.canvas.width / 2, this.canvas.height / 2);
+                    }
+                }
+            }
+
+            drawMap() { if(!this.map) return; for (let r = 0; r < MAP_HEIGHT; r++) { for (let c = 0; c < MAP_WIDTH; c++) { const tileType = this.map[r][c]; if (tileType === 1) { this.ctx.fillStyle = 'blue'; this.ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE); } else if (tileType === 0 || tileType === 6) { this.ctx.fillStyle = '#202028'; this.ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE); } } } }
+            drawPellets() { if(!this.map) return; for (let r = 0; r < MAP_HEIGHT; r++) { for (let c = 0; c < MAP_WIDTH; c++) { if (this.map[r][c] === 2) { this.ctx.fillStyle = 'grey'; this.ctx.beginPath(); this.ctx.arc(c * TILE_SIZE + TILE_SIZE / 2, r * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 8, 0, Math.PI * 2); this.ctx.fill(); } else if (this.map[r][c] === 3) { this.ctx.fillStyle = 'darkred'; this.ctx.beginPath(); this.ctx.arc(c * TILE_SIZE + TILE_SIZE / 2, r * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 4, 0, Math.PI * 2); this.ctx.fill(); } } } }
+
+            drawPlayer(player) {
+                this.ctx.save();
+                if (player.isDashing || player.isSpectator || (player.invulnerabilityTimer > 0 && Math.floor(performance.now() / 100) % 2 === 0)) {
+                    this.ctx.globalAlpha = 0.5;
+                }
+
+                if (player.isActive && player.powerUpTimer > 0) {
+                    const pulse = Math.abs(Math.sin(performance.now() / 100));
+                    this.ctx.fillStyle = `rgba(255, 255, 255, ${pulse * 0.5})`;
+                    this.ctx.beginPath();
+                    this.ctx.arc(player.x, player.y, player.radius + 5, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+
+                this.ctx.fillStyle = player.color;
+                this.ctx.beginPath();
+                
+                if (player.isSpectator) {
+                    const ghostRadius = TILE_SIZE / 3;
+                    this.ctx.arc(player.x, player.y - ghostRadius / 2, ghostRadius, Math.PI, 0, false);
+                    this.ctx.rect(player.x - ghostRadius, player.y - ghostRadius / 2, ghostRadius * 2, ghostRadius * 1.5);
+                    this.ctx.fill();
+                } else {
+                    let directionAngle = 0;
+                    if (player.dx > 0) directionAngle = 0;
+                    else if (player.dx < 0) directionAngle = Math.PI;
+                    else if (player.dy > 0) directionAngle = Math.PI / 2;
+                    else if (player.dy < 0) directionAngle = -Math.PI / 2;
+                    else if (player.lastDx > 0) directionAngle = 0;
+                    else if (player.lastDx < 0) directionAngle = Math.PI;
+                    else if (player.lastDy > 0) directionAngle = Math.PI / 2;
+                    else if (player.lastDy < 0) directionAngle = -Math.PI / 2;
+
+                    const startAngle = directionAngle + player.mouthAngle;
+                    const endAngle = directionAngle + Math.PI * 2 - player.mouthAngle;
+                    this.ctx.arc(player.x, player.y, player.radius, startAngle, endAngle);
+                    this.ctx.lineTo(player.x, player.y);
+                    this.ctx.fill();
+                }
+                this.ctx.restore();
+            }
+
+            drawGhosts() { if(!this.ghosts) return; const ghostRadius = TILE_SIZE / 3; this.ghosts.forEach(ghost => { if (ghost.eaten) { this.ctx.fillStyle = 'white'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.arc(ghost.x + ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.fill(); this.ctx.fillStyle = 'blue'; this.ctx.beginPath(); let pupilXOffset = 0; let pupilYOffset = 0; if (ghost.dx > 0) pupilXOffset = ghostRadius/4; else if (ghost.dx < 0) pupilXOffset = -ghostRadius/4; if (ghost.dy > 0) pupilYOffset = ghostRadius/4; else if (ghost.dy < 0) pupilYOffset = -ghostRadius/4; this.ctx.arc(ghost.x - ghostRadius / 2 + pupilXOffset, ghost.y - ghostRadius / 2 + pupilYOffset, ghostRadius / 4, 0, Math.PI * 2); this.ctx.arc(ghost.x + ghostRadius / 2 + pupilXOffset, ghost.y - ghostRadius / 2 + pupilYOffset, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); return; } this.ctx.fillStyle = ghost.frightened ? 'blue' : ghost.color; this.ctx.beginPath(); this.ctx.arc(ghost.x, ghost.y - ghostRadius / 2, ghostRadius, Math.PI, 0, false); this.ctx.rect(ghost.x - ghostRadius, ghost.y - ghostRadius / 2, ghostRadius * 2, ghostRadius * 1.5); this.ctx.arc(ghost.x - ghostRadius * 0.6, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.arc(ghost.x, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.arc(ghost.x + ghostRadius * 0.6, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.fill(); if (ghost.frightened && this.ghostFrightenedTimer < FRIGHTENED_DURATION / 3 && Math.floor(this.ghostFrightenedTimer / 100) % 2 === 0) { this.ctx.fillStyle = 'white'; this.ctx.beginPath(); this.ctx.arc(ghost.x, ghost.y - ghostRadius / 2, ghostRadius, Math.PI, 0, false); this.ctx.rect(ghost.x - ghostRadius, ghost.y - ghostRadius / 2, ghostRadius * 2, ghostRadius * 1.5); this.ctx.arc(ghost.x - ghostRadius * 0.6, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.arc(ghost.x, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.arc(ghost.x + ghostRadius * 0.6, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.fill(); } this.ctx.fillStyle = 'white'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.arc(ghost.x + ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.fill(); this.ctx.fillStyle = 'black'; this.ctx.beginPath(); let pupilXOffset = 0; let pupilYOffset = 0; if (ghost.dx > 0) pupilXOffset = ghostRadius / 4; else if (ghost.dx < 0) pupilXOffset = -ghostRadius / 4; if (ghost.dy > 0) pupilYOffset = ghostRadius / 4; else if (ghost.dy < 0) pupilYOffset = -ghostRadius / 4; this.ctx.arc(ghost.x - ghostRadius / 2 + pupilXOffset, ghost.y - ghostRadius / 2 + pupilYOffset, ghostRadius / 4, 0, Math.PI * 2); this.ctx.arc(ghost.x + ghostRadius / 2 + pupilXOffset, ghost.y - ghostRadius / 2 + pupilYOffset, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); }); }
+            
+            gameOver(state) {
+                this.gameRunning = false;
+                this.isGameOver = true;
+                this.gameOverTimer = state.gameOverTimer; // Sync timer from server
+                
+                this.updatePlayersUI();
+                const winner = this.players.find(p => p.isWinner);
+                if (winner) playWinSound(); else playGameOverSound();
+                
+                setTimeout(() => {
+                    const localParticipant = this.players.find(p => p.clientId === networkManager.clientId);
+                    if (localParticipant) {
+                         const topPlayer = this.players.sort((a, b) => b.score - a.score)[0];
+                         if (topPlayer.id === localParticipant.id && checkHighScore(topPlayer.score)) {
+                            promptForName(topPlayer.score);
+                         } else {
+                            lobby.init();
+                         }
+                    } else {
+                         // Spectator goes back to lobby
+                         lobby.init();
+                    }
+                }, this.gameOverTimer);
+            }
+
+            updatePlayersUI() {
+                const container = document.getElementById('player-scores');
+                if (!container || !this.players) return;
+                let html = '';
+                this.players.forEach(player => {
+                    const winnerText = player.isWinner ? '<span class="winner-text">WINNER!</span>' : '';
+                    html += `
+                        <div class="player-hud ${!player.isActive && !player.isSpectator ? 'inactive' : ''}" style="color: ${player.color}; border-color: ${player.color};">
+                            ${winnerText}
+                            <span>P${player.id} Score: ${player.score}</span>
+                            <span>Lives: ${player.lives < 0 ? 0 : player.lives}</span>
+                            ${player.isSpectator ? '<span>SPECTATING</span>' : `<span style="opacity: ${player.phaseDashAvailable ? 1 : 0.5}">Dash: ${player.phaseDashAvailable ? 'Ready' : 'Used'}</span>`}
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+            }
+        } // End PacCloneGame class
+
+        // --- UI Updates ---
+        function applyControlsLayout() { const preference = localStorage.getItem(CONTROLS_PREFERENCE_KEY); const touchControls = document.getElementById('touch-controls'); if (preference === 'left') { touchControls.classList.add('left-hand-layout'); } else { touchControls.classList.remove('left-hand-layout'); } }
+        function toggleControlsLayout() { const touchControls = document.getElementById('touch-controls'); const isLeftHanded = touchControls.classList.toggle('left-hand-layout'); localStorage.setItem(CONTROLS_PREFERENCE_KEY, isLeftHanded ? 'left' : 'right'); }
+        function updateControlStatus(controlType) { const statusEl = document.getElementById('control-status'); const controlsEl = document.getElementById('controls-info'); const startInfo = document.getElementById('start-gamepad-info'); if (!statusEl) return; switch (controlType) { case 'gamepad': statusEl.innerHTML = ICONS.gamepad; statusEl.style.color = 'lime'; if (controlsEl) controlsEl.textContent = 'D-Pad/Stick: Move | (A): Dash | (Start): Pause | (B): Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Controller Ready! Press Start or (A) to Play.'; startInfo.style.color = 'lime'; } break; case 'touch': statusEl.innerHTML = ICONS.touch; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'D-Pad: Move | DASH: Dash | P: Pause | R: Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; case 'keyboard': default: statusEl.innerHTML = ICONS.keyboard; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'P1: Arrows, Space | P2: WASD, Shift | P: Pause | R: Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; } }
+        
+        function setupTouchControls() { if (!isTouchDevice) { return; } const touchControls = document.getElementById('touch-controls'); const dpadUp = document.getElementById('dpad-up'); const dpadDown = document.getElementById('dpad-down'); const dpadLeft = document.getElementById('dpad-left'); const dpadRight = document.getElementById('dpad-right'); const dashButton = document.getElementById('dash-button-touch'); touchControls.style.display = 'block'; const handleDpadPress = (e, direction) => { e.preventDefault(); networkManager.send('playerInput', { action: 'move', direction: direction }); }; dpadUp.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 0, dy: -1 }), { passive: false }); dpadDown.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 0, dy: 1 }), { passive: false }); dpadLeft.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: -1, dy: 0 }), { passive: false }); dpadRight.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 1, dy: 0 }), { passive: false }); dashButton.addEventListener('touchstart', (e) => { e.preventDefault(); if (game && game.gameRunning && !game.paused) { networkManager.send('playerInput', { action: 'dash' }); } }, { passive: false }); }
+        const GAMEPAD_BUTTONS = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, L_STICK: 10, R_STICK: 11, DPAD_UP: 12, DPAD_DOWN: 13, DPAD_LEFT: 14, DPAD_RIGHT: 15, };
+        function setupGamepadListeners() { window.addEventListener("gamepadconnected", (e) => { console.log(`[GP_EVENT] Gamepad connected at index ${e.gamepad.index}: ${e.gamepad.id}`); }); window.addEventListener("gamepaddisconnected", (e) => { console.log(`[GP_EVENT] Gamepad disconnected from index ${e.gamepad.index}: ${e.gamepad.id}`); if (e.gamepad.index === gamepadIndex) { gamepadIndex = null; updateControlStatus(isTouchDevice ? 'touch' : 'keyboard'); } }); }
+        function findActiveGamepad() { const gamepads = navigator.getGamepads ? navigator.getGamepads() : []; if (!gamepads) return null; let standardMappingGamepad = null; let xboxIDGamepad = null; let firstAvailableGamepad = null; for (const gamepad of gamepads) { if (!gamepad) continue; const isRealController = gamepad.buttons.length > 0 && gamepad.axes.length > 0; if (!isRealController) { continue;  } if (!firstAvailableGamepad) { firstAvailableGamepad = gamepad; } if (gamepad.mapping === 'standard') { if (!standardMappingGamepad) standardMappingGamepad = gamepad; } if (gamepad.id && (gamepad.id.toLowerCase().includes('xinput') || gamepad.id.toLowerCase().includes('xbox'))) { if (!xboxIDGamepad) xboxIDGamepad = gamepad; } } return standardMappingGamepad || xboxIDGamepad || firstAvailableGamepad; }
+        function handleGamepadInput() { const gamepad = findActiveGamepad(); if (gamepad) { if (gamepadIndex !== gamepad.index) { gamepadIndex = gamepad.index; updateControlStatus('gamepad'); lastButtons = gamepad.buttons.map(b => (b ? b.pressed : false)); } } else { if (gamepadIndex !== null) { gamepadIndex = null; updateControlStatus(isTouchDevice ? 'touch' : 'keyboard'); } return; } const activeGamepad = navigator.getGamepads()[gamepadIndex]; if (!activeGamepad) { return; } const pressed = (buttonIndex) => { if (!activeGamepad.buttons[buttonIndex]) return false; const isPressedNow = activeGamepad.buttons[buttonIndex].pressed; const wasPressedLast = lastButtons[buttonIndex] || false; return isPressedNow && !wasPressedLast; }; const stickX = activeGamepad.axes[0]; const stickY = activeGamepad.axes[1]; const deadzone = 0.5; if (game && game.isGameOver) { if (pressed(GAMEPAD_BUTTONS.B)) { lobby.init(); } lastButtons = activeGamepad.buttons.map(b => (b ? b.pressed : false)); return; } if (!game || !game.gameRunning) { if (pressed(GAMEPAD_BUTTONS.START) || pressed(GAMEPAD_BUTTONS.A)) { document.querySelector('#start-game-btn')?.click(); } } else { if (!game.paused) { let movedByStick = false; if (Math.abs(stickY) > Math.abs(stickX) && Math.abs(stickY) > deadzone) { networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: stickY > 0 ? 1 : -1 } }); movedByStick = true; } else if (Math.abs(stickX) > Math.abs(stickY) && Math.abs(stickX) > deadzone) { networkManager.send('playerInput', { action: 'move', direction: { dx: stickX > 0 ? 1 : -1, dy: 0 } }); movedByStick = true; } if (!movedByStick) { if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_UP]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: -1 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_DOWN]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: 1 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_LEFT]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: -1, dy: 0 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_RIGHT]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 1, dy: 0 } }); } } if (pressed(GAMEPAD_BUTTONS.A)) networkManager.send('playerInput', { action: 'dash' }); if (pressed(GAMEPAD_BUTTONS.B)) lobby.init(); if (pressed(GAMEPAD_BUTTONS.START)) { game.paused = !game.paused; if (!game.paused) { document.getElementById('message').style.display = 'none'; game.lastFrameTime = performance.now(); } } } lastButtons = activeGamepad.buttons.map(b => (b ? b.pressed : false)); }
+        function adjustSpeed(delta) { const speedSlider = document.getElementById('speed-slider'); if (!speedSlider) return; let currentValue = parseFloat(speedSlider.value); let newValue = currentValue + delta; const min = parseFloat(speedSlider.min); const max = parseFloat(speedSlider.max); newValue = Math.round(Math.max(min, Math.min(max, newValue)) * 10) / 10; speedSlider.value = newValue; if (game) { game.gameSpeedMultiplier = newValue; } const speedValue = document.getElementById('speed-value'); if (speedValue) { speedValue.textContent = `${newValue.toFixed(1)}x`; } }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName.toLowerCase() === 'input' || (game && game.isGameOver)) return;
+
+            const key = e.key.toLowerCase();
+            
+            if (key === 'm') toggleMute();
+            if (key === '-' || key === '_') adjustSpeed(-0.1);
+            if (key === '=' || key === '+') adjustSpeed(0.1);
+
+            if (!game || !game.gameRunning) {
+                if (key === 'enter' || key === ' ') {
+                    e.preventDefault();
+                    document.querySelector('#start-game-btn')?.click();
+                }
+                return;
+            }
+
+            if (key === 'r') {
+                // To reset, we just need to re-init the lobby. The server will handle the state.
+                lobby.init();
+            }
+            if (key === 'p') {
+                e.preventDefault();
+                game.paused = !game.paused;
+                if (!game.paused) {
+                    document.getElementById('message').style.display = 'none';
+                    game.lastFrameTime = performance.now();
+                }
+                return; 
+            }
+
+            if (game.paused) return;
+
+            // Find the local player's controls to send the correct input
+            const playerInstance = game.playerInstances.get(localPlayerId);
+            if (playerInstance) {
+                const controls = playerInstance.controls;
+                if (key === controls.dash) {
+                    e.preventDefault();
+                    networkManager.send('playerInput', { action: 'dash' });
+                }
+                if (key === controls.up) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: -1 } });
+                else if (key === controls.down) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: 1 } });
+                else if (key === controls.left) networkManager.send('playerInput', { action: 'move', direction: { dx: -1, dy: 0 } });
+                else if (key === controls.right) networkManager.send('playerInput', { action: 'move', direction: { dx: 1, dy: 0 } });
+            }
+        });
+
+        window.onload = () => {
+            console.clear();
+            console.log('[SYSTEM] Setting up game client.');
+            
+            applyControlsLayout();
+            setupGamepadListeners();
+            setupTouchControls();
+
+            muteButton = document.getElementById('mute-button');
+            muteButton?.addEventListener('click', toggleMute);
+            updateMuteButtonDisplay();
+            updateControlStatus(isTouchDevice ? 'touch' : 'keyboard');
+            
+            const speedSlider = document.getElementById('speed-slider');
+            const speedValue = document.getElementById('speed-value');
+            speedSlider?.addEventListener('input', (e) => {
+                const newSpeed = parseFloat(e.target.value);
+                if (game) game.gameSpeedMultiplier = newSpeed;
+                speedValue.textContent = `${newSpeed.toFixed(1)}x`;
+            });
+
+            loadHighScores();
+            
+            networkManager = new NetworkManager();
+            lobby = new GameLobby(networkManager);
+
+            networkManager.on('connected', (payload) => {
+                console.log(`[NETWORK] Connected with client ID: ${payload.clientId}`);
+                lobby.updateState(payload.lobbyState);
+            });
+            
+            networkManager.on('lobbyStateUpdate', (lobbyState) => {
+                lobby.updateState(lobbyState);
+            });
+            
+            networkManager.on('gameStarted', (initialState) => {
+                initializeAudio();
+                game = new PacCloneGame();
+                game.initFromState(initialState);
+                game.start();
+            });
+
+            networkManager.on('gameStateUpdate', (newState) => {
+                if (game) {
+                    game.updateStateFromServer(newState);
+                }
+            });
+
+            lobby.init();
+            networkManager.connect();
+        };
+    </script>
+</body>
+</html>

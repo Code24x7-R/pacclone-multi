@@ -1,0 +1,6 @@
+{
+  "name": "pacclone-multi",
+  "description": "pacman clone multiplayer",
+  "version": "0.01",
+  "requestFramePermissions": []
+}
