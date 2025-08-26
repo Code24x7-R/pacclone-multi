@@ -1,4 +1,4 @@
-# 👻 Pacclone Arcade
+# 👻 Pacclone Multi
 
 A classic arcade-style game reminiscent of Pac-Man, built with HTML, CSS, and JavaScript, now featuring a client-server architecture for true multiplayer gameplay! Navigate the maze, eat all the pellets, avoid the ghosts, and aim for the high score!
 
