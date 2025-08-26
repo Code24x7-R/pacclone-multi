@@ -162,13 +162,18 @@ class Ghost {
 wss.on('connection', ws => {
     const clientId = uuidv4();
     clients.set(clientId, ws);
-    console.log(`[SERVER] Client connected: ${clientId}`);
+    console.log(`[SERVER] Client connected: ${clientId}. Total clients: ${clients.size}`);
 
-    // Send connection confirmation and initial lobby state
-    ws.send(JSON.stringify({
-        event: 'connected',
-        payload: { clientId, lobbyState }
-    }));
+    if (gameState && gameState.gameRunning) {
+        // Game in progress, inform the new client
+        ws.send(JSON.stringify({ event: 'gameInProgress' }));
+    } else {
+        // No game, send connection confirmation and initial lobby state
+        ws.send(JSON.stringify({
+            event: 'connected',
+            payload: { clientId, lobbyState }
+        }));
+    }
 
     ws.on('message', message => {
         try {
@@ -180,8 +185,8 @@ wss.on('connection', ws => {
     });
 
     ws.on('close', () => {
-        console.log(`[SERVER] Client disconnected: ${clientId}`);
         clients.delete(clientId);
+        console.log(`[SERVER] Client disconnected: ${clientId}. Total clients: ${clients.size}`);
         
         // If client was in lobby, free up their slot
         const playerSlot = lobbyState.slots.find(s => s.clientId === clientId);
@@ -223,6 +228,7 @@ function handleClientMessage(clientId, event, payload) {
             if (slotToJoin && !slotToJoin.joined && !alreadyJoined) {
                 slotToJoin.joined = true;
                 slotToJoin.clientId = clientId;
+                console.log(`[LOBBY] Client ${clientId.substring(0,8)} joined slot ${payload.slotId}.`);
                 broadcastLobbyState();
             }
             break;
@@ -242,6 +248,28 @@ function handleClientMessage(clientId, event, payload) {
                     case 'dash':
                         executePhaseDash(player);
                         break;
+                }
+            }
+            break;
+        case 'requestSpectate':
+            if (gameState && gameState.gameRunning) {
+                const clientWs = clients.get(clientId);
+                if (clientWs) {
+                    // Create a spectator player instance
+                    const spectator = new Player(
+                        gameState.players.length + 1, // Simple ID assignment
+                        clientId,
+                        '#cccccc', // Spectator color
+                        9.5 * TILE_SIZE, 11.5 * TILE_SIZE // Start pos doesn't matter much
+                    );
+                    spectator.enterSpectatorMode();
+                    spectator.lives = 0;
+                    
+                    gameState.players.push(spectator);
+                    console.log(`[GAME] Client ${clientId.substring(0,8)} is now spectating.`);
+                    
+                    // Send the current game state to the new spectator
+                    clientWs.send(JSON.stringify({ event: 'gameStarted', payload: gameState }));
                 }
             }
             break;
@@ -294,7 +322,7 @@ function initializeGame() {
 
     if(gameLoopInterval) clearInterval(gameLoopInterval);
     gameLoopInterval = setInterval(gameLoop, GAME_TICK_RATE);
-    console.log('[SERVER] Game started.');
+    console.log(`[GAME] Starting game with players: ${participatingPlayers.map(p => `P${p.id} (${p.clientId.substring(0,8)})`).join(', ')}`);
 }
 
 function gameLoop() {
@@ -317,6 +345,7 @@ function update(deltaTime) {
              gameState = null;
              Object.values(lobbyState.slots).forEach(s => { s.joined = false; s.clientId = null; });
              broadcastLobbyState();
+             console.log('[LOBBY] Game has ended. Returning all clients to lobby.');
         }
         return;
     };
@@ -327,7 +356,7 @@ function update(deltaTime) {
         if (player.dashTimer > 0) player.dashTimer -= deltaTime;
         if (player.isDashing && player.dashTimer <=0) player.isDashing = false;
 
-        if(player.isActive) movePlayer(player, deltaTime);
+        if(player.isActive || player.isSpectator) movePlayer(player, deltaTime);
         if(player.isActive) checkPelletCollision(player);
         if(player.isActive) checkGhostCollision(player);
     });
@@ -415,5 +444,5 @@ function checkGhostCollision(player) { if (player.isDashing || player.invulnerab
 function checkPlayerCollision() { const activePlayers = gameState.players.filter(p => p.isActive); if (activePlayers.length < 2) return; for (let i = 0; i < activePlayers.length; i++) { for (let j = i + 1; j < activePlayers.length; j++) { const p1 = activePlayers[i]; const p2 = activePlayers[j]; const distance = Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2)); if (distance < TILE_SIZE - 4) { const p1Powered = p1.powerUpTimer > 0; const p2Powered = p2.powerUpTimer > 0; const p1Invulnerable = p1.invulnerabilityTimer > 0; const p2Invulnerable = p2.invulnerabilityTimer > 0; if (p1Powered && !p2Powered && !p2Invulnerable) { p1.score += PVP_EAT_SCORE; handlePlayerDeath(p2); } else if (p2Powered && !p1Powered && !p1Invulnerable) { p2.score += PVP_EAT_SCORE; handlePlayerDeath(p1); } } } } }
 function handlePlayerDeath(player) { player.loseLife(); if (player.isActive) { resetActivePositions(); } }
 function resetActivePositions() { gameState.players.forEach(p => { if (p.isActive) { p.x = p.startX; p.y = p.startY; p.dx = 0; p.dy = 0; p.nextDirection = {dx: 0, dy: 0}; } }); gameState.ghosts.forEach(g => g.reset()); gameState.modeCycleIndex = 0; gameState.ghostMode = gameState.MODE_CYCLES[0].mode; gameState.ghostModeTimer = gameState.MODE_CYCLES[0].duration; }
-function gameOver() { if (gameState.isGameOver) return; gameState.gameRunning = false; gameState.isGameOver = true; gameState.gameOverTimer = 4000; console.log('[SERVER] Game over.'); }
+function gameOver() { if (gameState.isGameOver) return; gameState.gameRunning = false; gameState.isGameOver = true; gameState.gameOverTimer = 4000; const winner = gameState.players.find(p => p.isWinner); console.log(`[GAME] Game over. Winner: ${winner ? `Player ${winner.id}` : 'None'}. Resetting to lobby in 4s.`); }
 function executePhaseDash(player) { if (!player.phaseDashAvailable || player.isDashing) return; const dirX = player.dx || player.lastDx || 0; const dirY = player.dy || player.lastDy || 0; if (dirX === 0 && dirY === 0) return; const currentTileX = Math.floor(player.x / TILE_SIZE); const currentTileY = Math.floor(player.y / TILE_SIZE); let targetTileX = currentTileX + dirX * DASH_TILES; let targetTileY = currentTileY + dirY * DASH_TILES; if (targetTileX < 0) targetTileX = MAP_WIDTH + targetTileX; else if (targetTileX >= MAP_WIDTH) targetTileX = targetTileX - MAP_WIDTH; if (targetTileY < 0 || targetTileY >= MAP_HEIGHT || (gameState.map[targetTileY][targetTileX] === 1)) return; player.phaseDashAvailable = false; player.isDashing = true; player.dashTimer = 200; player.x = targetTileX * TILE_SIZE + TILE_SIZE / 2; player.y = targetTileY * TILE_SIZE + TILE_SIZE / 2; player.dx = 0; player.dy = 0; player.nextDirection = { dx: 0, dy: 0 }; }

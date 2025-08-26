@@ -191,7 +191,7 @@
             font-size: 0.6em;
             padding: 8px 16px;
         }
-        #mute-button {
+        #mute-button, #new-game-button {
             background-color: #111;
             color: #fff;
             border: 1px solid #fff;
@@ -200,8 +200,14 @@
             padding: 5px 10px;
             font-size: 0.8em;
         }
-        #mute-button:hover {
+        #mute-button:hover, #new-game-button:hover {
             background-color: #333;
+        }
+        #new-game-button {
+            background-color: #a00;
+        }
+        #new-game-button:hover {
+            background-color: #c00;
         }
         #speed-control {
             display: flex;
@@ -393,10 +399,11 @@
                 <span id="speed-value">1.0x</span>
             </div>
             <button id="mute-button" title="Toggle Sound (M)">Mute</button>
+            <button id="new-game-button" title="New Game (R)">New Game</button>
         </div>
         <canvas id="gameCanvas" width="600" height="600"></canvas>
         <div id="controls-info">
-            P1: Arrows, Space | P2: WASD, Shift | P: Pause | R: Reset
+            P1: Arrows, Space | P2: WASD, Shift | P: Pause | R: New Game
         </div>
     </div>
     <div id="message">
@@ -468,7 +475,7 @@
                 this.eventHandlers = new Map();
                 this.ws = null;
                 this.connected = false;
-                this.serverUrl = 'ws://localhost:8080';
+                this.serverUrl = `ws://${window.location.host}`;
                 this.clientId = null;
                 this.reconnectAttempts = 0;
                 this.maxReconnectAttempts = 5;
@@ -630,6 +637,12 @@
             }
             
             updateState(newLobbyState) {
+                // If we are not in the lobby screen (e.g., on "game in progress" screen), re-initialize it.
+                const messageContainer = document.getElementById('message');
+                const lobbyContainer = document.getElementById('lobby-container');
+                if (messageContainer.style.display !== 'flex' || !lobbyContainer) {
+                    this.init(); // This will rebuild the lobby UI from scratch
+                }
                 this.lobbyState = newLobbyState;
                 this.render();
             }
@@ -995,13 +1008,13 @@
         // --- UI Updates ---
         function applyControlsLayout() { const preference = localStorage.getItem(CONTROLS_PREFERENCE_KEY); const touchControls = document.getElementById('touch-controls'); if (preference === 'left') { touchControls.classList.add('left-hand-layout'); } else { touchControls.classList.remove('left-hand-layout'); } }
         function toggleControlsLayout() { const touchControls = document.getElementById('touch-controls'); const isLeftHanded = touchControls.classList.toggle('left-hand-layout'); localStorage.setItem(CONTROLS_PREFERENCE_KEY, isLeftHanded ? 'left' : 'right'); }
-        function updateControlStatus(controlType) { const statusEl = document.getElementById('control-status'); const controlsEl = document.getElementById('controls-info'); const startInfo = document.getElementById('start-gamepad-info'); if (!statusEl) return; switch (controlType) { case 'gamepad': statusEl.innerHTML = ICONS.gamepad; statusEl.style.color = 'lime'; if (controlsEl) controlsEl.textContent = 'D-Pad/Stick: Move | (A): Dash | (Start): Pause | (B): Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Controller Ready! Press Start or (A) to Play.'; startInfo.style.color = 'lime'; } break; case 'touch': statusEl.innerHTML = ICONS.touch; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'D-Pad: Move | DASH: Dash | P: Pause | R: Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; case 'keyboard': default: statusEl.innerHTML = ICONS.keyboard; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'P1: Arrows, Space | P2: WASD, Shift | P: Pause | R: Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; } }
+        function updateControlStatus(controlType) { const statusEl = document.getElementById('control-status'); const controlsEl = document.getElementById('controls-info'); const startInfo = document.getElementById('start-gamepad-info'); if (!statusEl) return; switch (controlType) { case 'gamepad': statusEl.innerHTML = ICONS.gamepad; statusEl.style.color = 'lime'; if (controlsEl) controlsEl.textContent = 'D-Pad/Stick: Move | (A): Dash | (Start): Pause | (B): Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Controller Ready! Press Start or (A) to Play.'; startInfo.style.color = 'lime'; } break; case 'touch': statusEl.innerHTML = ICONS.touch; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'D-Pad: Move | DASH: Dash | P: Pause | R: Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; case 'keyboard': default: statusEl.innerHTML = ICONS.keyboard; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'P1: Arrows, Space | P2: WASD, Shift | P: Pause | R: New Game'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; } }
         
         function setupTouchControls() { if (!isTouchDevice) { return; } const touchControls = document.getElementById('touch-controls'); const dpadUp = document.getElementById('dpad-up'); const dpadDown = document.getElementById('dpad-down'); const dpadLeft = document.getElementById('dpad-left'); const dpadRight = document.getElementById('dpad-right'); const dashButton = document.getElementById('dash-button-touch'); touchControls.style.display = 'block'; const handleDpadPress = (e, direction) => { e.preventDefault(); networkManager.send('playerInput', { action: 'move', direction: direction }); }; dpadUp.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 0, dy: -1 }), { passive: false }); dpadDown.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 0, dy: 1 }), { passive: false }); dpadLeft.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: -1, dy: 0 }), { passive: false }); dpadRight.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 1, dy: 0 }), { passive: false }); dashButton.addEventListener('touchstart', (e) => { e.preventDefault(); if (game && game.gameRunning && !game.paused) { networkManager.send('playerInput', { action: 'dash' }); } }, { passive: false }); }
         const GAMEPAD_BUTTONS = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, L_STICK: 10, R_STICK: 11, DPAD_UP: 12, DPAD_DOWN: 13, DPAD_LEFT: 14, DPAD_RIGHT: 15, };
         function setupGamepadListeners() { window.addEventListener("gamepadconnected", (e) => { console.log(`[GP_EVENT] Gamepad connected at index ${e.gamepad.index}: ${e.gamepad.id}`); }); window.addEventListener("gamepaddisconnected", (e) => { console.log(`[GP_EVENT] Gamepad disconnected from index ${e.gamepad.index}: ${e.gamepad.id}`); if (e.gamepad.index === gamepadIndex) { gamepadIndex = null; updateControlStatus(isTouchDevice ? 'touch' : 'keyboard'); } }); }
         function findActiveGamepad() { const gamepads = navigator.getGamepads ? navigator.getGamepads() : []; if (!gamepads) return null; let standardMappingGamepad = null; let xboxIDGamepad = null; let firstAvailableGamepad = null; for (const gamepad of gamepads) { if (!gamepad) continue; const isRealController = gamepad.buttons.length > 0 && gamepad.axes.length > 0; if (!isRealController) { continue;  } if (!firstAvailableGamepad) { firstAvailableGamepad = gamepad; } if (gamepad.mapping === 'standard') { if (!standardMappingGamepad) standardMappingGamepad = gamepad; } if (gamepad.id && (gamepad.id.toLowerCase().includes('xinput') || gamepad.id.toLowerCase().includes('xbox'))) { if (!xboxIDGamepad) xboxIDGamepad = gamepad; } } return standardMappingGamepad || xboxIDGamepad || firstAvailableGamepad; }
-        function handleGamepadInput() { const gamepad = findActiveGamepad(); if (gamepad) { if (gamepadIndex !== gamepad.index) { gamepadIndex = gamepad.index; updateControlStatus('gamepad'); lastButtons = gamepad.buttons.map(b => (b ? b.pressed : false)); } } else { if (gamepadIndex !== null) { gamepadIndex = null; updateControlStatus(isTouchDevice ? 'touch' : 'keyboard'); } return; } const activeGamepad = navigator.getGamepads()[gamepadIndex]; if (!activeGamepad) { return; } const pressed = (buttonIndex) => { if (!activeGamepad.buttons[buttonIndex]) return false; const isPressedNow = activeGamepad.buttons[buttonIndex].pressed; const wasPressedLast = lastButtons[buttonIndex] || false; return isPressedNow && !wasPressedLast; }; const stickX = activeGamepad.axes[0]; const stickY = activeGamepad.axes[1]; const deadzone = 0.5; if (game && game.isGameOver) { if (pressed(GAMEPAD_BUTTONS.B)) { lobby.init(); } lastButtons = activeGamepad.buttons.map(b => (b ? b.pressed : false)); return; } if (!game || !game.gameRunning) { if (pressed(GAMEPAD_BUTTONS.START) || pressed(GAMEPAD_BUTTONS.A)) { document.querySelector('#start-game-btn')?.click(); } } else { if (!game.paused) { let movedByStick = false; if (Math.abs(stickY) > Math.abs(stickX) && Math.abs(stickY) > deadzone) { networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: stickY > 0 ? 1 : -1 } }); movedByStick = true; } else if (Math.abs(stickX) > Math.abs(stickY) && Math.abs(stickX) > deadzone) { networkManager.send('playerInput', { action: 'move', direction: { dx: stickX > 0 ? 1 : -1, dy: 0 } }); movedByStick = true; } if (!movedByStick) { if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_UP]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: -1 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_DOWN]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: 1 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_LEFT]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: -1, dy: 0 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_RIGHT]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 1, dy: 0 } }); } } if (pressed(GAMEPAD_BUTTONS.A)) networkManager.send('playerInput', { action: 'dash' }); if (pressed(GAMEPAD_BUTTONS.B)) lobby.init(); if (pressed(GAMEPAD_BUTTONS.START)) { game.paused = !game.paused; if (!game.paused) { document.getElementById('message').style.display = 'none'; game.lastFrameTime = performance.now(); } } } lastButtons = activeGamepad.buttons.map(b => (b ? b.pressed : false)); }
+        function handleGamepadInput() { const gamepad = findActiveGamepad(); if (gamepad) { if (gamepadIndex !== gamepad.index) { gamepadIndex = gamepad.index; updateControlStatus('gamepad'); lastButtons = gamepad.buttons.map(b => (b ? b.pressed : false)); } } else { if (gamepadIndex !== null) { gamepadIndex = null; updateControlStatus(isTouchDevice ? 'touch' : 'keyboard'); } return; } const activeGamepad = navigator.getGamepads()[gamepadIndex]; if (!activeGamepad) { return; } const pressed = (buttonIndex) => { if (!activeGamepad.buttons[buttonIndex]) return false; const isPressedNow = activeGamepad.buttons[buttonIndex].pressed; const wasPressedLast = lastButtons[buttonIndex] || false; return isPressedNow && !wasPressedLast; }; const stickX = activeGamepad.axes[0]; const stickY = activeGamepad.axes[1]; const deadzone = 0.5; if (game && game.isGameOver) { if (pressed(GAMEPAD_BUTTONS.B)) { location.reload(); } lastButtons = activeGamepad.buttons.map(b => (b ? b.pressed : false)); return; } if (!game || !game.gameRunning) { if (pressed(GAMEPAD_BUTTONS.START) || pressed(GAMEPAD_BUTTONS.A)) { document.querySelector('#start-game-btn')?.click(); } } else { if (!game.paused) { let movedByStick = false; if (Math.abs(stickY) > Math.abs(stickX) && Math.abs(stickY) > deadzone) { networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: stickY > 0 ? 1 : -1 } }); movedByStick = true; } else if (Math.abs(stickX) > Math.abs(stickY) && Math.abs(stickX) > deadzone) { networkManager.send('playerInput', { action: 'move', direction: { dx: stickX > 0 ? 1 : -1, dy: 0 } }); movedByStick = true; } if (!movedByStick) { if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_UP]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: -1 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_DOWN]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: 1 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_LEFT]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: -1, dy: 0 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_RIGHT]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 1, dy: 0 } }); } } if (pressed(GAMEPAD_BUTTONS.A)) networkManager.send('playerInput', { action: 'dash' }); if (pressed(GAMEPAD_BUTTONS.B)) location.reload(); if (pressed(GAMEPAD_BUTTONS.START)) { game.paused = !game.paused; if (!game.paused) { document.getElementById('message').style.display = 'none'; game.lastFrameTime = performance.now(); } } } lastButtons = activeGamepad.buttons.map(b => (b ? b.pressed : false)); }
         function adjustSpeed(delta) { const speedSlider = document.getElementById('speed-slider'); if (!speedSlider) return; let currentValue = parseFloat(speedSlider.value); let newValue = currentValue + delta; const min = parseFloat(speedSlider.min); const max = parseFloat(speedSlider.max); newValue = Math.round(Math.max(min, Math.min(max, newValue)) * 10) / 10; speedSlider.value = newValue; if (game) { game.gameSpeedMultiplier = newValue; } const speedValue = document.getElementById('speed-value'); if (speedValue) { speedValue.textContent = `${newValue.toFixed(1)}x`; } }
 
         document.addEventListener('keydown', (e) => {
@@ -1022,8 +1035,7 @@
             }
 
             if (key === 'r') {
-                // To reset, we just need to re-init the lobby. The server will handle the state.
-                lobby.init();
+                location.reload(); // Quits and rejoins lobby
             }
             if (key === 'p') {
                 e.preventDefault();
@@ -1065,6 +1077,9 @@
             updateMuteButtonDisplay();
             updateControlStatus(isTouchDevice ? 'touch' : 'keyboard');
             
+            const newGameButton = document.getElementById('new-game-button');
+            newGameButton?.addEventListener('click', () => location.reload());
+
             const speedSlider = document.getElementById('speed-slider');
             const speedValue = document.getElementById('speed-value');
             speedSlider?.addEventListener('input', (e) => {
@@ -1080,6 +1095,7 @@
 
             networkManager.on('connected', (payload) => {
                 console.log(`[NETWORK] Connected with client ID: ${payload.clientId}`);
+                lobby.init(); // Show the lobby screen
                 lobby.updateState(payload.lobbyState);
             });
             
@@ -1100,7 +1116,23 @@
                 }
             });
 
-            lobby.init();
+            networkManager.on('gameInProgress', () => {
+                document.getElementById('game-container').style.display = 'none';
+                const messageContainer = document.getElementById('message');
+                const messageText = document.getElementById('message-text');
+                const messageButtons = document.getElementById('message-buttons');
+
+                messageText.innerHTML = `<h1>GAME IN PROGRESS</h1><div style="font-size:0.7em">Please wait for the current game to finish, or you can join as a spectator.</div>`;
+                messageButtons.innerHTML = `<button id="spectate-btn">Spectate</button>`;
+                messageContainer.style.display = 'flex';
+                
+                document.getElementById('spectate-btn').addEventListener('click', () => {
+                    networkManager.send('requestSpectate', {});
+                });
+            });
+
+            // Initial state is to show the lobby
+            lobby.init(); 
             networkManager.connect();
         };
     </script>
