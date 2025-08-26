@@ -468,24 +468,40 @@
                 this.eventHandlers = new Map();
                 this.ws = null;
                 this.connected = false;
-                this.serverUrl = 'ws://localhost:8080'; // Standard local dev WebSocket port
+                this.serverUrl = 'ws://localhost:8080';
                 this.clientId = null;
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = 5;
+                this.reconnectInterval = 1000; // ms
+                this.reconnectTimer = null;
             }
 
             connect() {
-                console.log(`[NETWORK] Attempting to connect to ${this.serverUrl}...`);
-                this.updateNetworkStatus(`Connecting to ${this.serverUrl}...`, '#aaa');
+                if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+                this.reconnectAttempts = 0;
+                this._attemptConnection();
+            }
+            
+            _attemptConnection() {
+                 if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
+                    console.warn('[NETWORK] Connection attempt while WebSocket is not closed.');
+                    return;
+                }
+
+                console.log(`[NETWORK] Attempting to connect (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})...`);
+                this.updateNetworkStatus(`Connecting to server...`, '#aaa');
 
                 try {
                     this.ws = new WebSocket(this.serverUrl);
                 } catch (error) {
                     console.error('[NETWORK] WebSocket constructor failed:', error);
-                    this.updateNetworkStatus('Connection Failed (Invalid URL?)', 'red');
+                    this.handleReconnect();
                     return;
                 }
 
                 this.ws.onopen = () => {
                     this.connected = true;
+                    this.reconnectAttempts = 0;
                     console.log('[NETWORK] WebSocket connection established.');
                     this.updateNetworkStatus('Connected', 'lime');
                 };
@@ -493,7 +509,6 @@
                 this.ws.onmessage = (event) => {
                     try {
                         const message = JSON.parse(event.data);
-                        // console.log('[NETWORK_RECV]', message);
                         if (message.event && this.eventHandlers.has(message.event)) {
                              if (message.event === 'connected') {
                                 this.clientId = message.payload.clientId;
@@ -510,18 +525,36 @@
                     this.connected = false;
                     const reason = event.reason || (event.code === 1006 ? 'Abnormal closure; server may be down.' : 'No reason given.');
                     console.warn(`[NETWORK] WebSocket connection closed. Code: ${event.code}. Reason: ${reason}`);
-
-                    if (!wasConnected) {
-                        this.updateNetworkStatus('Connection Failed. Is the server running?', 'red');
-                    } else {
-                        this.updateNetworkStatus('Connection Closed.', 'orange');
-                    }
+                    
                     this.ws = null;
+
+                    // A "normal" closure (code 1000) means we don't try to reconnect.
+                    if (event.code !== 1000) { 
+                        this.handleReconnect();
+                    } else if (wasConnected) {
+                        this.updateNetworkStatus('Disconnected.', 'orange');
+                    }
                 };
 
                 this.ws.onerror = (error) => {
-                    console.error('[NETWORK] WebSocket error occurred. This typically means the connection to the server could not be established. Please ensure the server is running and accessible at the specified URL.');
+                    console.error('[NETWORK] WebSocket error occurred.');
+                    // onclose will be called immediately after, which will handle reconnection.
                 };
+            }
+            
+            handleReconnect() {
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    this.reconnectAttempts++;
+                    const delay = Math.min(10000, this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1)); // Exponential backoff up to 10s
+                    console.log(`[NETWORK] Reconnecting in ${delay / 1000} seconds...`);
+                    this.updateNetworkStatus(`Connection lost. Retrying...`, 'orange');
+                    
+                    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = setTimeout(() => this._attemptConnection(), delay);
+                } else {
+                    console.error('[NETWORK] Max reconnect attempts reached. Giving up.');
+                    this.updateNetworkStatus('Connection Failed. Is the server running?', 'red');
+                }
             }
 
             on(eventName, callback) {
@@ -534,7 +567,6 @@
             send(eventName, payload) {
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                     const message = JSON.stringify({ event: eventName, payload: payload });
-                    // console.log(`[NETWORK_SEND] Event: ${eventName}`, payload);
                     this.ws.send(message);
                 } else {
                     console.warn('[NETWORK] Could not send message, WebSocket is not open.');

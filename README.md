@@ -17,8 +17,8 @@ A classic arcade-style game reminiscent of Pac-Man, built with HTML, CSS, and Ja
 ## Client/Server Architecture
 
 This project now uses a true client-server model:
--   **`server.js`**: A Node.js application that acts as the authoritative game server. It manages the game state, processes all game logic (movement, collisions, AI), and synchronizes clients.
--   **`index.html`**: The frontend client that connects to the server. It is responsible for sending user input to the server and rendering the game state it receives. It does not contain any game logic.
+-   **`server.js`**: A Node.js application that acts as the authoritative game server. It manages the game state, processes all game logic (movement, collisions, AI), synchronizes clients, and serves the game client.
+-   **`index.html`**: The frontend client that connects to the server. It is responsible for sending user input to the server and rendering the game state it receives.
 
 This setup requires you to run the server application locally before you can play the game in your browser.
 
@@ -42,9 +42,9 @@ This setup requires you to run the server application locally before you can pla
     ```bash
     npm start
     ```
-    You should see a message like `[SERVER] WebSocket server started on ws://localhost:8080`. Leave this terminal window running.
+    You should see a message like `[SERVER] Open http://localhost:8080 in your browser to play.`. Leave this terminal window running.
 
-5.  **Play the Game**: Open the `index.html` file in your web browser. The game will connect to your local server, and you can join the lobby and start playing. To play with a friend on the same computer, open `index.html` in a second browser tab or window.
+5.  **Play the Game**: Open your web browser and navigate to `http://localhost:8080`. The game will load, and you can join the lobby and start playing. To play with a friend, open the same URL in a second browser tab or window.
 
 ## Controls
 

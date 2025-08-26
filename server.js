@@ -1,8 +1,48 @@
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
-const wss = new WebSocket.Server({ port: 8080 });
-console.log('[SERVER] WebSocket server started on ws://localhost:8080');
+
+// --- Server Setup with HTTP and WebSocket ---
+const server = http.createServer((req, res) => {
+    // Serve index.html for the root request
+    if (req.url === '/' || req.url === '/index.html') {
+        const filePath = path.join(__dirname, 'index.html');
+        fs.readFile(filePath, (err, data) => {
+            if (err) {
+                console.error('[SERVER] Error reading index.html:', err);
+                res.writeHead(500, { 'Content-Type': 'text/plain' });
+                res.end('Internal Server Error: Could not load the game file.');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(data);
+        });
+    } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
+    }
+});
+
+const wss = new WebSocket.Server({ server });
+
+server.listen(8080, '0.0.0.0', () => {
+    console.log('[SERVER] Game server is running.');
+    console.log('[SERVER] Open http://localhost:8080 in your browser to play.');
+});
+
+server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+        console.error('[SERVER] FATAL: Port 8080 is already in use.');
+        console.error('[SERVER] Please close the other application using this port and try again.');
+    } else {
+        console.error('[SERVER] FATAL: An unexpected error occurred on the server.', error);
+    }
+    process.exit(1); // Exit if the server cannot be started
+});
+
 
 // --- Game Constants (mirrored from client) ---
 const TILE_SIZE = 30;
