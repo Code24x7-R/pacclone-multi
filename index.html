@@ -140,1506 +140,201 @@
         }
         #high-scores td:nth-child(1) { text-align: right; padding-right: 15px; color: #ccc; } /* Rank */
         #high-scores td:nth-child(2) { text-align: right; padding-right: 15px; } /* Score */
-        #high-scores td:nth-child(3) { text-align: left; } /* Name */
-
-        #message-buttons {
-            display: flex;
-            gap: 15px;
-            flex-direction: column;
-            align-items: center;
-        }
-        #message-buttons button {
+        #high-scores td:nth-child(3) { text-align: left; padding-left: 15px; } /* Initials */
+        #final-scores .player-name { font-weight: bold; }
+        .button {
+            background-color: #333;
+            color: #fff;
+            border: 2px solid #fff;
             padding: 10px 20px;
-            font-size: 0.8em;
-            font-family: monospace;
-            color: #000;
-            background-color: #fff;
-            border: 2px solid yellow;
-            border-radius: 5px;
+            font-family: inherit;
+            font-size: clamp(0.9rem, 3vw, 1.2rem);
             cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-radius: 5px;
             transition: background-color 0.2s, color 0.2s;
         }
-        #message-buttons button:hover:not(:disabled) {
-            background-color: yellow;
+        .button:hover, .button:focus {
+            background-color: #fff;
             color: #000;
         }
-        #message-buttons button:disabled {
-            background-color: #333;
-            color: #777;
-            border-color: #777;
+        .button:disabled {
+            background-color: #222;
+            color: #555;
+            border-color: #555;
             cursor: not-allowed;
         }
-        #highscore-form {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            justify-content: center;
-        }
-        #highscore-form input {
-            width: 4em;
-            height: 1.5em;
-            font-size: 1em;
-            text-align: center;
-            background-color: #111;
-            color: #fff;
-            border: 2px solid yellow;
-            font-family: monospace;
-            text-transform: uppercase;
-        }
-        #highscore-form button {
-            font-size: 0.6em;
-            padding: 8px 16px;
-        }
-        #mute-button, #new-game-button {
-            background-color: #111;
-            color: #fff;
-            border: 1px solid #fff;
-            font-family: monospace;
-            cursor: pointer;
-            padding: 5px 10px;
-            font-size: 0.8em;
-        }
-        #mute-button:hover, #new-game-button:hover {
-            background-color: #333;
-        }
-        #new-game-button {
-            background-color: #a00;
-        }
-        #new-game-button:hover {
-            background-color: #c00;
-        }
-        #speed-control {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 0.8em;
-        }
-        #speed-control input[type="range"] {
-            vertical-align: middle;
-        }
-        #speed-value {
-            width: 3em;
-            text-align: right;
-        }
-        #controls-info {
-            margin-top: 10px;
-            font-size: clamp(0.7rem, 2vw, 0.9rem);
-            color: #aaa;
-            text-align: center;
-        }
-        /* --- Lobby Styles --- */
-        #lobby-container {
+        /* LOBBY STYLES */
+        #lobby {
             display: flex;
             flex-direction: column;
+            align-items: center;
+            gap: 20px;
             width: 100%;
+        }
+        .lobby-slots {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .slot {
+            border: 2px solid #555;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            min-width: 150px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .slot.joined {
+            border-color: var(--player-color, #fff);
+            box-shadow: 0 0 10px var(--player-color, #fff);
+        }
+        .slot .player-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--player-color, #fff);
+        }
+        .slot .status {
+            font-style: italic;
+            color: #aaa;
+            height: 20px;
+            margin-bottom: 15px;
+        }
+        .slot .status.waiting {
+            color: #ff0;
+        }
+        #game-options {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+        #game-options label {
+            display: flex;
+            align-items: center;
             gap: 10px;
         }
-        .player-slot {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
-            border: 2px solid #555;
-            border-radius: 5px;
-            font-size: 0.8em;
-            transition: border-color 0.3s;
-        }
-        .player-slot.joined {
-            border-style: solid;
-        }
-        .player-slot.local-player {
-            box-shadow: 0 0 8px yellow;
-        }
-        .player-slot .player-name {
-            font-weight: bold;
-        }
-        .player-slot button {
-            padding: 5px 15px;
-            font-size: 0.9em;
-            font-family: monospace;
-            cursor: pointer;
-        }
-        .player-slot button:disabled {
-            background-color: #222;
-            color: #666;
-            border-color: #444;
-            cursor: not-allowed;
-        }
-        #network-status {
-            font-size: 0.6em;
-            color: #aaa;
-            margin-top: 15px;
-            height: 1.2em;
-        }
-        /* --- Touch Controls --- */
+        /* TOUCH CONTROLS (initially hidden) */
         #touch-controls {
-            display: none; /* Hidden by default, JS will show it */
+            display: none;
             position: fixed;
-            bottom: 10px;
-            left: 10px;
-            right: 10px;
-            height: var(--dpad-size);
-            pointer-events: none; /* Container doesn't block clicks, children will override */
-            z-index: 10;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 0 20px;
+            pointer-events: none; /* Allow clicks through the container */
+            user-select: none; /* Prevent text selection */
+            -webkit-user-select: none;
+            z-index: 100;
         }
-        #dpad {
-            position: absolute;
-            bottom: 0;
+        #dpad-container {
+            position: relative;
             width: var(--dpad-size);
             height: var(--dpad-size);
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            grid-template-rows: 1fr 1fr 1fr;
-            pointer-events: auto; /* This area is interactive */
-            user-select: none;
-            -webkit-user-select: none;
-            -webkit-tap-highlight-color: transparent;
-            font-size: clamp(8px, 2vmin, 12px); /* Base for em units in arrows */
+            pointer-events: auto; /* Enable clicks on dpad */
         }
         .dpad-btn {
-            background-color: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            position: relative;
-        }
-        .dpad-btn:active {
-            background-color: rgba(255, 255, 255, 0.5);
-        }
-        #dpad-up {
-            grid-column: 2;
-            grid-row: 1;
-            border-radius: 5px 5px 0 0;
-        }
-        #dpad-down {
-            grid-column: 2;
-            grid-row: 3;
-            border-radius: 0 0 5px 5px;
-        }
-        #dpad-left {
-            grid-column: 1;
-            grid-row: 2;
-            border-radius: 5px 0 0 5px;
-        }
-        #dpad-right {
-            grid-column: 3;
-            grid-row: 2;
-            border-radius: 0 5px 5px 0;
-        }
-        .dpad-btn::after {
-            content: '';
             position: absolute;
-            top: 50%;
-            left: 50%;
-            border-style: solid;
-            border-color: transparent;
+            width: 38%;
+            height: 38%;
+            background-color: rgba(128, 128, 128, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
         }
-        #dpad-up::after {
-            border-width: 0 1.25em 1.875em 1.25em;
-            border-bottom-color: rgba(255, 255, 255, 0.8);
-            transform: translate(-50%, -60%);
+        .dpad-btn.active {
+            background-color: rgba(255, 255, 255, 0.6);
         }
-        #dpad-down::after {
-            border-width: 1.875em 1.25em 0 1.25em;
-            border-top-color: rgba(255, 255, 255, 0.8);
-            transform: translate(-50%, -40%);
+        #dpad-up { top: 0; left: 31%; border-radius: 5px 5px 0 0; }
+        #dpad-down { bottom: 0; left: 31%; border-radius: 0 0 5px 5px; }
+        #dpad-left { left: 0; top: 31%; border-radius: 5px 0 0 5px; }
+        #dpad-right { right: 0; top: 31%; border-radius: 0 5px 5px 0; }
+        #dash-btn-container {
+            pointer-events: auto; /* Enable clicks on dash button */
         }
-        #dpad-left::after {
-            border-width: 1.25em 1.875em 1.25em 0;
-            border-right-color: rgba(255, 255, 255, 0.8);
-            transform: translate(-60%, -50%);
-        }
-        #dpad-right::after {
-            border-width: 1.25em 0 1.25em 1.875em;
-            border-left-color: rgba(255, 255, 255, 0.8);
-            transform: translate(-40%, -50%);
-        }
-        #dash-button-touch {
-            position: absolute;
-            bottom: 15px; /* Aligned with joystick area */
+        #dash-btn {
             width: var(--dash-btn-size);
             height: var(--dash-btn-size);
             border-radius: 50%;
-            background-color: rgba(255, 255, 0, 0.4);
-            border: 2px solid yellow;
+            background-color: rgba(255, 82, 82, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: clamp(0.9rem, 3vmin, 1.2rem);
-            font-family: monospace;
-            color: white;
-            text-shadow: 1px 1px 2px black;
-            pointer-events: auto; /* Interactive */
-            user-select: none; /* Prevent text selection */
-            -webkit-user-select: none; /* for iOS */
-            -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
         }
-        #dash-button-touch:active {
-            background-color: rgba(255, 255, 0, 0.7);
-        }
-        
-        /* --- Touch Controls Layout --- */
-        /* Default (Right-handed) Layout */
-        #touch-controls:not(.left-hand-layout) #dpad {
-            left: 0;
-        }
-        #touch-controls:not(.left-hand-layout) #dash-button-touch {
-            right: 15px;
-        }
-        /* Swapped (Left-handed) Layout */
-        #touch-controls.left-hand-layout #dpad {
-            right: 0;
-        }
-        #touch-controls.left-hand-layout #dash-button-touch {
-            left: 15px;
+        #dash-btn.active {
+            background-color: rgba(255, 82, 82, 0.8);
         }
     </style>
 </head>
 <body>
+
     <div id="game-container">
         <div id="game-info">
             <div id="player-scores"></div>
-            <div id="control-status" title="Active Control Method"></div>
-            <div id="speed-control">
-                <label for="speed-slider">Speed:</label>
-                <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1" title="Adjust Game Speed">
-                <span id="speed-value">1.0x</span>
+            <div id="control-status" title="Gamepad status">
+                <!-- SVG Icon for Gamepad, keyboard, etc. -->
             </div>
-            <button id="mute-button" title="Toggle Sound (M)">Mute</button>
-            <button id="new-game-button" title="New Game (R)">New Game</button>
         </div>
         <canvas id="gameCanvas" width="600" height="600"></canvas>
-        <div id="controls-info">
-            Arrows/WASD: Move | Space/Shift: Dash | P: Pause | R: New Game
-        </div>
     </div>
+
     <div id="message">
-        <div id="message-text"></div>
-        <div id="message-buttons"></div>
+        <h1 id="message-title">Connecting...</h1>
+        <div id="message-body">Attempting to connect to the game server.</div>
+        <div id="final-scores"></div>
+        <div id="high-scores"></div>
+        <button id="spectate-btn" class="button" style="display: none;">Spectate</button>
     </div>
-    <div id="touch-controls">
-        <div id="dpad">
-            <div id="dpad-up" class="dpad-btn"></div>
-            <div id="dpad-down" class="dpad-btn"></div>
-            <div id="dpad-left" class="dpad-btn"></div>
-            <div id="dpad-right" class="dpad-btn"></div>
+
+    <!-- LOBBY -->
+    <div id="lobby">
+        <h1>Pacclone Multi</h1>
+        <div class="lobby-slots">
+            <div class="slot" id="slot-1" data-slot-id="1" style="--player-color: yellow;">
+                <div class="player-name">Player 1</div>
+                <div class="status">Open</div>
+                <button class="button join-btn">Join</button>
+            </div>
+            <div class="slot" id="slot-2" data-slot-id="2" style="--player-color: #4ade80;">
+                <div class="player-name">Player 2</div>
+                <div class="status">Open</div>
+                <button class="button join-btn">Join</button>
+            </div>
         </div>
-        <div id="dash-button-touch">DASH</div>
+        <div id="lobby-message"></div>
+        <div id="game-options">
+            <label>
+                Game Speed: <input type="range" id="game-speed-slider" min="0.5" max="2" step="0.1" value="1.0">
+            </label>
+            <!-- Start button is now controlled by the server -->
+        </div>
     </div>
 
-    <script>
-        // --- Game Constants ---
-        const TILE_SIZE = 30;
-        const MAP_WIDTH = 20;
-        const MAP_HEIGHT = 20;
-        const DASH_DURATION = 200;
-        const DASH_TILES = 3;
-        const CONTROLS_PREFERENCE_KEY = 'paccloneControlsPref';
-        const HIGH_SCORES_KEY = 'paccloneHighScores';
-        const MAX_HIGH_SCORES = 10;
-        const FRIGHTENED_DURATION = 8000;
 
-        const ICONS = {
-            keyboard: `<svg viewBox="0 0 24 24" fill="currentColor" title="Keyboard"><path d="M15.5 13.5h-7v-3h7v3z M12 3L9.5 7h5L12 3zm0 18l2.5-4h-5L12 21zM21 12l-4 2.5v-5L21 12zM3 12l4-2.5v5L3 12z"/></svg>`,
-            touch: `<svg viewBox="0 0 24 24" fill="currentColor" title="Touch Controls"><path d="M15 9v-4h-6v4H5v6h4v4h6v-4h4V9h-4z"/></svg>`,
-            gamepad: `<svg viewBox="0 0 24 24" fill="currentColor" title="Gamepad"><path d="M9.5,5.5 C 5.5,5.5 5.5,9 2,9 L 2,15 C 5.5,15 5.5,18.5 9.5,18.5 H 14.5 C 18.5,18.5 18.5,15 22,15 V 9 C 18.5,9 18.5,5.5 14.5,5.5 H 9.5 Z M8 11H5v2h3v3h2v-3h3v-2h-3V8h-2v3z M 15,10 a 1 1 0 1 0 2 0 a 1 1 0 1 0 -2 0 z M 17,12 a 1 1 0 1 0 2 0 a 1 1 0 1 0 -2 0 z"/></svg>`
-        };
-
-        class Player {
-            constructor(id, color) {
-                this.id = id;
-                this.color = color;
-                this.radius = TILE_SIZE / 2 - 2;
-                
-                // State will be synced from server
-                this.x = 0;
-                this.y = 0;
-                this.dx = 0;
-                this.dy = 0;
-                this.mouthOpen = true;
-                this.mouthAngle = 0;
-                this.animationFrame = 0;
-                this.lastDx = 0;
-                this.lastDy = 0;
-                this.phaseDashAvailable = true;
-                this.isDashing = false;
-                this.powerUpTimer = 0;
-                this.invulnerabilityTimer = 0;
-                this.score = 0;
-                this.lives = 0;
-                this.isActive = false;
-                this.isSpectator = false;
-                this.isWinner = false;
-            }
-        }
-
-        /**
-         * Manages real-time network communication for the game using WebSockets.
-         */
-        class NetworkManager {
-            constructor() {
-                this.eventHandlers = new Map();
-                this.ws = null;
-                this.connected = false;
-                this.serverUrl = `ws://${window.location.host}`;
-                this.clientId = null;
-                this.reconnectAttempts = 0;
-                this.maxReconnectAttempts = 5;
-                this.reconnectInterval = 1000; // ms
-                this.reconnectTimer = null;
-            }
-
-            connect() {
-                if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-                this.reconnectAttempts = 0;
-                this._attemptConnection();
-            }
-            
-            _attemptConnection() {
-                 if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
-                    console.warn('[NETWORK] Connection attempt while WebSocket is not closed.');
-                    return;
-                }
-
-                console.log(`[NETWORK] Attempting to connect (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})...`);
-                this.updateNetworkStatus(`Connecting to server...`, '#aaa');
-
-                try {
-                    this.ws = new WebSocket(this.serverUrl);
-                } catch (error) {
-                    console.error('[NETWORK] WebSocket constructor failed:', error);
-                    this.handleReconnect();
-                    return;
-                }
-
-                this.ws.onopen = () => {
-                    this.connected = true;
-                    this.reconnectAttempts = 0;
-                    console.log('[NETWORK] WebSocket connection established.');
-                    this.updateNetworkStatus('Connected', 'lime');
-                };
-
-                this.ws.onmessage = (event) => {
-                    try {
-                        const message = JSON.parse(event.data);
-                        if (message.event && this.eventHandlers.has(message.event)) {
-                             if (message.event === 'connected') {
-                                this.clientId = message.payload.clientId;
-                            }
-                            this.eventHandlers.get(message.event).forEach(callback => callback(message.payload));
-                        }
-                    } catch (e) {
-                        console.error('[NETWORK] Error parsing message from server:', event.data, e);
-                    }
-                };
-
-                this.ws.onclose = (event) => {
-                    const wasConnected = this.connected;
-                    this.connected = false;
-                    const reason = event.reason || (event.code === 1006 ? 'Abnormal closure; server may be down.' : 'No reason given.');
-                    console.warn(`[NETWORK] WebSocket connection closed. Code: ${event.code}. Reason: ${reason}`);
-                    
-                    this.ws = null;
-
-                    // A "normal" closure (code 1000) means we don't try to reconnect.
-                    if (event.code !== 1000) { 
-                        this.handleReconnect();
-                    } else if (wasConnected) {
-                        this.updateNetworkStatus('Disconnected.', 'orange');
-                    }
-                };
-
-                this.ws.onerror = (error) => {
-                    console.error('[NETWORK] WebSocket error occurred.');
-                    // onclose will be called immediately after, which will handle reconnection.
-                };
-            }
-            
-            handleReconnect() {
-                if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                    this.reconnectAttempts++;
-                    const delay = Math.min(10000, this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1)); // Exponential backoff up to 10s
-                    console.log(`[NETWORK] Reconnecting in ${delay / 1000} seconds...`);
-                    this.updateNetworkStatus(`Connection lost. Retrying...`, 'orange');
-                    
-                    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-                    this.reconnectTimer = setTimeout(() => this._attemptConnection(), delay);
-                } else {
-                    console.error('[NETWORK] Max reconnect attempts reached. Giving up.');
-                    this.updateNetworkStatus('Connection Failed. Is the server running?', 'red');
-                }
-            }
-
-            on(eventName, callback) {
-                if (!this.eventHandlers.has(eventName)) {
-                    this.eventHandlers.set(eventName, []);
-                }
-                this.eventHandlers.get(eventName).push(callback);
-            }
-
-            send(eventName, payload) {
-                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                    const message = JSON.stringify({ event: eventName, payload: payload });
-                    this.ws.send(message);
-                } else {
-                    console.warn('[NETWORK] Could not send message, WebSocket is not open.');
-                }
-            }
-            
-            updateNetworkStatus(text, color) {
-                const statusEl = document.getElementById('network-status');
-                if (statusEl) {
-                    statusEl.textContent = text;
-                    statusEl.style.color = color;
-                }
-                 if (game && game.paused) {
-                    const messageContainer = document.getElementById('message');
-                    const messageText = document.getElementById('message-text');
-                    let pauseHTML = `PAUSED<br><div id="network-status" style="font-size: 0.6em; color: ${color};">${text}</div>`;
-                    messageText.innerHTML = pauseHTML;
-                }
-            }
-        }
-
-        /**
-         * Manages the pre-game lobby screen where players can join.
-         */
-        class GameLobby {
-            constructor(networkManager) {
-                this.networkManager = networkManager;
-                this.lobbyState = {
-                    slots: [
-                        { id: 1, color: 'yellow', joined: false, clientId: null },
-                        { id: 2, color: '#4ade80', joined: false, clientId: null },
-                    ],
-                };
-            }
-
-            init() {
-                document.getElementById('game-container').style.display = 'flex';
-                document.getElementById('game-info').style.display = 'none';
-                document.getElementById('gameCanvas').style.display = 'none';
-                document.getElementById('controls-info').style.display = 'none';
-
-                const messageContainer = document.getElementById('message');
-                const messageText = document.getElementById('message-text');
-                const messageButtons = document.getElementById('message-buttons');
-
-                messageText.innerHTML = `<h1>PACCLONE MULTI</h1><div id="lobby-container"></div><div id="network-status">Connecting...</div>`;
-                messageButtons.innerHTML = ``;
-                
-                this.render();
-
-                const lobbyContainer = document.getElementById('lobby-container');
-                lobbyContainer.addEventListener('click', (e) => {
-                    if (e.target.matches('.join-btn')) {
-                        const playerId = parseInt(e.target.dataset.playerId, 10);
-                        this.handleJoin(playerId);
-                    }
-                });
-                
-                messageContainer.style.display = 'flex';
-            }
-            
-            updateState(newLobbyState) {
-                this.lobbyState = newLobbyState; // Always update the internal state
-                
-                // Only re-render the lobby UI if it is currently visible
-                const lobbyContainer = document.getElementById('lobby-container');
-                if (lobbyContainer) {
-                    this.render();
-                }
-            }
-
-            render() {
-                const lobbyContainer = document.getElementById('lobby-container');
-                if (!lobbyContainer) return;
-
-                const localPlayerIsJoined = this.lobbyState.slots.some(p => p.clientId === this.networkManager.clientId);
-
-                let lobbyHTML = '';
-                this.lobbyState.slots.forEach(slot => {
-                    const isLocalPlayer = slot.clientId === this.networkManager.clientId;
-                    const joinedClass = slot.joined ? 'joined' : '';
-                    const localClass = isLocalPlayer ? 'local-player' : '';
-
-                    let buttonHTML;
-                    if (slot.joined) {
-                        buttonHTML = `<span>${isLocalPlayer ? 'YOU' : 'JOINED'}</span>`;
-                    } else {
-                        if (localPlayerIsJoined) {
-                            // This client has already joined another slot, so disable this empty one.
-                            buttonHTML = `<button class="join-btn" data-player-id="${slot.id}" disabled>Join</button>`;
-                        } else {
-                            // Slot is open and this client hasn't joined anywhere yet.
-                            buttonHTML = `<button class="join-btn" data-player-id="${slot.id}">Join</button>`;
-                        }
-                    }
-
-                    lobbyHTML += `
-                        <div class="player-slot ${joinedClass} ${localClass}" style="border-color: ${slot.color};">
-                            <span class="player-name" style="color: ${slot.color};">PLAYER ${slot.id}</span>
-                            ${buttonHTML}
-                        </div>
-                    `;
-                });
-                lobbyContainer.innerHTML = lobbyHTML;
-            }
-
-            handleJoin(playerId) {
-                this.networkManager.send('joinLobby', { slotId: playerId });
-            }
-            
-            handleStart() {
-                this.networkManager.send('startGame', {});
-            }
-        }
-        
-        // --- Game State Variables ---
-        let game = null;
-        let networkManager = null;
-        let lobby = null;
-        let localPlayerId = null;
-
-        let highScores = [];
-        let animationFrameId;
-
-        // --- Gamepad State ---
-        let gamepadIndex = null;
-        let lastButtons = [];
-        let isTouchDevice = 'ontouchstart' in window;
-
-        // --- Audio Context & Sounds ---
-        let audioContext;
-        let isMuted = false;
-        let muteButton;
-        const sounds = {};
-        const lastMoveSoundTime = new Map();
-        const MOVE_SOUND_INTERVAL = 120; // ms
-
-        function toggleMute() { isMuted = !isMuted; updateMuteButtonDisplay(); }
-        function updateMuteButtonDisplay() { if (muteButton) { muteButton.textContent = isMuted ? 'Unmute' : 'Mute'; muteButton.title = isMuted ? 'Toggle Sound On (M)' : 'Toggle Sound Off (M)'; } }
-
-        function initializeAudio() {
-            if (audioContext) {
-                // If context exists but is suspended, resume it.
-                if (audioContext.state === 'suspended') {
-                    audioContext.resume();
-                }
-                return;
-            }
-            try {
-                // Create the context if it doesn't exist.
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            } catch (e) {
-                console.error("Web Audio API is not supported in this browser.");
-            }
-        }
-
-        function playChompSound(playerId) {
-            if (isMuted || !audioContext) return;
-            const now = audioContext.currentTime;
-            const duration = 0.05; // 50ms
-
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            oscillator.type = 'square';
-            
-            // Different pitch for each player's chomp
-            const baseFreq = playerId === 1 ? 300 : 350;
-            // Add a slight, random pitch variation to make chomping less monotonous.
-            oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 40 - 20), now);
-
-            // A fast attack and decay envelope makes the sound "plucky" or "sucky".
-            gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.1, now + 0.02); // Quick attack
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); // Fast decay
-
-            oscillator.start(now);
-            oscillator.stop(now + duration);
-        }
-
-        function playMoveSound(playerId) {
-            if (isMuted || !audioContext) return;
-            
-            const nowMs = performance.now();
-            if (lastMoveSoundTime.has(playerId) && (nowMs - lastMoveSoundTime.get(playerId) < MOVE_SOUND_INTERVAL)) {
-                return; // Too soon, don't play
-            }
-            lastMoveSoundTime.set(playerId, nowMs);
-
-            const now = audioContext.currentTime;
-            const duration = 0.08;
-
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            oscillator.type = 'sine'; // Use a sine wave for a cleaner "blip"
-            
-            // More distinct frequencies for each player
-            const startFreq = playerId === 1 ? 220 : 280; // A3 and C#4
-            const endFreq = startFreq * 0.9;
-
-            oscillator.frequency.setValueAtTime(startFreq, now);
-            oscillator.frequency.exponentialRampToValueAtTime(endFreq, now + duration);
-
-            // A short envelope for a "blip" sound
-            gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.05, now + 0.01); 
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-            oscillator.start(now);
-            oscillator.stop(now + duration);
-        }
-
-        function playPowerupSound() {
-            if (isMuted || !audioContext) return;
-            const now = audioContext.currentTime;
-            const duration = 0.4; // 400ms
-
-            // An LFO modulates the main oscillator's frequency to create a "wobble".
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            const lfo = audioContext.createOscillator();
-            const lfoGain = audioContext.createGain();
-
-            lfo.type = 'sine';
-            lfo.frequency.setValueAtTime(10, now); // 10Hz wobble
-            lfoGain.gain.setValueAtTime(50, now); // 50Hz frequency deviation
-
-            lfo.connect(lfoGain);
-            lfoGain.connect(oscillator.frequency); // LFO modulates main oscillator frequency
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            oscillator.type = 'triangle';
-            oscillator.frequency.setValueAtTime(440, now); // Base frequency A4
-
-            // Fade the sound in and out smoothly.
-            gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.3, now + 0.05); // Fade in
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); // Fade out
-
-            lfo.start(now);
-            lfo.stop(now + duration);
-            oscillator.start(now);
-            oscillator.stop(now + duration);
-        }
-
-        function playEatGhostSound() {
-            if (isMuted || !audioContext) return;
-            const now = audioContext.currentTime;
-            const duration = 0.2; // 200ms
-
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            oscillator.type = 'square';
-            
-            // A rapid upward frequency sweep for a celebratory "zap" sound.
-            oscillator.frequency.setValueAtTime(500, now);
-            oscillator.frequency.exponentialRampToValueAtTime(1200, now + duration);
-
-            // Sharp attack and quick decay.
-            gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.4, now + 0.01);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-            oscillator.start(now);
-            oscillator.stop(now + duration);
-        }
-
-        function playDeathSound() {
-            if (isMuted || !audioContext) return;
-            const now = audioContext.currentTime;
-            const duration = 0.6; // 600ms
-
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.type = 'sawtooth'; // A harsh, grating sound
-            
-            // A rapid downward frequency sweep, like a machine powering down.
-            oscillator.frequency.setValueAtTime(400, now);
-            oscillator.frequency.exponentialRampToValueAtTime(50, now + duration);
-
-            gainNode.gain.setValueAtTime(0.5, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-            oscillator.start(now);
-            oscillator.stop(now + duration);
-        }
-
-        function playGameOverSound() {
-            if (isMuted || !audioContext) return;
-            const now = audioContext.currentTime;
-            const durationPerNote = 0.25;
-            const notes = [220, 165, 110, 55]; // Descending arpeggio
-            const volume = 0.4;
-
-            notes.forEach((freq, index) => {
-                const startTime = now + index * durationPerNote;
-                
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-
-                oscillator.type = 'triangle'; // A softer, more melancholic tone
-                oscillator.frequency.setValueAtTime(freq, startTime);
-
-                gainNode.gain.setValueAtTime(0, startTime);
-                gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.02);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durationPerNote);
-
-                oscillator.start(startTime);
-                oscillator.stop(startTime + durationPerNote);
-            });
-        }
-        
-        function playDashSound() {
-            if (isMuted || !audioContext) return;
-            const now = audioContext.currentTime;
-            const duration = 0.2; // 200ms
-
-            // --- Tonal Part (the whoosh) ---
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            oscillator.type = 'sawtooth';
-            oscillator.frequency.setValueAtTime(2500, now); // Start high
-            oscillator.frequency.exponentialRampToValueAtTime(150, now + duration);
-
-            gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.2, now + 0.01);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-            oscillator.start(now);
-            oscillator.stop(now + duration);
-
-            // --- Noise Part (the static/phase effect) ---
-            const bufferSize = audioContext.sampleRate * duration;
-            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-            const output = buffer.getChannelData(0);
-
-            for (let i = 0; i < bufferSize; i++) {
-                output[i] = Math.random() * 2 - 1; // White noise
-            }
-
-            const noiseSource = audioContext.createBufferSource();
-            noiseSource.buffer = buffer;
-            const noiseGain = audioContext.createGain();
-            
-            noiseSource.connect(noiseGain);
-            noiseGain.connect(audioContext.destination);
-
-            // Noise fades in and out quickly like a burst of static.
-            noiseGain.gain.setValueAtTime(0, now);
-            noiseGain.gain.linearRampToValueAtTime(0.15, now + 0.02); // Quick fade in
-            noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration); // Quick fade out
-
-            noiseSource.start(now);
-            noiseSource.stop(now + duration);
-        }
-
-        function playCelebrateSound() {
-            if (isMuted || !audioContext) return;
-            const now = audioContext.currentTime;
-            const durationPerNote = 0.1;
-            const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
-            const volume = 0.35;
-
-            notes.forEach((freq, index) => {
-                const startTime = now + index * durationPerNote;
-                
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-
-                oscillator.type = 'triangle'; // A bright, happy tone
-                oscillator.frequency.setValueAtTime(freq, startTime);
-
-                // A quick attack and decay for each note
-                gainNode.gain.setValueAtTime(0, startTime);
-                gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durationPerNote);
-
-                oscillator.start(startTime);
-                oscillator.stop(startTime + durationPerNote);
-            });
-        }
-
-        function playHighScoreSound() {
-            if (isMuted || !audioContext) return;
-            const now = audioContext.currentTime;
-            const noteDuration = 0.08;
-            const gap = 0.02;
-            const startTime = now + 0.1; // Small delay
-            const volume = 0.35;
-
-            // Notes for a Pac-Man style jingle (C5, E5, G5, C6, G5, E5, C5)
-            const notes = [523.25, 659.25, 783.99, 1046.50, 783.99, 659.25, 523.25];
-
-            notes.forEach((freq, index) => {
-                const noteStartTime = startTime + index * (noteDuration + gap);
-                
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-
-                oscillator.type = 'square'; // Classic arcade sound
-                oscillator.frequency.setValueAtTime(freq, noteStartTime);
-
-                // A quick, sharp envelope for each note
-                gainNode.gain.setValueAtTime(0, noteStartTime);
-                gainNode.gain.linearRampToValueAtTime(volume, noteStartTime + 0.01);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + noteDuration);
-
-                oscillator.start(noteStartTime);
-                oscillator.stop(noteStartTime + noteDuration);
-            });
-        }
-
-        // --- Functions kept from previous version ---
-        function playWinSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const durationPerNote = 0.08; const notes = [ { freq: 523.25, dur: durationPerNote * 1.5 }, { freq: 659.25, dur: durationPerNote * 1.5 }, { freq: 783.99, dur: durationPerNote * 1.5 }, { freq: 1046.50, dur: durationPerNote * 3 } ]; const volume = 0.4; let cumulativeTime = now; notes.forEach(({ freq, dur }) => { const noteStartTime = cumulativeTime; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(freq, noteStartTime); gainNode.gain.setValueAtTime(0, noteStartTime); gainNode.gain.linearRampToValueAtTime(volume, noteStartTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + dur * 0.9); oscillator.start(noteStartTime); oscillator.stop(noteStartTime + dur); cumulativeTime += dur; }); }
-        function playStartSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const startTime = now + 0.1; const volume = 0.35; const tempo = 180; const eighthNote = 60 / tempo / 2; const notes = [ { freq: 932.33, dur: eighthNote }, { freq: 0, dur: eighthNote/2 }, { freq: 932.33, dur: eighthNote }, { freq: 783.99, dur: eighthNote }, { freq: 698.46, dur: eighthNote }, { freq: 622.25, dur: eighthNote }, { freq: 0, dur: eighthNote/2 }, { freq: 698.46, dur: eighthNote }, { freq: 622.25, dur: eighthNote }, { freq: 523.25, dur: eighthNote }, { freq: 466.16, dur: eighthNote }, { freq: 0, dur: eighthNote/2 }, { freq: 523.25, dur: eighthNote }, { freq: 466.16, dur: eighthNote }, { freq: 392.00, dur: eighthNote }, { freq: 523.25, dur: eighthNote *8 } ]; let cumulativeTime = startTime; notes.forEach(({ freq, dur }) => { if (freq > 0) { const noteStartTime = cumulativeTime; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(freq, noteStartTime); gainNode.gain.setValueAtTime(0, noteStartTime); gainNode.gain.linearRampToValueAtTime(volume, noteStartTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + dur * 0.9); oscillator.start(noteStartTime); oscillator.stop(noteStartTime + dur); } cumulativeTime += dur; }); }
-
-        // --- High Score Logic ---
-        function loadHighScores() { try { const storedScores = localStorage.getItem(HIGH_SCORES_KEY); if (storedScores) { highScores = JSON.parse(storedScores); } else { highScores = [ { name: 'TLP', score: 10000 }, { name: 'HOE', score: 8000 }, { name: 'ELN', score: 6000 }, { name: 'OLP', score: 4000 }, { name: '_YE', score: 2000 }, { name: 'E_N', score: 1000 }, ]; } highScores.sort((a, b) => b.score - a.score); highScores = highScores.slice(0, MAX_HIGH_SCORES); } catch (e) { console.error("Could not load high scores:", e); highScores = []; } }
-        function saveHighScore(name, score) { try { highScores.push({ name, score }); highScores.sort((a, b) => b.score - a.score); highScores = highScores.slice(0, MAX_HIGH_SCORES); localStorage.setItem(HIGH_SCORES_KEY, JSON.stringify(highScores)); } catch (e) { console.error("Could not save high scores:", e); } }
-        function checkHighScore(playerScore) { if (!playerScore || playerScore <= 0) return false; const lowestScore = highScores.length < MAX_HIGH_SCORES ? 0 : highScores[MAX_HIGH_SCORES - 1].score; return playerScore > lowestScore; }
-        function displayHighScores(containerElement) { let tableHTML = '<h2>HIGH SCORES</h2><div id="high-scores"><table>'; tableHTML += '<tr><th>RANK</th><th>SCORE</th><th>NAME</th></tr>'; highScores.forEach((entry, index) => { tableHTML += `<tr><td>${index + 1}</td><td>${entry.score}</td><td>${entry.name}</td></tr>`; }); for (let i = highScores.length; i < 5; i++) { tableHTML += `<tr><td>${i + 1}</td><td>---</td><td>---</td></tr>`; } tableHTML += '</table></div>'; containerElement.innerHTML = tableHTML; }
-        
-        function showGameOverScreen(finalGameState) {
-            document.getElementById('game-container').style.display = 'none';
-            const messageContainer = document.getElementById('message');
-            const messageText = document.getElementById('message-text');
-            const messageButtons = document.getElementById('message-buttons');
-
-            // Determine winner
-            const winner = finalGameState.players.find(p => p.isWinner);
-            let titleHTML = winner ? `<h1 style="color: ${winner.color};">PLAYER ${winner.id} WINS!</h1>` : '<h1>GAME OVER</h1>';
-
-            // Display final scores
-            let scoresHTML = '<div id="final-scores"><h2>Final Scores</h2><table>';
-            finalGameState.players
-                .filter(p => !p.isSpectator)
-                .sort((a,b) => b.score - a.score)
-                .forEach(p => {
-                    scoresHTML += `<tr><td style="color:${p.color}; text-align: left;">PLAYER ${p.id}</td><td style="text-align: right;">${p.score}</td></tr>`;
-                });
-            scoresHTML += '</table></div>';
-            
-            // Function to generate and display all content
-            const updateScreenContent = () => {
-                const highScoresContainer = document.createElement('div');
-                displayHighScores(highScoresContainer);
-                messageText.innerHTML = titleHTML + scoresHTML + highScoresContainer.innerHTML;
-            };
-
-            updateScreenContent();
-
-            // Check if local player got a high score
-            const localParticipant = finalGameState.players.find(p => p.clientId === networkManager.clientId);
-            const topPlayer = finalGameState.players.filter(p => !p.isSpectator).sort((a, b) => b.score - a.score)[0];
-            let isNewHighScore = false;
-            if (localParticipant && topPlayer && topPlayer.id === localParticipant.id) {
-                isNewHighScore = checkHighScore(topPlayer.score);
-            }
-            
-            const waitingMessage = `<div style="font-size: 0.7em; color: #ccc; margin-top: 20px;">Returning to lobby shortly...</div>`;
-
-            if (isNewHighScore) {
-                playHighScoreSound();
-                messageButtons.innerHTML = `<div style="font-size: 0.8em; color: lime;">NEW HIGH SCORE! Enter your initials:</div><form id="highscore-form"><input type="text" id="name-input" maxlength="3" required pattern="[A-Z_]{3}" title="3 uppercase letters or underscores" autocomplete="off" placeholder="AAA"><button type="submit">SUBMIT</button></form>`;
-                const form = document.getElementById('highscore-form');
-                const input = document.getElementById('name-input');
-                setTimeout(() => input.focus(), 0);
-                input.addEventListener('input', () => { input.value = input.value.toUpperCase().replace(/[^A-Z_]/g, ''); });
-                
-                form.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    const playerName = input.value.padEnd(3, '_').substring(0, 3);
-                    saveHighScore(playerName, topPlayer.score);
-                    
-                    updateScreenContent(); // Re-render with new high score
-                    messageButtons.innerHTML = waitingMessage;
-                });
-            } else {
-                messageButtons.innerHTML = waitingMessage;
-            }
-
-            messageContainer.style.display = 'flex';
-        }
-
-
-        // --- Game Class ---
-        class PacCloneGame {
-            constructor() {
-                this.canvas = document.getElementById('gameCanvas');
-                this.ctx = this.canvas.getContext('2d');
-
-                // Game state properties - these will be populated by the server
-                this.players = [];
-                this.ghosts = [];
-                this.map = [];
-                this.pelletsRemaining = 0;
-                this.gameRunning = false;
-                this.paused = false;
-                this.isGameOver = false;
-                this.gameOverTimer = 0;
-                this.ghostFrightenedTimer = 0;
-                this.lastFrameTime = 0;
-                this.gameSpeedMultiplier = 1.0;
-
-                // Client-side animation properties
-                this.playerInstances = new Map();
-                
-                this.soundState = {
-                    playersEatingPellet: new Set(),
-                    powerupEaten: false,
-                    ghostEaten: false,
-                    playerDied: false,
-                    playerDashed: null,
-                };
-
-                // Bind methods
-                this.gameLoop = this.gameLoop.bind(this);
-            }
-
-            initFromState(initialState) {
-                document.getElementById('game-container').style.display = 'flex';
-                document.getElementById('game-info').style.display = 'flex';
-                this.canvas.style.display = 'block';
-                document.getElementById('controls-info').style.display = 'block';
-                document.getElementById('message').style.display = 'none';
-
-                this.updateStateFromServer(initialState);
-                
-                const localPlayer = this.players.find(p => p.clientId === networkManager.clientId);
-                if(localPlayer) {
-                    localPlayerId = localPlayer.id;
-                }
-
-                playStartSound();
-                
-                this.gameRunning = true;
-                this.paused = false;
-                this.isGameOver = false;
-            }
-            
-            updateStateFromServer(newState) {
-                // --- SOUND LOGIC ---
-                // We check for sound-triggering events by comparing the old state (`this`) to the `newState`.
-                
-                // First, reset sound triggers for this frame
-                this.soundState.playersEatingPellet.clear();
-                this.soundState.powerupEaten = false;
-                this.soundState.ghostEaten = false;
-                this.soundState.playerDied = false;
-                this.soundState.playerDashed = null;
-
-                // Check for pellet/powerup eating sounds for ALL players
-                if (game && this.map && this.map.length > 0) {
-                    newState.players.forEach(player => {
-                        if (player.isActive) {
-                            const tileX = Math.floor(player.x / TILE_SIZE);
-                            const tileY = Math.floor(player.y / TILE_SIZE);
-                            // Ensure tile coordinates are within map bounds
-                            if (tileY < 0 || tileY >= this.map.length || tileX < 0 || tileX >= this.map[0].length) return;
-
-                            const oldTileState = this.map[tileY] ? this.map[tileY][tileX] : -1;
-                            const newTileState = newState.map[tileY] ? newState.map[tileY][tileX] : -1;
-
-                            if (newTileState === 4 && oldTileState !== 4) { // 4 is an empty path where a pellet was
-                                if (oldTileState === 2) {
-                                    this.soundState.playersEatingPellet.add(player.id);
-                                } else if (oldTileState === 3) {
-                                    this.soundState.powerupEaten = true; // A single sound is fine
-                                }
-                            }
-                        }
-                    });
-                }
-
-                // Check for GLOBAL sounds (ghosts eaten, players dying)
-                newState.ghosts.forEach((g, index) => {
-                    if (this.ghosts[index] && !this.ghosts[index].eaten && g.eaten) {
-                        this.soundState.ghostEaten = true;
-                    }
-                });
-                
-                newState.players.forEach((p, index) => {
-                    if (this.players[index] && this.players[index].lives > p.lives) {
-                        this.soundState.playerDied = true;
-                    }
-                    if (this.players[index] && !this.players[index].isDashing && p.isDashing) {
-                        this.soundState.playerDashed = p.id;
-                    }
-                });
-
-                // Update the state
-                this.players = newState.players;
-                this.ghosts = newState.ghosts;
-                this.map = newState.map;
-                this.pelletsRemaining = newState.pelletsRemaining;
-                this.ghostFrightenedTimer = newState.ghostFrightenedTimer;
-                
-                if (newState.gameSpeedMultiplier !== undefined && this.gameSpeedMultiplier !== newState.gameSpeedMultiplier) {
-                    this.gameSpeedMultiplier = newState.gameSpeedMultiplier;
-                    const speedSlider = document.getElementById('speed-slider');
-                    const speedValue = document.getElementById('speed-value');
-                    if (speedSlider) speedSlider.value = this.gameSpeedMultiplier;
-                    if (speedValue) speedValue.textContent = `${this.gameSpeedMultiplier.toFixed(1)}x`;
-                }
-                
-                if (this.isGameOver !== newState.isGameOver && newState.isGameOver) {
-                    this.gameOver(newState);
-                }
-                this.isGameOver = newState.isGameOver;
-
-                // Update player instances for animations
-                this.players.forEach(pData => {
-                    if (!this.playerInstances.has(pData.id)) {
-                        this.playerInstances.set(pData.id, new Player(pData.id, pData.color));
-                    }
-                    const pInstance = this.playerInstances.get(pData.id);
-                    Object.assign(pInstance, pData); // Copy server state to local instance
-                });
-
-                this.updatePlayersUI();
-            }
-
-            start() {
-                this.lastFrameTime = performance.now();
-                if (animationFrameId) cancelAnimationFrame(animationFrameId);
-                animationFrameId = requestAnimationFrame(this.gameLoop);
-            }
-
-            gameLoop(currentTime) {
-                const deltaTime = (currentTime - this.lastFrameTime) * this.gameSpeedMultiplier;
-                this.lastFrameTime = currentTime;
-                
-                if (!this.gameRunning) {
-                     // Still process gamepad input to allow restarting
-                     handleGamepadInput();
-                } else if (this.paused) {
-                    handleGamepadInput();
-                    this.draw();
-                } else if (this.gameRunning) {
-                    handleGamepadInput(); // Send inputs to server
-                    this.updateAnimations(deltaTime);
-                    this.playSounds();
-                    this.draw();
-                }
-                
-                animationFrameId = requestAnimationFrame(this.gameLoop);
-            }
-            
-            updateAnimations(deltaTime) {
-                // Animate player mouth
-                this.playerInstances.forEach(player => {
-                    player.animationFrame += deltaTime;
-                    if (player.animationFrame > 100) {
-                        player.mouthOpen = !player.mouthOpen;
-                        player.animationFrame = 0;
-                    }
-                    player.mouthAngle = player.mouthOpen ? Math.PI / 4 : 0;
-                });
-            }
-
-            playSounds() {
-                // Play sounds for each active player based on their state
-                this.playerInstances.forEach(player => {
-                    if (player.isActive && (player.dx !== 0 || player.dy !== 0)) {
-                        // Player is moving
-                        if (this.soundState.playersEatingPellet.has(player.id)) {
-                            // Moving and eating a pellet: play chomp sound
-                            playChompSound(player.id);
-                        } else {
-                            // Moving on an empty path: play move sound
-                            playMoveSound(player.id);
-                        }
-                    }
-                });
-                
-                if (this.soundState.powerupEaten) playPowerupSound();
-                if (this.soundState.ghostEaten) playEatGhostSound();
-                if (this.soundState.playerDied) playDeathSound();
-                if (this.soundState.playerDashed) playDashSound();
-            }
-
-            draw() {
-                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                this.drawMap();
-                this.drawPellets();
-                this.playerInstances.forEach(p => this.drawPlayer(p));
-                this.drawGhosts();
-
-                if (this.paused) {
-                    const messageContainer = document.getElementById('message');
-                    const messageText = document.getElementById('message-text');
-                    const netStatus = document.getElementById('network-status')?.cloneNode(true);
-                    let statusHTML = netStatus ? netStatus.outerHTML.replace('style="', 'style="font-size: 0.6em; margin-top: 10px; ') : '';
-                    let pauseHTML = `PAUSED<br>${statusHTML}`;
-                    messageText.innerHTML = pauseHTML;
-                    messageText.style.color = 'yellow';
-                    document.getElementById('message-buttons').innerHTML = '';
-                    messageContainer.style.display = 'flex';
-                }
-                
-                 if (this.isGameOver && this.gameOverTimer > 0) {
-                    this.ctx.font = '48px monospace';
-                    this.ctx.textAlign = 'center';
-                    const winner = this.players.find(p => p.isWinner);
-                    if (winner) {
-                        this.ctx.fillStyle = winner.color;
-                        this.ctx.fillText(`PLAYER ${winner.id} WINS!`, this.canvas.width / 2, this.canvas.height / 2);
-                    } else {
-                        this.ctx.fillStyle = 'red';
-                        this.ctx.fillText('GAME OVER', this.canvas.width / 2, this.canvas.height / 2);
-                    }
-                }
-            }
-
-            drawMap() { if(!this.map) return; for (let r = 0; r < MAP_HEIGHT; r++) { for (let c = 0; c < MAP_WIDTH; c++) { const tileType = this.map[r][c]; if (tileType === 1) { this.ctx.fillStyle = 'blue'; this.ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE); } else if (tileType === 0 || tileType === 6) { this.ctx.fillStyle = '#202028'; this.ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE); } } } }
-            drawPellets() { if(!this.map) return; for (let r = 0; r < MAP_HEIGHT; r++) { for (let c = 0; c < MAP_WIDTH; c++) { if (this.map[r][c] === 2) { this.ctx.fillStyle = 'grey'; this.ctx.beginPath(); this.ctx.arc(c * TILE_SIZE + TILE_SIZE / 2, r * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 8, 0, Math.PI * 2); this.ctx.fill(); } else if (this.map[r][c] === 3) { this.ctx.fillStyle = 'darkred'; this.ctx.beginPath(); this.ctx.arc(c * TILE_SIZE + TILE_SIZE / 2, r * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 4, 0, Math.PI * 2); this.ctx.fill(); } } } }
-
-            drawPlayer(player) {
-                this.ctx.save();
-                if (player.isDashing || player.isSpectator || (player.invulnerabilityTimer > 0 && Math.floor(performance.now() / 100) % 2 === 0)) {
-                    this.ctx.globalAlpha = 0.5;
-                }
-
-                if (player.isActive && player.powerUpTimer > 0) {
-                    const pulse = Math.abs(Math.sin(performance.now() / 100));
-                    this.ctx.fillStyle = `rgba(255, 255, 255, ${pulse * 0.5})`;
-                    this.ctx.beginPath();
-                    this.ctx.arc(player.x, player.y, player.radius + 5, 0, Math.PI * 2);
-                    this.ctx.fill();
-                }
-
-                this.ctx.fillStyle = player.color;
-                this.ctx.beginPath();
-                
-                if (player.isSpectator) {
-                    const ghostRadius = TILE_SIZE / 3;
-                    this.ctx.arc(player.x, player.y - ghostRadius / 2, ghostRadius, Math.PI, 0, false);
-                    this.ctx.rect(player.x - ghostRadius, player.y - ghostRadius / 2, ghostRadius * 2, ghostRadius * 1.5);
-                    this.ctx.fill();
-                } else {
-                    let directionAngle = 0;
-                    if (player.dx > 0) directionAngle = 0;
-                    else if (player.dx < 0) directionAngle = Math.PI;
-                    else if (player.dy > 0) directionAngle = Math.PI / 2;
-                    else if (player.dy < 0) directionAngle = -Math.PI / 2;
-                    else if (player.lastDx > 0) directionAngle = 0;
-                    else if (player.lastDx < 0) directionAngle = Math.PI;
-                    else if (player.lastDy > 0) directionAngle = Math.PI / 2;
-                    else if (player.lastDy < 0) directionAngle = -Math.PI / 2;
-
-                    const startAngle = directionAngle + player.mouthAngle;
-                    const endAngle = directionAngle + Math.PI * 2 - player.mouthAngle;
-                    this.ctx.arc(player.x, player.y, player.radius, startAngle, endAngle);
-                    this.ctx.lineTo(player.x, player.y);
-                    this.ctx.fill();
-                }
-                this.ctx.restore();
-            }
-
-            drawGhosts() { if(!this.ghosts) return; const ghostRadius = TILE_SIZE / 3; this.ghosts.forEach(ghost => { if (ghost.eaten) { this.ctx.fillStyle = 'white'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.fill(); this.ctx.fillStyle = 'blue'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius, ghost.y - ghostRadius / 2, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); this.ctx.beginPath(); this.ctx.arc(ghost.x, ghost.y - ghostRadius / 2, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); } else { const isFrightened = ghost.frightened; this.ctx.fillStyle = isFrightened ? 'blue' : ghost.color; this.ctx.beginPath(); this.ctx.arc(ghost.x, ghost.y - ghostRadius / 2, ghostRadius, Math.PI, 0, false); this.ctx.rect(ghost.x - ghostRadius, ghost.y - ghostRadius / 2, ghostRadius * 2, ghostRadius * 1.5); this.ctx.fill(); this.ctx.fillStyle = isFrightened ? 'pink' : 'white'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.fill(); this.ctx.beginPath(); this.ctx.arc(ghost.x + ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.fill(); this.ctx.fillStyle = 'blue'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); this.ctx.beginPath(); this.ctx.arc(ghost.x + ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); } }); }
-
-            updatePlayersUI() {
-                const container = document.getElementById('player-scores');
-                if (!container || !this.players) return;
-                
-                let html = '';
-                this.players.forEach(p => {
-                    const inactiveClass = !p.isActive ? 'inactive' : '';
-                    const winnerText = p.isWinner ? '<span class="winner-text">🏆</span>' : '';
-                    html += `
-                        <div class="player-hud ${inactiveClass}" style="color: ${p.color}; border-color: ${p.color};">
-                            ${winnerText}
-                            <div>P${p.id} Score: ${p.score}</div>
-                            <div>Lives: ${p.lives}</div>
-                        </div>
-                    `;
-                });
-                container.innerHTML = html;
-            }
-
-            pause() {
-                if (this.isGameOver) return;
-                this.paused = !this.paused;
-                if (!this.paused) {
-                    document.getElementById('message').style.display = 'none';
-                    // Recalculate lastFrameTime to avoid a time jump
-                    this.lastFrameTime = performance.now();
-                }
-            }
-            
-            gameOver(finalState) {
-                this.gameRunning = false;
-                this.isGameOver = true;
-                this.gameOverTimer = 4000;
-                
-                const hasWinner = finalState.players.some(p => p.isWinner);
-                if (hasWinner) {
-                    playCelebrateSound();
-                } else {
-                    playGameOverSound();
-                }
-                
-                showGameOverScreen(finalState);
-            }
-        }
-
-        // --- Input Handling ---
-        const keys = { up: false, down: false, left: false, right: false, dash: false };
-        let currentControlType = 'keyboard';
-
-        function handleKeyDown(e) {
-            initializeAudio(); // Initialize audio on first user interaction
-            setActiveControl('keyboard');
-            if (e.key === 'p' || e.key === 'P') { if (game) game.pause(); return; }
-            if (e.key === 'm' || e.key === 'M') { toggleMute(); return; }
-            if (e.key === 'r' || e.key === 'R') { window.location.reload(); return; }
-            if (e.repeat) return;
-            switch(e.key) {
-                case 'ArrowUp': case 'w': keys.up = true; break;
-                case 'ArrowDown': case 's': keys.down = true; break;
-                case 'ArrowLeft': case 'a': keys.left = true; break;
-                case 'ArrowRight': case 'd': keys.right = true; break;
-                case ' ': case 'Shift': keys.dash = true; break;
-            }
-            sendInput();
-        }
-
-        function handleKeyUp(e) {
-            switch(e.key) {
-                case 'ArrowUp': case 'w': keys.up = false; break;
-                case 'ArrowDown': case 's': keys.down = false; break;
-                case 'ArrowLeft': case 'a': keys.left = false; break;
-                case 'ArrowRight': case 'd': keys.right = false; break;
-                case ' ': case 'Shift': keys.dash = false; break;
-            }
-            sendInput();
-        }
-
-        function sendInput() {
-            if (currentControlType !== 'keyboard' && currentControlType !== 'gamepad') return;
-
-            let direction = { dx: 0, dy: 0 };
-            if (keys.right) direction.dx = 1;
-            else if (keys.left) direction.dx = -1;
-            else if (keys.down) direction.dy = 1;
-            else if (keys.up) direction.dy = -1;
-
-            networkManager.send('playerInput', { action: 'move', direction });
-
-            if (keys.dash) {
-                networkManager.send('playerInput', { action: 'dash' });
-                keys.dash = false; // Dash is a single press event
-            }
-        }
-        
-        function handleGamepadInput() {
-            if (gamepadIndex === null) return;
-            const gamepad = navigator.getGamepads()[gamepadIndex];
-            if (!gamepad) return;
-
-            // --- Buttons ---
-            const buttons = gamepad.buttons.map(b => b.pressed);
-            const buttonPressed = (index) => buttons[index] && !lastButtons[index];
-
-            if (buttonPressed(9)) { // Start button
-                if (game) game.pause();
-            }
-            if (buttonPressed(1)) { // B button
-                window.location.reload();
-            }
-            if (buttonPressed(0)) { // A button
-                networkManager.send('playerInput', { action: 'dash' });
-            }
-            
-            lastButtons = buttons;
-
-            // --- Axes (D-pad is often mapped to axes 9) ---
-            let dx = 0, dy = 0;
-            const deadzone = 0.5;
-            
-            // D-Pad (often on axes)
-            if (gamepad.axes.length > 9) {
-                const dpadValue = gamepad.axes[9];
-                if (dpadValue < 2) { // Ensure it's not an idle value
-                    if (dpadValue > 0.4 && dpadValue < 0.8) dy = 1;      // Down
-                    else if (dpadValue > -0.2 && dpadValue < 0.2) dx = 1; // Right
-                    else if (dpadValue > -0.8 && dpadValue < -0.4) dy = -1; // Up
-                    else if (dpadValue > -1.1 && dpadValue < -0.9) dx = -1; // Left
-                }
-            }
-            
-            // Analog stick
-            if (Math.abs(gamepad.axes[0]) > deadzone) dx = Math.round(gamepad.axes[0]);
-            if (Math.abs(gamepad.axes[1]) > deadzone) dy = Math.round(gamepad.axes[1]);
-            
-            // Prioritize d-pad buttons if they exist and are pressed
-            if (gamepad.buttons[15]?.pressed) dx = 1; // D-pad right
-            else if (gamepad.buttons[14]?.pressed) dx = -1; // D-pad left
-            else if (gamepad.buttons[13]?.pressed) dy = 1; // D-pad down
-            else if (gamepad.buttons[12]?.pressed) dy = -1; // D-pad up
-            
-            networkManager.send('playerInput', { action: 'move', direction: { dx, dy } });
-        }
-        
-        function handleTouch(e) {
-            initializeAudio();
-            setActiveControl('touch');
-            e.preventDefault();
-            const targetId = e.target.id;
-            let direction = { dx: 0, dy: 0 };
-
-            switch (e.type) {
-                case 'touchstart':
-                case 'touchmove':
-                    const touch = e.touches[0];
-                    const touchedElement = document.elementFromPoint(touch.clientX, touch.clientY);
-                    if (!touchedElement) return;
-
-                    // Reset all directions first
-                    keys.up = keys.down = keys.left = keys.right = false;
-                    
-                    if (touchedElement.id === 'dpad-up') keys.up = true;
-                    else if (touchedElement.id === 'dpad-down') keys.down = true;
-                    else if (touchedElement.id === 'dpad-left') keys.left = true;
-                    else if (touchedElement.id === 'dpad-right') keys.right = true;
-                    else if (touchedElement.id === 'dash-button-touch' && e.type === 'touchstart') {
-                         networkManager.send('playerInput', { action: 'dash' });
-                    }
-                    break;
-                case 'touchend':
-                    // Reset all on touchend
-                    keys.up = keys.down = keys.left = keys.right = false;
-                    break;
-            }
-
-            if (keys.right) direction.dx = 1;
-            else if (keys.left) direction.dx = -1;
-            else if (keys.down) direction.dy = 1;
-            else if (keys.up) direction.dy = -1;
-            networkManager.send('playerInput', { action: 'move', direction });
-        }
-
-
-        function setActiveControl(type) { if (type !== currentControlType) { currentControlType = type; localStorage.setItem(CONTROLS_PREFERENCE_KEY, type); updateControlStatusDisplay(); } }
-        function updateControlStatusDisplay() { const statusDiv = document.getElementById('control-status'); if (!statusDiv || !ICONS[currentControlType]) return; statusDiv.innerHTML = ICONS[currentControlType]; statusDiv.title = `Active Control: ${currentControlType.charAt(0).toUpperCase() + currentControlType.slice(1)}`; const touchControls = document.getElementById('touch-controls'); if (touchControls) { touchControls.style.display = isTouchDevice ? 'block' : 'none'; } }
-        function loadControlPreference() { const pref = localStorage.getItem(CONTROLS_PREFERENCE_KEY); if (pref) { currentControlType = pref; } else if (isTouchDevice) { currentControlType = 'touch'; } else { currentControlType = 'keyboard'; } updateControlStatusDisplay(); }
-
-        // --- Init ---
-        document.addEventListener('DOMContentLoaded', () => {
-            loadHighScores();
-            
-            // Setup network and lobby
-            networkManager = new NetworkManager();
-            lobby = new GameLobby(networkManager);
-            
-            networkManager.on('connected', (payload) => {
-                lobby.updateState(payload.lobbyState);
-            });
-            networkManager.on('lobbyStateUpdate', (lobbyData) => {
-                lobby.updateState(lobbyData);
-                if (lobbyData.message) {
-                    networkManager.updateNetworkStatus(lobbyData.message, 'lime');
-                }
-            });
-            networkManager.on('gameStarted', (initialState) => {
-                if (game) return; // Prevent multiple initializations
-                game = new PacCloneGame();
-                game.initFromState(initialState);
-                game.start();
-            });
-            networkManager.on('gameStateUpdate', (newState) => {
-                if (game) {
-                    game.updateStateFromServer(newState);
-                }
-            });
-            networkManager.on('returnToLobby', (lobbyData) => {
-                if(animationFrameId) cancelAnimationFrame(animationFrameId);
-                game = null;
-                localPlayerId = null;
-                lobby.updateState(lobbyData);
-                lobby.init();
-            });
-            networkManager.on('gameInProgress', () => {
-                // This client connected while a game was running.
-                const messageContainer = document.getElementById('message');
-                const messageText = document.getElementById('message-text');
-                const messageButtons = document.getElementById('message-buttons');
-                messageText.innerHTML = `<h1>GAME IN PROGRESS</h1>`;
-                messageButtons.innerHTML = `<button id="spectate-btn">Spectate</button><button id="reload-btn">Reload</button>`;
-                messageContainer.style.display = 'flex';
-                
-                document.getElementById('spectate-btn').addEventListener('click', () => {
-                    networkManager.send('requestSpectate', {});
-                });
-                document.getElementById('reload-btn').addEventListener('click', () => {
-                    window.location.reload();
-                });
-            });
-
-            lobby.init();
-            networkManager.connect();
-
-            // Event Listeners
-            window.addEventListener('keydown', handleKeyDown);
-            window.addEventListener('keyup', handleKeyUp);
-            window.addEventListener("gamepadconnected", e => { gamepadIndex = e.gamepad.index; setActiveControl('gamepad'); });
-            window.addEventListener("gamepaddisconnected", () => { gamepadIndex = null; setActiveControl(isTouchDevice ? 'touch' : 'keyboard'); });
-
-            muteButton = document.getElementById('mute-button');
-            muteButton.addEventListener('click', toggleMute);
-            document.getElementById('new-game-button').addEventListener('click', () => window.location.reload());
-            
-            const speedSlider = document.getElementById('speed-slider');
-            const speedValue = document.getElementById('speed-value');
-            speedSlider.addEventListener('input', () => {
-                const newSpeed = parseFloat(speedSlider.value);
-                speedValue.textContent = `${newSpeed.toFixed(1)}x`;
-                if(networkManager) {
-                    networkManager.send('setGameSpeed', { speed: newSpeed });
-                }
-            });
-            
-            // Touch controls setup
-            const touchControlsDiv = document.getElementById('touch-controls');
-            if (isTouchDevice) {
-                touchControlsDiv.addEventListener('touchstart', handleTouch, { passive: false });
-                touchControlsDiv.addEventListener('touchmove', handleTouch, { passive: false });
-                touchControlsDiv.addEventListener('touchend', handleTouch, { passive: false });
-            }
-
-            loadControlPreference();
-        });
-    </script>
+    <!-- TOUCH CONTROLS -->
+    <div id="touch-controls">
+        <div id="dpad-container">
+            <div id="dpad-up" class="dpad-btn">▲</div>
+            <div id="dpad-down" class="dpad-btn">▼</div>
+            <div id="dpad-left" class="dpad-btn">◀</div>
+            <div id="dpad-right" class="dpad-btn">▶</div>
+        </div>
+        <div id="dash-btn-container">
+            <div id="dash-btn">DASH</div>
+        </div>
+    </div>
+
+    <script type="module" src="index.tsx"></script>
 </body>
 </html>
