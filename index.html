@@ -1120,6 +1120,7 @@
                     powerupEaten: false,
                     ghostEaten: false,
                     playerDied: false,
+                    playerDashed: null,
                 };
 
                 // Bind methods
@@ -1156,6 +1157,7 @@
                 this.soundState.powerupEaten = false;
                 this.soundState.ghostEaten = false;
                 this.soundState.playerDied = false;
+                this.soundState.playerDashed = null;
 
                 // Check for pellet/powerup eating sounds for ALL players
                 if (game && this.map && this.map.length > 0) {
@@ -1190,6 +1192,9 @@
                 newState.players.forEach((p, index) => {
                     if (this.players[index] && this.players[index].lives > p.lives) {
                         this.soundState.playerDied = true;
+                    }
+                    if (this.players[index] && !this.players[index].isDashing && p.isDashing) {
+                        this.soundState.playerDashed = p.id;
                     }
                 });
 
@@ -1281,6 +1286,7 @@
                 if (this.soundState.powerupEaten) playPowerupSound();
                 if (this.soundState.ghostEaten) playEatGhostSound();
                 if (this.soundState.playerDied) playDeathSound();
+                if (this.soundState.playerDashed) playDashSound();
             }
 
             draw() {
