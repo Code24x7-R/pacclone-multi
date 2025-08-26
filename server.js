@@ -251,6 +251,12 @@ function handleClientMessage(clientId, event, payload) {
                 }
             }
             break;
+        case 'setGameSpeed':
+            if (gameState && payload.speed >= 0.5 && payload.speed <= 2.0) {
+                gameState.gameSpeedMultiplier = payload.speed;
+                console.log(`[GAME] Game speed changed to ${payload.speed}x`);
+            }
+            break;
         case 'requestSpectate':
             if (gameState && gameState.gameRunning) {
                 const clientWs = clients.get(clientId);
@@ -283,6 +289,7 @@ function initializeGame() {
         .map(s => new Player(s.id, s.clientId, s.color, s.startX, s.startY));
         
     gameState = {
+        gameSpeedMultiplier: 1.0,
         players: participatingPlayers,
         ghosts: [
             new Ghost('blinky', 9.5 * TILE_SIZE, 8.5 * TILE_SIZE, 'red'),
@@ -332,7 +339,8 @@ function gameLoop() {
         return;
     }
     
-    update(GAME_TICK_RATE);
+    const effectiveDeltaTime = GAME_TICK_RATE * (gameState.gameSpeedMultiplier || 1.0);
+    update(effectiveDeltaTime);
 
     if (gameState) {
         broadcast({ event: 'gameStateUpdate', payload: gameState });

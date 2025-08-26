@@ -791,6 +791,7 @@
 
             oscillator.start(now);
             oscillator.stop(now + duration );
+            
         }
 
         function playPowerupSound() {
@@ -1175,6 +1176,14 @@
                 this.pelletsRemaining = newState.pelletsRemaining;
                 this.ghostFrightenedTimer = newState.ghostFrightenedTimer;
                 
+                if (newState.gameSpeedMultiplier !== undefined && this.gameSpeedMultiplier !== newState.gameSpeedMultiplier) {
+                    this.gameSpeedMultiplier = newState.gameSpeedMultiplier;
+                    const speedSlider = document.getElementById('speed-slider');
+                    const speedValue = document.getElementById('speed-value');
+                    if (speedSlider) speedSlider.value = this.gameSpeedMultiplier;
+                    if (speedValue) speedValue.textContent = `${this.gameSpeedMultiplier.toFixed(1)}x`;
+                }
+                
                 if (this.isGameOver !== newState.isGameOver && newState.isGameOver) {
                     this.gameOver(newState);
                 }
@@ -1373,7 +1382,7 @@
         function setupGamepadListeners() { window.addEventListener("gamepadconnected", (e) => { console.log(`[GP_EVENT] Gamepad connected at index ${e.gamepad.index}: ${e.gamepad.id}`); }); window.addEventListener("gamepaddisconnected", (e) => { console.log(`[GP_EVENT] Gamepad disconnected from index ${e.gamepad.index}: ${e.gamepad.id}`); if (e.gamepad.index === gamepadIndex) { gamepadIndex = null; updateControlStatus(isTouchDevice ? 'touch' : 'keyboard'); } }); }
         function findActiveGamepad() { const gamepads = navigator.getGamepads ? navigator.getGamepads() : []; if (!gamepads) return null; let standardMappingGamepad = null; let xboxIDGamepad = null; let firstAvailableGamepad = null; for (const gamepad of gamepads) { if (!gamepad) continue; const isRealController = gamepad.buttons.length > 0 && gamepad.axes.length > 0; if (!isRealController) { continue;  } if (!firstAvailableGamepad) { firstAvailableGamepad = gamepad; } if (gamepad.mapping === 'standard') { if (!standardMappingGamepad) standardMappingGamepad = gamepad; } if (gamepad.id && (gamepad.id.toLowerCase().includes('xinput') || gamepad.id.toLowerCase().includes('xbox'))) { if (!xboxIDGamepad) xboxIDGamepad = gamepad; } } return standardMappingGamepad || xboxIDGamepad || firstAvailableGamepad; }
         function handleGamepadInput() { const gamepad = findActiveGamepad(); if (gamepad) { if (gamepadIndex !== gamepad.index) { gamepadIndex = gamepad.index; updateControlStatus('gamepad'); lastButtons = gamepad.buttons.map(b => (b ? b.pressed : false)); } } else { if (gamepadIndex !== null) { gamepadIndex = null; updateControlStatus(isTouchDevice ? 'touch' : 'keyboard'); } return; } const activeGamepad = navigator.getGamepads()[gamepadIndex]; if (!activeGamepad) { return; } const pressed = (buttonIndex) => { if (!activeGamepad.buttons[buttonIndex]) return false; const isPressedNow = activeGamepad.buttons[buttonIndex].pressed; const wasPressedLast = lastButtons[buttonIndex] || false; return isPressedNow && !wasPressedLast; }; const stickX = activeGamepad.axes[0]; const stickY = activeGamepad.axes[1]; const deadzone = 0.5; if (game && game.isGameOver) { if (pressed(GAMEPAD_BUTTONS.B)) { document.querySelector('#play-again-btn')?.click(); } lastButtons = activeGamepad.buttons.map(b => (b ? b.pressed : false)); return; } if (!game || !game.gameRunning) { if (pressed(GAMEPAD_BUTTONS.START) || pressed(GAMEPAD_BUTTONS.A)) { document.querySelector('#start-game-btn')?.click(); } } else { if (!game.paused) { let movedByStick = false; if (Math.abs(stickY) > Math.abs(stickX) && Math.abs(stickY) > deadzone) { networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: stickY > 0 ? 1 : -1 } }); movedByStick = true; } else if (Math.abs(stickX) > Math.abs(stickY) && Math.abs(stickX) > deadzone) { networkManager.send('playerInput', { action: 'move', direction: { dx: stickX > 0 ? 1 : -1, dy: 0 } }); movedByStick = true; } if (!movedByStick) { if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_UP]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: -1 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_DOWN]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: 1 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_LEFT]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: -1, dy: 0 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_RIGHT]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 1, dy: 0 } }); } } if (pressed(GAMEPAD_BUTTONS.A)) networkManager.send('playerInput', { action: 'dash' }); if (pressed(GAMEPAD_BUTTONS.B)) location.reload(); if (pressed(GAMEPAD_BUTTONS.START)) { game.paused = !game.paused; if (!game.paused) { document.getElementById('message').style.display = 'none'; game.lastFrameTime = performance.now(); } } } lastButtons = activeGamepad.buttons.map(b => (b ? b.pressed : false)); }
-        function adjustSpeed(delta) { const speedSlider = document.getElementById('speed-slider'); if (!speedSlider) return; let currentValue = parseFloat(speedSlider.value); let newValue = currentValue + delta; const min = parseFloat(speedSlider.min); const max = parseFloat(speedSlider.max); newValue = Math.round(Math.max(min, Math.min(max, newValue)) * 10) / 10; speedSlider.value = newValue; if (game) { game.gameSpeedMultiplier = newValue; } const speedValue = document.getElementById('speed-value'); if (speedValue) { speedValue.textContent = `${newValue.toFixed(1)}x`; } }
+        function adjustSpeed(delta) { const speedSlider = document.getElementById('speed-slider'); if (!speedSlider) return; let currentValue = parseFloat(speedSlider.value); let newValue = currentValue + delta; const min = parseFloat(speedSlider.min); const max = parseFloat(speedSlider.max); newValue = Math.round(Math.max(min, Math.min(max, newValue)) * 10) / 10; speedSlider.value = newValue; if (game) { game.gameSpeedMultiplier = newValue; } const speedValue = document.getElementById('speed-value'); if (speedValue) { speedValue.textContent = `${newValue.toFixed(1)}x`; } if (networkManager) { networkManager.send('setGameSpeed', { speed: newValue }); } }
 
         document.addEventListener('keydown', (e) => {
             if (e.target.tagName.toLowerCase() === 'input') return;
@@ -1451,8 +1460,11 @@
             const speedValue = document.getElementById('speed-value');
             speedSlider?.addEventListener('input', (e) => {
                 const newSpeed = parseFloat(e.target.value);
-                if (game) game.gameSpeedMultiplier = newSpeed;
+                if (game) game.gameSpeedMultiplier = newSpeed; // Keep for local animation responsiveness
                 speedValue.textContent = `${newSpeed.toFixed(1)}x`;
+                if (networkManager) {
+                    networkManager.send('setGameSpeed', { speed: newSpeed });
+                }
             });
 
             loadHighScores();
