@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const packageInfo = require('./package.json');
 
 
 // --- Server Setup with HTTP and WebSocket ---
@@ -29,7 +30,7 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocket.Server({ server });
 
 server.listen(8080, '0.0.0.0', () => {
-    console.log('[SERVER] Game server is running.');
+    console.log(`[SERVER] Pacclone Multi v${packageInfo.version} server is running.`);
     console.log('[SERVER] Open http://localhost:8080 in your browser to play.');
 });
 
