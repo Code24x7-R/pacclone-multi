@@ -741,7 +741,7 @@
             }
         }
 
-        function playChompSound() {
+        function playChompSound(playerId) {
             if (isMuted || !audioContext) return;
             const now = audioContext.currentTime;
             const duration = 0.05; // 50ms
@@ -752,12 +752,12 @@
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
 
-            // A square wave sounds more "chiptuney" and distinct than a sine wave.
             oscillator.type = 'square';
-
+            
+            // Different pitch for each player's chomp
+            const baseFreq = playerId === 1 ? 300 : 350;
             // Add a slight, random pitch variation to make chomping less monotonous.
-            const baseFreq = 300;
-            oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 50 - 25), now);
+            oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 40 - 20), now);
 
             // A fast attack and decay envelope makes the sound "plucky" or "sucky".
             gainNode.gain.setValueAtTime(0, now);
@@ -778,7 +778,7 @@
             lastMoveSoundTime.set(playerId, nowMs);
 
             const now = audioContext.currentTime;
-            const duration = 0.1; // 100ms
+            const duration = 0.08;
 
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
@@ -786,15 +786,18 @@
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
 
-            oscillator.type = 'triangle'; // Softer than square, less "buzzy" than sine at low freqs
+            oscillator.type = 'sine'; // Use a sine wave for a cleaner "blip"
             
-            // Different base frequency for each player
-            const baseFreq = playerId === 1 ? 150 : 170;
-            oscillator.frequency.setValueAtTime(baseFreq, now);
+            // More distinct frequencies for each player
+            const startFreq = playerId === 1 ? 220 : 280; // A3 and C#4
+            const endFreq = startFreq * 0.9;
+
+            oscillator.frequency.setValueAtTime(startFreq, now);
+            oscillator.frequency.exponentialRampToValueAtTime(endFreq, now + duration);
 
             // A short envelope for a "blip" sound
             gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.04, now + 0.01); // Quick attack, low volume
+            gainNode.gain.linearRampToValueAtTime(0.05, now + 0.01); 
             gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
             oscillator.start(now);
@@ -1274,7 +1277,7 @@
                         // Player is moving
                         if (this.soundState.playersEatingPellet.has(player.id)) {
                             // Moving and eating a pellet: play chomp sound
-                            playChompSound();
+                            playChompSound(player.id);
                         } else {
                             // Moving on an empty path: play move sound
                             playMoveSound(player.id);
