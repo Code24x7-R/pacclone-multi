@@ -769,27 +769,28 @@
         function playMoveSound() {
             if (isMuted || !audioContext) return;
             const now = audioContext.currentTime;
-            const duration = 0.1; // 100ms, a bit longer to be more tonal
+            const duration = 0.15; // 150ms
 
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
 
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
-            
-            oscillator.type = 'square';
 
-            // Two octaves below the chomp sound for a bassier tone.
-            const baseFreq = 75; // 300Hz / 4
-            oscillator.frequency.setValueAtTime(baseFreq, now);
+            // Use a sine wave for a softer, more subdued sound.
+            oscillator.type = 'sine'; // Changed from 'square' to a sine wave for a much softer tone.
 
-            // A slightly softer envelope to reduce clicking
+            // A slightly higher frequency to be audible on more speaker types.
+            const baseFreq = 40;
+            oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 10 - 5), now );
+
+            // Reduce the gain (volume) significantly to be a subtle background hum.
             gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.04, now + 0.03); // Slower attack, quieter
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); 
+            gainNode.gain.linearRampToValueAtTime(0.03, now + 0.02); // Reduced peak volume
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration );
 
             oscillator.start(now);
-            oscillator.stop(now + duration);
+            oscillator.stop(now + duration );
         }
 
         function playPowerupSound() {
@@ -1351,196 +1352,276 @@
                 this.ctx.restore();
             }
 
-            drawGhosts() { if(!this.ghosts) return; const ghostRadius = TILE_SIZE / 3; this.ghosts.forEach(ghost => { if (ghost.eaten) { this.ctx.fillStyle = 'white'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.arc(ghost.x + ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.fill(); this.ctx.fillStyle = 'blue'; this.ctx.beginPath(); let pupilXOffset = 0; let pupilYOffset = 0; if (ghost.dx > 0) pupilXOffset = ghostRadius/4; else if (ghost.dx < 0) pupilXOffset = -ghostRadius/4; if (ghost.dy > 0) pupilYOffset = ghostRadius/4; else if (ghost.dy < 0) pupilYOffset = -ghostRadius/4; this.ctx.arc(ghost.x - ghostRadius / 2 + pupilXOffset, ghost.y - ghostRadius / 2 + pupilYOffset, ghostRadius / 4, 0, Math.PI * 2); this.ctx.arc(ghost.x + ghostRadius / 2 + pupilXOffset, ghost.y - ghostRadius / 2 + pupilYOffset, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); return; } this.ctx.fillStyle = ghost.frightened ? 'blue' : ghost.color; this.ctx.beginPath(); this.ctx.arc(ghost.x, ghost.y - ghostRadius / 2, ghostRadius, Math.PI, 0, false); this.ctx.rect(ghost.x - ghostRadius, ghost.y - ghostRadius / 2, ghostRadius * 2, ghostRadius * 1.5); this.ctx.arc(ghost.x - ghostRadius * 0.6, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.arc(ghost.x, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.arc(ghost.x + ghostRadius * 0.6, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.fill(); if (ghost.frightened && this.ghostFrightenedTimer < FRIGHTENED_DURATION / 3 && Math.floor(this.ghostFrightenedTimer / 100) % 2 === 0) { this.ctx.fillStyle = 'white'; this.ctx.beginPath(); this.ctx.arc(ghost.x, ghost.y - ghostRadius / 2, ghostRadius, Math.PI, 0, false); this.ctx.rect(ghost.x - ghostRadius, ghost.y - ghostRadius / 2, ghostRadius * 2, ghostRadius * 1.5); this.ctx.arc(ghost.x - ghostRadius * 0.6, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.arc(ghost.x, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.arc(ghost.x + ghostRadius * 0.6, ghost.y + ghostRadius, ghostRadius * 0.4, 0, Math.PI, true); this.ctx.fill(); } this.ctx.fillStyle = 'white'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.arc(ghost.x + ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.fill(); this.ctx.fillStyle = 'black'; this.ctx.beginPath(); let pupilXOffset = 0; let pupilYOffset = 0; if (ghost.dx > 0) pupilXOffset = ghostRadius / 4; else if (ghost.dx < 0) pupilXOffset = -ghostRadius / 4; if (ghost.dy > 0) pupilYOffset = ghostRadius / 4; else if (ghost.dy < 0) pupilYOffset = -ghostRadius / 4; this.ctx.arc(ghost.x - ghostRadius / 2 + pupilXOffset, ghost.y - ghostRadius / 2 + pupilYOffset, ghostRadius / 4, 0, Math.PI * 2); this.ctx.arc(ghost.x + ghostRadius / 2 + pupilXOffset, ghost.y - ghostRadius / 2 + pupilYOffset, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); }); }
-            
-            gameOver(state) {
-                this.gameRunning = false;
-                this.isGameOver = true;
-                this.gameOverTimer = state.gameOverTimer; // Sync timer from server
-                
-                this.updatePlayersUI(); // Final UI update to show winner text
-                const winner = this.players.find(p => p.isWinner);
-                if (winner) playWinSound(); else playGameOverSound();
-
-                // Show the new game over screen with final results.
-                // The state from the server might not be perfectly in sync with the client's last score update,
-                // so we pass the client's version of the player data which is visually consistent for the user.
-                showGameOverScreen({ players: this.players });
-            }
+            drawGhosts() { if(!this.ghosts) return; const ghostRadius = TILE_SIZE / 3; this.ghosts.forEach(ghost => { if (ghost.eaten) { this.ctx.fillStyle = 'white'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.fill(); this.ctx.fillStyle = 'blue'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius, ghost.y - ghostRadius / 2, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); this.ctx.beginPath(); this.ctx.arc(ghost.x, ghost.y - ghostRadius / 2, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); } else { const isFrightened = ghost.frightened; this.ctx.fillStyle = isFrightened ? 'blue' : ghost.color; this.ctx.beginPath(); this.ctx.arc(ghost.x, ghost.y - ghostRadius / 2, ghostRadius, Math.PI, 0, false); this.ctx.rect(ghost.x - ghostRadius, ghost.y - ghostRadius / 2, ghostRadius * 2, ghostRadius * 1.5); this.ctx.fill(); this.ctx.fillStyle = isFrightened ? 'pink' : 'white'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.fill(); this.ctx.beginPath(); this.ctx.arc(ghost.x + ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2, 0, Math.PI * 2); this.ctx.fill(); this.ctx.fillStyle = 'blue'; this.ctx.beginPath(); this.ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); this.ctx.beginPath(); this.ctx.arc(ghost.x + ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 4, 0, Math.PI * 2); this.ctx.fill(); } }); }
 
             updatePlayersUI() {
                 const container = document.getElementById('player-scores');
                 if (!container || !this.players) return;
+                
                 let html = '';
-                this.players.forEach(player => {
-                    const winnerText = player.isWinner ? '<span class="winner-text">WINNER!</span>' : '';
+                this.players.forEach(p => {
+                    const inactiveClass = !p.isActive ? 'inactive' : '';
+                    const winnerText = p.isWinner ? '<span class="winner-text">🏆</span>' : '';
                     html += `
-                        <div class="player-hud ${!player.isActive && !player.isSpectator ? 'inactive' : ''}" style="color: ${player.color}; border-color: ${player.color};">
+                        <div class="player-hud ${inactiveClass}" style="color: ${p.color}; border-color: ${p.color};">
                             ${winnerText}
-                            <span>P${player.id} Score: ${player.score}</span>
-                            <span>Lives: ${player.lives < 0 ? 0 : player.lives}</span>
-                            ${player.isSpectator ? '<span>SPECTATING</span>' : `<span style="opacity: ${player.phaseDashAvailable ? 1 : 0.5}">Dash: ${player.phaseDashAvailable ? 'Ready' : 'Used'}</span>`}
+                            <div>P${p.id} Score: ${p.score}</div>
+                            <div>Lives: ${p.lives}</div>
                         </div>
                     `;
                 });
                 container.innerHTML = html;
             }
-        } // End PacCloneGame class
 
-        // --- UI Updates ---
-        function applyControlsLayout() { const preference = localStorage.getItem(CONTROLS_PREFERENCE_KEY); const touchControls = document.getElementById('touch-controls'); if (preference === 'left') { touchControls.classList.add('left-hand-layout'); } else { touchControls.classList.remove('left-hand-layout'); } }
-        function toggleControlsLayout() { const touchControls = document.getElementById('touch-controls'); const isLeftHanded = touchControls.classList.toggle('left-hand-layout'); localStorage.setItem(CONTROLS_PREFERENCE_KEY, isLeftHanded ? 'left' : 'right'); }
-        function updateControlStatus(controlType) { const statusEl = document.getElementById('control-status'); const controlsEl = document.getElementById('controls-info'); const startInfo = document.getElementById('start-gamepad-info'); if (!statusEl) return; switch (controlType) { case 'gamepad': statusEl.innerHTML = ICONS.gamepad; statusEl.style.color = 'lime'; if (controlsEl) controlsEl.textContent = 'D-Pad/Stick: Move | (A): Dash | (Start): Pause | (B): Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Controller Ready! Press Start or (A) to Play.'; startInfo.style.color = 'lime'; } break; case 'touch': statusEl.innerHTML = ICONS.touch; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'D-Pad: Move | DASH: Dash | P: Pause | R: Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; case 'keyboard': default: statusEl.innerHTML = ICONS.keyboard; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'Arrows/WASD: Move | Space/Shift: Dash | P: Pause | R: New Game'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; } }
-        
-        function setupTouchControls() { if (!isTouchDevice) { return; } const touchControls = document.getElementById('touch-controls'); const dpadUp = document.getElementById('dpad-up'); const dpadDown = document.getElementById('dpad-down'); const dpadLeft = document.getElementById('dpad-left'); const dpadRight = document.getElementById('dpad-right'); const dashButton = document.getElementById('dash-button-touch'); touchControls.style.display = 'block'; const handleDpadPress = (e, direction) => { e.preventDefault(); networkManager.send('playerInput', { action: 'move', direction: direction }); }; dpadUp.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 0, dy: -1 }), { passive: false }); dpadDown.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 0, dy: 1 }), { passive: false }); dpadLeft.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: -1, dy: 0 }), { passive: false }); dpadRight.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 1, dy: 0 }), { passive: false }); dashButton.addEventListener('touchstart', (e) => { e.preventDefault(); if (game && game.gameRunning && !game.paused) { networkManager.send('playerInput', { action: 'dash' }); } }, { passive: false }); }
-        const GAMEPAD_BUTTONS = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, L_STICK: 10, R_STICK: 11, DPAD_UP: 12, DPAD_DOWN: 13, DPAD_LEFT: 14, DPAD_RIGHT: 15, };
-        function setupGamepadListeners() { window.addEventListener("gamepadconnected", (e) => { console.log(`[GP_EVENT] Gamepad connected at index ${e.gamepad.index}: ${e.gamepad.id}`); }); window.addEventListener("gamepaddisconnected", (e) => { console.log(`[GP_EVENT] Gamepad disconnected from index ${e.gamepad.index}: ${e.gamepad.id}`); if (e.gamepad.index === gamepadIndex) { gamepadIndex = null; updateControlStatus(isTouchDevice ? 'touch' : 'keyboard'); } }); }
-        function findActiveGamepad() { const gamepads = navigator.getGamepads ? navigator.getGamepads() : []; if (!gamepads) return null; let standardMappingGamepad = null; let xboxIDGamepad = null; let firstAvailableGamepad = null; for (const gamepad of gamepads) { if (!gamepad) continue; const isRealController = gamepad.buttons.length > 0 && gamepad.axes.length > 0; if (!isRealController) { continue;  } if (!firstAvailableGamepad) { firstAvailableGamepad = gamepad; } if (gamepad.mapping === 'standard') { if (!standardMappingGamepad) standardMappingGamepad = gamepad; } if (gamepad.id && (gamepad.id.toLowerCase().includes('xinput') || gamepad.id.toLowerCase().includes('xbox'))) { if (!xboxIDGamepad) xboxIDGamepad = gamepad; } } return standardMappingGamepad || xboxIDGamepad || firstAvailableGamepad; }
-        function handleGamepadInput() { const gamepad = findActiveGamepad(); if (gamepad) { if (gamepadIndex !== gamepad.index) { gamepadIndex = gamepad.index; updateControlStatus('gamepad'); lastButtons = gamepad.buttons.map(b => (b ? b.pressed : false)); } } else { if (gamepadIndex !== null) { gamepadIndex = null; updateControlStatus(isTouchDevice ? 'touch' : 'keyboard'); } return; } const activeGamepad = navigator.getGamepads()[gamepadIndex]; if (!activeGamepad) { return; } const pressed = (buttonIndex) => { if (!activeGamepad.buttons[buttonIndex]) return false; const isPressedNow = activeGamepad.buttons[buttonIndex].pressed; const wasPressedLast = lastButtons[buttonIndex] || false; return isPressedNow && !wasPressedLast; }; const stickX = activeGamepad.axes[0]; const stickY = activeGamepad.axes[1]; const deadzone = 0.5; if (game && game.isGameOver) { if (pressed(GAMEPAD_BUTTONS.B)) { document.querySelector('#play-again-btn')?.click(); } lastButtons = activeGamepad.buttons.map(b => (b ? b.pressed : false)); return; } if (!game || !game.gameRunning) { if (pressed(GAMEPAD_BUTTONS.START) || pressed(GAMEPAD_BUTTONS.A)) { document.querySelector('#start-game-btn')?.click(); } } else { if (!game.paused) { let movedByStick = false; if (Math.abs(stickY) > Math.abs(stickX) && Math.abs(stickY) > deadzone) { networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: stickY > 0 ? 1 : -1 } }); movedByStick = true; } else if (Math.abs(stickX) > Math.abs(stickY) && Math.abs(stickX) > deadzone) { networkManager.send('playerInput', { action: 'move', direction: { dx: stickX > 0 ? 1 : -1, dy: 0 } }); movedByStick = true; } if (!movedByStick) { if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_UP]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: -1 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_DOWN]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: 1 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_LEFT]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: -1, dy: 0 } }); else if (activeGamepad.buttons[GAMEPAD_BUTTONS.DPAD_RIGHT]?.pressed) networkManager.send('playerInput', { action: 'move', direction: { dx: 1, dy: 0 } }); } } if (pressed(GAMEPAD_BUTTONS.A)) networkManager.send('playerInput', { action: 'dash' }); if (pressed(GAMEPAD_BUTTONS.B)) location.reload(); if (pressed(GAMEPAD_BUTTONS.START)) { game.paused = !game.paused; if (!game.paused) { document.getElementById('message').style.display = 'none'; game.lastFrameTime = performance.now(); } } } lastButtons = activeGamepad.buttons.map(b => (b ? b.pressed : false)); }
-        function adjustSpeed(delta) { const speedSlider = document.getElementById('speed-slider'); if (!speedSlider) return; let currentValue = parseFloat(speedSlider.value); let newValue = currentValue + delta; const min = parseFloat(speedSlider.min); const max = parseFloat(speedSlider.max); newValue = Math.round(Math.max(min, Math.min(max, newValue)) * 10) / 10; speedSlider.value = newValue; if (game) { game.gameSpeedMultiplier = newValue; } const speedValue = document.getElementById('speed-value'); if (speedValue) { speedValue.textContent = `${newValue.toFixed(1)}x`; } if (networkManager) { networkManager.send('setGameSpeed', { speed: newValue }); } }
-
-        document.addEventListener('keydown', (e) => {
-            if (e.target.tagName.toLowerCase() === 'input') return;
-
-            const key = e.key.toLowerCase();
-            
-            if (key === 'm') toggleMute();
-            if (key === '-' || key === '_') adjustSpeed(-0.1);
-            if (key === '=' || key === '+') adjustSpeed(0.1);
-
-            if (game && game.isGameOver) {
-                if (key === 'enter') {
-                    // Enter no longer does anything on game over screen
-                }
-                return;
-            }
-
-            if (!game || !game.gameRunning) {
-                if (key === 'enter' || key === ' ') {
-                    e.preventDefault();
-                    document.querySelector('#start-game-btn')?.click();
-                }
-                return;
-            }
-
-            if (key === 'r') {
-                location.reload(); // Quits and rejoins lobby
-            }
-            if (key === 'p') {
-                e.preventDefault();
-                game.paused = !game.paused;
-                if (!game.paused) {
+            pause() {
+                if (this.isGameOver) return;
+                this.paused = !this.paused;
+                if (!this.paused) {
                     document.getElementById('message').style.display = 'none';
-                    game.lastFrameTime = performance.now();
+                    // Recalculate lastFrameTime to avoid a time jump
+                    this.lastFrameTime = performance.now();
                 }
-                return; 
             }
-
-            if (game.paused) return;
-
-            // Unified controls for all network players
-            let direction = null;
-            if (key === 'arrowup' || key === 'w') direction = { dx: 0, dy: -1 };
-            else if (key === 'arrowdown' || key === 's') direction = { dx: 0, dy: 1 };
-            else if (key === 'arrowleft' || key === 'a') direction = { dx: -1, dy: 0 };
-            else if (key === 'arrowright' || key === 'd') direction = { dx: 1, dy: 0 };
             
-            if (direction) {
-                networkManager.send('playerInput', { action: 'move', direction });
+            gameOver(finalState) {
+                this.gameRunning = false;
+                this.isGameOver = true;
+                this.gameOverTimer = 4000;
+                
+                const hasWinner = finalState.players.some(p => p.isWinner);
+                if (hasWinner) {
+                    playCelebrateSound();
+                } else {
+                    playGameOverSound();
+                }
+                
+                showGameOverScreen(finalState);
             }
+        }
 
-            if (key === ' ' || key === 'shift') {
-                e.preventDefault();
+        // --- Input Handling ---
+        const keys = { up: false, down: false, left: false, right: false, dash: false };
+        let currentControlType = 'keyboard';
+
+        function handleKeyDown(e) {
+            initializeAudio(); // Initialize audio on first user interaction
+            setActiveControl('keyboard');
+            if (e.key === 'p' || e.key === 'P') { if (game) game.pause(); return; }
+            if (e.key === 'm' || e.key === 'M') { toggleMute(); return; }
+            if (e.key === 'r' || e.key === 'R') { window.location.reload(); return; }
+            if (e.repeat) return;
+            switch(e.key) {
+                case 'ArrowUp': case 'w': keys.up = true; break;
+                case 'ArrowDown': case 's': keys.down = true; break;
+                case 'ArrowLeft': case 'a': keys.left = true; break;
+                case 'ArrowRight': case 'd': keys.right = true; break;
+                case ' ': case 'Shift': keys.dash = true; break;
+            }
+            sendInput();
+        }
+
+        function handleKeyUp(e) {
+            switch(e.key) {
+                case 'ArrowUp': case 'w': keys.up = false; break;
+                case 'ArrowDown': case 's': keys.down = false; break;
+                case 'ArrowLeft': case 'a': keys.left = false; break;
+                case 'ArrowRight': case 'd': keys.right = false; break;
+                case ' ': case 'Shift': keys.dash = false; break;
+            }
+            sendInput();
+        }
+
+        function sendInput() {
+            if (currentControlType !== 'keyboard' && currentControlType !== 'gamepad') return;
+
+            let direction = { dx: 0, dy: 0 };
+            if (keys.right) direction.dx = 1;
+            else if (keys.left) direction.dx = -1;
+            else if (keys.down) direction.dy = 1;
+            else if (keys.up) direction.dy = -1;
+
+            networkManager.send('playerInput', { action: 'move', direction });
+
+            if (keys.dash) {
+                networkManager.send('playerInput', { action: 'dash' });
+                keys.dash = false; // Dash is a single press event
+            }
+        }
+        
+        function handleGamepadInput() {
+            if (gamepadIndex === null) return;
+            const gamepad = navigator.getGamepads()[gamepadIndex];
+            if (!gamepad) return;
+
+            // --- Buttons ---
+            const buttons = gamepad.buttons.map(b => b.pressed);
+            const buttonPressed = (index) => buttons[index] && !lastButtons[index];
+
+            if (buttonPressed(9)) { // Start button
+                if (game) game.pause();
+            }
+            if (buttonPressed(1)) { // B button
+                window.location.reload();
+            }
+            if (buttonPressed(0)) { // A button
                 networkManager.send('playerInput', { action: 'dash' });
             }
-        });
-
-        window.onload = () => {
-            console.clear();
-            console.log('[SYSTEM] Setting up game client.');
             
-            applyControlsLayout();
-            setupGamepadListeners();
-            setupTouchControls();
+            lastButtons = buttons;
 
-            muteButton = document.getElementById('mute-button');
-            muteButton?.addEventListener('click', toggleMute);
-            updateMuteButtonDisplay();
-            updateControlStatus(isTouchDevice ? 'touch' : 'keyboard');
+            // --- Axes (D-pad is often mapped to axes 9) ---
+            let dx = 0, dy = 0;
+            const deadzone = 0.5;
             
-            const newGameButton = document.getElementById('new-game-button');
-            newGameButton?.addEventListener('click', () => location.reload());
-
-            const speedSlider = document.getElementById('speed-slider');
-            const speedValue = document.getElementById('speed-value');
-            speedSlider?.addEventListener('input', (e) => {
-                const newSpeed = parseFloat(e.target.value);
-                if (game) game.gameSpeedMultiplier = newSpeed; // Keep for local animation responsiveness
-                speedValue.textContent = `${newSpeed.toFixed(1)}x`;
-                if (networkManager) {
-                    networkManager.send('setGameSpeed', { speed: newSpeed });
+            // D-Pad (often on axes)
+            if (gamepad.axes.length > 9) {
+                const dpadValue = gamepad.axes[9];
+                if (dpadValue < 2) { // Ensure it's not an idle value
+                    if (dpadValue > 0.4 && dpadValue < 0.8) dy = 1;      // Down
+                    else if (dpadValue > -0.2 && dpadValue < 0.2) dx = 1; // Right
+                    else if (dpadValue > -0.8 && dpadValue < -0.4) dy = -1; // Up
+                    else if (dpadValue > -1.1 && dpadValue < -0.9) dx = -1; // Left
                 }
-            });
+            }
+            
+            // Analog stick
+            if (Math.abs(gamepad.axes[0]) > deadzone) dx = Math.round(gamepad.axes[0]);
+            if (Math.abs(gamepad.axes[1]) > deadzone) dy = Math.round(gamepad.axes[1]);
+            
+            // Prioritize d-pad buttons if they exist and are pressed
+            if (gamepad.buttons[15]?.pressed) dx = 1; // D-pad right
+            else if (gamepad.buttons[14]?.pressed) dx = -1; // D-pad left
+            else if (gamepad.buttons[13]?.pressed) dy = 1; // D-pad down
+            else if (gamepad.buttons[12]?.pressed) dy = -1; // D-pad up
+            
+            networkManager.send('playerInput', { action: 'move', direction: { dx, dy } });
+        }
+        
+        function handleTouch(e) {
+            initializeAudio();
+            setActiveControl('touch');
+            e.preventDefault();
+            const targetId = e.target.id;
+            let direction = { dx: 0, dy: 0 };
 
+            switch (e.type) {
+                case 'touchstart':
+                case 'touchmove':
+                    const touch = e.touches[0];
+                    const touchedElement = document.elementFromPoint(touch.clientX, touch.clientY);
+                    if (!touchedElement) return;
+
+                    // Reset all directions first
+                    keys.up = keys.down = keys.left = keys.right = false;
+                    
+                    if (touchedElement.id === 'dpad-up') keys.up = true;
+                    else if (touchedElement.id === 'dpad-down') keys.down = true;
+                    else if (touchedElement.id === 'dpad-left') keys.left = true;
+                    else if (touchedElement.id === 'dpad-right') keys.right = true;
+                    else if (touchedElement.id === 'dash-button-touch' && e.type === 'touchstart') {
+                         networkManager.send('playerInput', { action: 'dash' });
+                    }
+                    break;
+                case 'touchend':
+                    // Reset all on touchend
+                    keys.up = keys.down = keys.left = keys.right = false;
+                    break;
+            }
+
+            if (keys.right) direction.dx = 1;
+            else if (keys.left) direction.dx = -1;
+            else if (keys.down) direction.dy = 1;
+            else if (keys.up) direction.dy = -1;
+            networkManager.send('playerInput', { action: 'move', direction });
+        }
+
+
+        function setActiveControl(type) { if (type !== currentControlType) { currentControlType = type; localStorage.setItem(CONTROLS_PREFERENCE_KEY, type); updateControlStatusDisplay(); } }
+        function updateControlStatusDisplay() { const statusDiv = document.getElementById('control-status'); if (!statusDiv || !ICONS[currentControlType]) return; statusDiv.innerHTML = ICONS[currentControlType]; statusDiv.title = `Active Control: ${currentControlType.charAt(0).toUpperCase() + currentControlType.slice(1)}`; const touchControls = document.getElementById('touch-controls'); if (touchControls) { touchControls.style.display = isTouchDevice ? 'block' : 'none'; } }
+        function loadControlPreference() { const pref = localStorage.getItem(CONTROLS_PREFERENCE_KEY); if (pref) { currentControlType = pref; } else if (isTouchDevice) { currentControlType = 'touch'; } else { currentControlType = 'keyboard'; } updateControlStatusDisplay(); }
+
+        // --- Init ---
+        document.addEventListener('DOMContentLoaded', () => {
             loadHighScores();
             
+            // Setup network and lobby
             networkManager = new NetworkManager();
             lobby = new GameLobby(networkManager);
-
+            
             networkManager.on('connected', (payload) => {
-                console.log(`[NETWORK] Connected with client ID: ${payload.clientId}`);
-                lobby.init(); // Show the lobby screen
                 lobby.updateState(payload.lobbyState);
             });
-            
-            networkManager.on('lobbyStateUpdate', (lobbyState) => {
-                lobby.updateState(lobbyState);
+            networkManager.on('lobbyStateUpdate', (lobbyData) => {
+                lobby.updateState(lobbyData);
             });
-            
             networkManager.on('gameStarted', (initialState) => {
-                initializeAudio();
+                if (game) return; // Prevent multiple initializations
                 game = new PacCloneGame();
                 game.initFromState(initialState);
                 game.start();
             });
-
             networkManager.on('gameStateUpdate', (newState) => {
                 if (game) {
                     game.updateStateFromServer(newState);
                 }
             });
-            
-            networkManager.on('returnToLobby', (newLobbyState) => {
-                if (game) {
-                    game.gameRunning = false;
-                    game.isGameOver = true;
-                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-                    animationFrameId = null;
-                    game = null;
-                }
-                lobby.updateState(newLobbyState);
+            networkManager.on('returnToLobby', (lobbyData) => {
+                if(animationFrameId) cancelAnimationFrame(animationFrameId);
+                game = null;
+                localPlayerId = null;
+                lobby.updateState(lobbyData);
                 lobby.init();
             });
-
             networkManager.on('gameInProgress', () => {
-                document.getElementById('game-container').style.display = 'none';
+                // This client connected while a game was running.
                 const messageContainer = document.getElementById('message');
                 const messageText = document.getElementById('message-text');
                 const messageButtons = document.getElementById('message-buttons');
-
-                messageText.innerHTML = `<h1>GAME IN PROGRESS</h1><div style="font-size:0.7em">Please wait for the current game to finish, or you can join as a spectator.</div>`;
-                messageButtons.innerHTML = `<button id="spectate-btn">Spectate</button>`;
+                messageText.innerHTML = `<h1>GAME IN PROGRESS</h1>`;
+                messageButtons.innerHTML = `<button id="spectate-btn">Spectate</button><button id="reload-btn">Reload</button>`;
                 messageContainer.style.display = 'flex';
                 
                 document.getElementById('spectate-btn').addEventListener('click', () => {
                     networkManager.send('requestSpectate', {});
                 });
+                document.getElementById('reload-btn').addEventListener('click', () => {
+                    window.location.reload();
+                });
             });
 
-            // Initial state is to show the lobby
-            lobby.init(); 
+            lobby.init();
             networkManager.connect();
-        };
+
+            // Event Listeners
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            window.addEventListener("gamepadconnected", e => { gamepadIndex = e.gamepad.index; setActiveControl('gamepad'); });
+            window.addEventListener("gamepaddisconnected", () => { gamepadIndex = null; setActiveControl(isTouchDevice ? 'touch' : 'keyboard'); });
+
+            muteButton = document.getElementById('mute-button');
+            muteButton.addEventListener('click', toggleMute);
+            document.getElementById('new-game-button').addEventListener('click', () => window.location.reload());
+            
+            const speedSlider = document.getElementById('speed-slider');
+            const speedValue = document.getElementById('speed-value');
+            speedSlider.addEventListener('input', () => {
+                const newSpeed = parseFloat(speedSlider.value);
+                speedValue.textContent = `${newSpeed.toFixed(1)}x`;
+                if(networkManager) {
+                    networkManager.send('setGameSpeed', { speed: newSpeed });
+                }
+            });
+            
+            // Touch controls setup
+            const touchControlsDiv = document.getElementById('touch-controls');
+            if (isTouchDevice) {
+                touchControlsDiv.addEventListener('touchstart', handleTouch, { passive: false });
+                touchControlsDiv.addEventListener('touchmove', handleTouch, { passive: false });
+                touchControlsDiv.addEventListener('touchend', handleTouch, { passive: false });
+            }
+
+            loadControlPreference();
+        });
     </script>
 </body>
 </html>
