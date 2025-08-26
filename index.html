@@ -769,7 +769,7 @@
         function playMoveSound() {
             if (isMuted || !audioContext) return;
             const now = audioContext.currentTime;
-            const duration = 0.06; // 60ms
+            const duration = 0.1; // 100ms, a bit longer to be more tonal
 
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
@@ -781,12 +781,12 @@
 
             // Two octaves below the chomp sound for a bassier tone.
             const baseFreq = 75; // 300Hz / 4
-            oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 10 - 5), now);
+            oscillator.frequency.setValueAtTime(baseFreq, now);
 
-            // A similar envelope to chomp, but quieter.
+            // A slightly softer envelope to reduce clicking
             gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.05, now + 0.02); // Quieter attack
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); // Fast decay
+            gainNode.gain.linearRampToValueAtTime(0.04, now + 0.03); // Slower attack, quieter
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); 
 
             oscillator.start(now);
             oscillator.stop(now + duration);
@@ -1143,17 +1143,35 @@
             }
             
             updateStateFromServer(newState) {
-                // Update sounds based on state change
-                if (game && this.pelletsRemaining > 0 && newState.pelletsRemaining < this.pelletsRemaining) {
-                    const pelletsEaten = this.pelletsRemaining - newState.pelletsRemaining;
-                    // Simplistic check: assume a big drop is a powerup
-                    if (pelletsEaten > 1) { // Not perfect, but works for single powerup
-                       this.soundState.powerupEaten = true;
-                    } else {
-                       this.soundState.pelletEaten = true;
+                // --- SOUND LOGIC ---
+                // We check for sound-triggering events by comparing the old state (`this`) to the `newState`.
+                
+                // First, reset sound triggers for this frame
+                Object.keys(this.soundState).forEach(key => this.soundState[key] = false);
+
+                // Check for LOCAL player sounds (pellet/powerup eating)
+                if (game && this.map && this.map.length > 0 && localPlayerId !== null) {
+                    const localPlayer = newState.players.find(p => p.id === localPlayerId);
+                    if (localPlayer && localPlayer.isActive) {
+                        const tileX = Math.floor(localPlayer.x / TILE_SIZE);
+                        const tileY = Math.floor(localPlayer.y / TILE_SIZE);
+
+                        // Check if the tile the local player is on has just changed from a pellet to an empty path.
+                        // This indicates the local player just ate it.
+                        const oldTileState = this.map[tileY] ? this.map[tileY][tileX] : -1;
+                        const newTileState = newState.map[tileY] ? newState.map[tileY][tileX] : -1;
+
+                        if (newTileState === 4 && oldTileState !== 4) { // 4 is an empty path where a pellet was
+                            if (oldTileState === 2) {
+                                this.soundState.pelletEaten = true;
+                            } else if (oldTileState === 3) {
+                                this.soundState.powerupEaten = true;
+                            }
+                        }
                     }
                 }
-                
+
+                // Check for GLOBAL sounds (ghosts eaten, players dying)
                 newState.ghosts.forEach((g, index) => {
                     if (this.ghosts[index] && !this.ghosts[index].eaten && g.eaten) {
                         this.soundState.ghostEaten = true;
@@ -1165,7 +1183,6 @@
                         this.soundState.playerDied = true;
                     }
                 });
-
 
                 // Update the state
                 this.players = newState.players;
@@ -1238,10 +1255,11 @@
             }
 
             playSounds() {
+                // Play sounds based on the state determined in updateStateFromServer
                 if (this.soundState.pelletEaten) {
                     playChompSound();
                 } else {
-                    // If we didn't eat a pellet, check if we are moving to play the ambient move sound
+                    // If we didn't eat a pellet, check if our local player is moving
                     const localPlayerInstance = this.playerInstances.get(localPlayerId);
                     if (localPlayerInstance && localPlayerInstance.isActive && (localPlayerInstance.dx !== 0 || localPlayerInstance.dy !== 0)) {
                         playMoveSound();
@@ -1252,8 +1270,7 @@
                 if (this.soundState.ghostEaten) playEatGhostSound();
                 if (this.soundState.playerDied) playDeathSound();
 
-                // Reset sounds for next frame
-                Object.keys(this.soundState).forEach(key => this.soundState[key] = false);
+                // Sound state is now reset in updateStateFromServer before new state is processed
             }
 
             draw() {
