@@ -719,6 +719,8 @@
         let isMuted = false;
         let muteButton;
         const sounds = {};
+        const lastMoveSoundTime = new Map();
+        const MOVE_SOUND_INTERVAL = 120; // ms
 
         function toggleMute() { isMuted = !isMuted; updateMuteButtonDisplay(); }
         function updateMuteButtonDisplay() { if (muteButton) { muteButton.textContent = isMuted ? 'Unmute' : 'Mute'; muteButton.title = isMuted ? 'Toggle Sound On (M)' : 'Toggle Sound Off (M)'; } }
@@ -766,10 +768,17 @@
             oscillator.stop(now + duration);
         }
 
-        function playMoveSound() {
+        function playMoveSound(playerId) {
             if (isMuted || !audioContext) return;
+            
+            const nowMs = performance.now();
+            if (lastMoveSoundTime.has(playerId) && (nowMs - lastMoveSoundTime.get(playerId) < MOVE_SOUND_INTERVAL)) {
+                return; // Too soon, don't play
+            }
+            lastMoveSoundTime.set(playerId, nowMs);
+
             const now = audioContext.currentTime;
-            const duration = 0.15; // 150ms
+            const duration = 0.1; // 100ms
 
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
@@ -777,20 +786,19 @@
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
 
-            // Use a sine wave for a softer, more subdued sound.
-            oscillator.type = 'sine'; // Changed from 'square' to a sine wave for a much softer tone.
+            oscillator.type = 'triangle'; // Softer than square, less "buzzy" than sine at low freqs
+            
+            // Different base frequency for each player
+            const baseFreq = playerId === 1 ? 150 : 170;
+            oscillator.frequency.setValueAtTime(baseFreq, now);
 
-            // A slightly higher frequency to be audible on more speaker types.
-            const baseFreq = 40;
-            oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 10 - 5), now );
-
-            // Reduce the gain (volume) significantly to be a subtle background hum.
+            // A short envelope for a "blip" sound
             gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.03, now + 0.02); // Reduced peak volume
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration );
+            gainNode.gain.linearRampToValueAtTime(0.04, now + 0.01); // Quick attack, low volume
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
             oscillator.start(now);
-            oscillator.stop(now + duration );
+            oscillator.stop(now + duration);
         }
 
         function playPowerupSound() {
@@ -1112,7 +1120,7 @@
                 this.playerInstances = new Map();
                 
                 this.soundState = {
-                    pelletEaten: false,
+                    playersEatingPellet: new Set(),
                     powerupEaten: false,
                     ghostEaten: false,
                     playerDied: false,
@@ -1148,28 +1156,32 @@
                 // We check for sound-triggering events by comparing the old state (`this`) to the `newState`.
                 
                 // First, reset sound triggers for this frame
-                Object.keys(this.soundState).forEach(key => this.soundState[key] = false);
+                this.soundState.playersEatingPellet.clear();
+                this.soundState.powerupEaten = false;
+                this.soundState.ghostEaten = false;
+                this.soundState.playerDied = false;
 
-                // Check for LOCAL player sounds (pellet/powerup eating)
-                if (game && this.map && this.map.length > 0 && localPlayerId !== null) {
-                    const localPlayer = newState.players.find(p => p.id === localPlayerId);
-                    if (localPlayer && localPlayer.isActive) {
-                        const tileX = Math.floor(localPlayer.x / TILE_SIZE);
-                        const tileY = Math.floor(localPlayer.y / TILE_SIZE);
+                // Check for pellet/powerup eating sounds for ALL players
+                if (game && this.map && this.map.length > 0) {
+                    newState.players.forEach(player => {
+                        if (player.isActive) {
+                            const tileX = Math.floor(player.x / TILE_SIZE);
+                            const tileY = Math.floor(player.y / TILE_SIZE);
+                            // Ensure tile coordinates are within map bounds
+                            if (tileY < 0 || tileY >= this.map.length || tileX < 0 || tileX >= this.map[0].length) return;
 
-                        // Check if the tile the local player is on has just changed from a pellet to an empty path.
-                        // This indicates the local player just ate it.
-                        const oldTileState = this.map[tileY] ? this.map[tileY][tileX] : -1;
-                        const newTileState = newState.map[tileY] ? newState.map[tileY][tileX] : -1;
+                            const oldTileState = this.map[tileY] ? this.map[tileY][tileX] : -1;
+                            const newTileState = newState.map[tileY] ? newState.map[tileY][tileX] : -1;
 
-                        if (newTileState === 4 && oldTileState !== 4) { // 4 is an empty path where a pellet was
-                            if (oldTileState === 2) {
-                                this.soundState.pelletEaten = true;
-                            } else if (oldTileState === 3) {
-                                this.soundState.powerupEaten = true;
+                            if (newTileState === 4 && oldTileState !== 4) { // 4 is an empty path where a pellet was
+                                if (oldTileState === 2) {
+                                    this.soundState.playersEatingPellet.add(player.id);
+                                } else if (oldTileState === 3) {
+                                    this.soundState.powerupEaten = true; // A single sound is fine
+                                }
                             }
                         }
-                    }
+                    });
                 }
 
                 // Check for GLOBAL sounds (ghosts eaten, players dying)
@@ -1256,22 +1268,23 @@
             }
 
             playSounds() {
-                // Play sounds based on the state determined in updateStateFromServer
-                if (this.soundState.pelletEaten) {
-                    playChompSound();
-                } else {
-                    // If we didn't eat a pellet, check if our local player is moving
-                    const localPlayerInstance = this.playerInstances.get(localPlayerId);
-                    if (localPlayerInstance && localPlayerInstance.isActive && (localPlayerInstance.dx !== 0 || localPlayerInstance.dy !== 0)) {
-                        playMoveSound();
+                // Play sounds for each active player based on their state
+                this.playerInstances.forEach(player => {
+                    if (player.isActive && (player.dx !== 0 || player.dy !== 0)) {
+                        // Player is moving
+                        if (this.soundState.playersEatingPellet.has(player.id)) {
+                            // Moving and eating a pellet: play chomp sound
+                            playChompSound();
+                        } else {
+                            // Moving on an empty path: play move sound
+                            playMoveSound(player.id);
+                        }
                     }
-                }
+                });
                 
                 if (this.soundState.powerupEaten) playPowerupSound();
                 if (this.soundState.ghostEaten) playEatGhostSound();
                 if (this.soundState.playerDied) playDeathSound();
-
-                // Sound state is now reset in updateStateFromServer before new state is processed
             }
 
             draw() {
