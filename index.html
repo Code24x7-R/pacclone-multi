@@ -403,7 +403,7 @@
         </div>
         <canvas id="gameCanvas" width="600" height="600"></canvas>
         <div id="controls-info">
-            P1: Arrows, Space | P2: WASD, Shift | P: Pause | R: New Game
+            Arrows/WASD: Move | Space/Shift: Dash | P: Pause | R: New Game
         </div>
     </div>
     <div id="message">
@@ -439,10 +439,9 @@
         };
 
         class Player {
-            constructor(id, color, controls) {
+            constructor(id, color) {
                 this.id = id;
                 this.color = color;
-                this.controls = controls; // Keep controls for client-side input mapping
                 this.radius = TILE_SIZE / 2 - 2;
                 
                 // State will be synced from server
@@ -747,10 +746,6 @@
 
                 // Client-side animation properties
                 this.playerInstances = new Map();
-                this.playerControls = [
-                    { up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright', dash: ' ' },
-                    { up: 'w', down: 's', left: 'a', right: 'd', dash: 'shift' }
-                ];
                 
                 this.soundState = {
                     pelletEaten: false,
@@ -824,7 +819,7 @@
                 // Update player instances for animations
                 this.players.forEach(pData => {
                     if (!this.playerInstances.has(pData.id)) {
-                        this.playerInstances.set(pData.id, new Player(pData.id, pData.color, this.playerControls[pData.id - 1] || {}));
+                        this.playerInstances.set(pData.id, new Player(pData.id, pData.color));
                     }
                     const pInstance = this.playerInstances.get(pData.id);
                     Object.assign(pInstance, pData); // Copy server state to local instance
@@ -1008,7 +1003,7 @@
         // --- UI Updates ---
         function applyControlsLayout() { const preference = localStorage.getItem(CONTROLS_PREFERENCE_KEY); const touchControls = document.getElementById('touch-controls'); if (preference === 'left') { touchControls.classList.add('left-hand-layout'); } else { touchControls.classList.remove('left-hand-layout'); } }
         function toggleControlsLayout() { const touchControls = document.getElementById('touch-controls'); const isLeftHanded = touchControls.classList.toggle('left-hand-layout'); localStorage.setItem(CONTROLS_PREFERENCE_KEY, isLeftHanded ? 'left' : 'right'); }
-        function updateControlStatus(controlType) { const statusEl = document.getElementById('control-status'); const controlsEl = document.getElementById('controls-info'); const startInfo = document.getElementById('start-gamepad-info'); if (!statusEl) return; switch (controlType) { case 'gamepad': statusEl.innerHTML = ICONS.gamepad; statusEl.style.color = 'lime'; if (controlsEl) controlsEl.textContent = 'D-Pad/Stick: Move | (A): Dash | (Start): Pause | (B): Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Controller Ready! Press Start or (A) to Play.'; startInfo.style.color = 'lime'; } break; case 'touch': statusEl.innerHTML = ICONS.touch; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'D-Pad: Move | DASH: Dash | P: Pause | R: Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; case 'keyboard': default: statusEl.innerHTML = ICONS.keyboard; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'P1: Arrows, Space | P2: WASD, Shift | P: Pause | R: New Game'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; } }
+        function updateControlStatus(controlType) { const statusEl = document.getElementById('control-status'); const controlsEl = document.getElementById('controls-info'); const startInfo = document.getElementById('start-gamepad-info'); if (!statusEl) return; switch (controlType) { case 'gamepad': statusEl.innerHTML = ICONS.gamepad; statusEl.style.color = 'lime'; if (controlsEl) controlsEl.textContent = 'D-Pad/Stick: Move | (A): Dash | (Start): Pause | (B): Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Controller Ready! Press Start or (A) to Play.'; startInfo.style.color = 'lime'; } break; case 'touch': statusEl.innerHTML = ICONS.touch; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'D-Pad: Move | DASH: Dash | P: Pause | R: Reset'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; case 'keyboard': default: statusEl.innerHTML = ICONS.keyboard; statusEl.style.color = '#fff'; if (controlsEl) controlsEl.textContent = 'Arrows/WASD: Move | Space/Shift: Dash | P: Pause | R: New Game'; if (startInfo && (!game || !game.gameRunning)) { startInfo.textContent = 'Connect controller to activate'; startInfo.style.color = '#aaa'; } break; } }
         
         function setupTouchControls() { if (!isTouchDevice) { return; } const touchControls = document.getElementById('touch-controls'); const dpadUp = document.getElementById('dpad-up'); const dpadDown = document.getElementById('dpad-down'); const dpadLeft = document.getElementById('dpad-left'); const dpadRight = document.getElementById('dpad-right'); const dashButton = document.getElementById('dash-button-touch'); touchControls.style.display = 'block'; const handleDpadPress = (e, direction) => { e.preventDefault(); networkManager.send('playerInput', { action: 'move', direction: direction }); }; dpadUp.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 0, dy: -1 }), { passive: false }); dpadDown.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 0, dy: 1 }), { passive: false }); dpadLeft.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: -1, dy: 0 }), { passive: false }); dpadRight.addEventListener('touchstart', (e) => handleDpadPress(e, { dx: 1, dy: 0 }), { passive: false }); dashButton.addEventListener('touchstart', (e) => { e.preventDefault(); if (game && game.gameRunning && !game.paused) { networkManager.send('playerInput', { action: 'dash' }); } }, { passive: false }); }
         const GAMEPAD_BUTTONS = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, L_STICK: 10, R_STICK: 11, DPAD_UP: 12, DPAD_DOWN: 13, DPAD_LEFT: 14, DPAD_RIGHT: 15, };
@@ -1049,18 +1044,20 @@
 
             if (game.paused) return;
 
-            // Find the local player's controls to send the correct input
-            const playerInstance = game.playerInstances.get(localPlayerId);
-            if (playerInstance) {
-                const controls = playerInstance.controls;
-                if (key === controls.dash) {
-                    e.preventDefault();
-                    networkManager.send('playerInput', { action: 'dash' });
-                }
-                if (key === controls.up) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: -1 } });
-                else if (key === controls.down) networkManager.send('playerInput', { action: 'move', direction: { dx: 0, dy: 1 } });
-                else if (key === controls.left) networkManager.send('playerInput', { action: 'move', direction: { dx: -1, dy: 0 } });
-                else if (key === controls.right) networkManager.send('playerInput', { action: 'move', direction: { dx: 1, dy: 0 } });
+            // Unified controls for all network players
+            let direction = null;
+            if (key === 'arrowup' || key === 'w') direction = { dx: 0, dy: -1 };
+            else if (key === 'arrowdown' || key === 's') direction = { dx: 0, dy: 1 };
+            else if (key === 'arrowleft' || key === 'a') direction = { dx: -1, dy: 0 };
+            else if (key === 'arrowright' || key === 'd') direction = { dx: 1, dy: 0 };
+            
+            if (direction) {
+                networkManager.send('playerInput', { action: 'move', direction });
+            }
+
+            if (key === ' ' || key === 'shift') {
+                e.preventDefault();
+                networkManager.send('playerInput', { action: 'dash' });
             }
         });
 

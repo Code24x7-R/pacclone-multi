@@ -52,8 +52,8 @@ The game automatically detects your input method. Each browser window/tab can be
 
 ### Keyboard
 
--   **Player 1 (first to join):** Arrow Keys (↑ ↓ ← →) to move, `Spacebar` for Phase Dash.
--   **Player 2 (second to join):** `WASD` to move, `Shift` for Phase Dash.
+-   **Movement**: Arrow Keys (↑ ↓ ← →) or `WASD`
+-   **Phase Dash**: `Spacebar` or `Shift`
 -   **General**: `P` to Pause, `R` to Reset (returns to lobby), `M` to Mute.
 
 ### Gamepad (Xbox/Standard Layout Recommended)
