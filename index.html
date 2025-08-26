@@ -624,7 +624,7 @@
                 const messageButtons = document.getElementById('message-buttons');
 
                 messageText.innerHTML = `<h1>PACCLONE MULTI</h1><div id="lobby-container"></div><div id="network-status">Connecting...</div>`;
-                messageButtons.innerHTML = `<button id="start-game-btn" disabled>Start Game</button>`;
+                messageButtons.innerHTML = ``;
                 
                 this.render();
 
@@ -636,7 +636,6 @@
                     }
                 });
                 
-                document.getElementById('start-game-btn').addEventListener('click', () => this.handleStart());
                 messageContainer.style.display = 'flex';
             }
             
@@ -683,12 +682,6 @@
                     `;
                 });
                 lobbyContainer.innerHTML = lobbyHTML;
-
-                const joinedPlayers = this.lobbyState.slots.filter(p => p.joined).length;
-                const startBtn = document.getElementById('start-game-btn');
-                if (startBtn) {
-                   startBtn.disabled = joinedPlayers < 1 || !localPlayerIsJoined;
-                }
             }
 
             handleJoin(playerId) {
@@ -1569,6 +1562,9 @@
             });
             networkManager.on('lobbyStateUpdate', (lobbyData) => {
                 lobby.updateState(lobbyData);
+                if (lobbyData.message) {
+                    networkManager.updateNetworkStatus(lobbyData.message, 'lime');
+                }
             });
             networkManager.on('gameStarted', (initialState) => {
                 if (game) return; // Prevent multiple initializations

@@ -217,8 +217,25 @@ function broadcast(message) {
 }
 
 function broadcastLobbyState() {
-    broadcast({ event: 'lobbyStateUpdate', payload: lobbyState });
+    const joinedPlayers = lobbyState.slots.filter(s => s.joined).length;
+    const neededPlayers = lobbyState.slots.length - joinedPlayers;
+    const message = joinedPlayers > 0 && neededPlayers > 0 ? `Waiting for ${neededPlayers} more player${neededPlayers > 1 ? 's' : ''}...` : `Connected`;
+    const payload = { ...lobbyState, message: message };
+    broadcast({ event: 'lobbyStateUpdate', payload: payload });
 }
+
+function triggerGameStartSequence() {
+    console.log('[LOBBY] All players have joined. Starting game in 4 seconds...');
+    const payload = { ...lobbyState, message: 'Starting match...' };
+    broadcast({ event: 'lobbyStateUpdate', payload: payload });
+
+    setTimeout(() => {
+        if (gameState) return; // Game already started somehow
+        initializeGame();
+        broadcast({ event: 'gameStarted', payload: gameState });
+    }, 4000);
+}
+
 
 function handleClientMessage(clientId, event, payload) {
     switch (event) {
@@ -229,13 +246,17 @@ function handleClientMessage(clientId, event, payload) {
                 slotToJoin.joined = true;
                 slotToJoin.clientId = clientId;
                 console.log(`[LOBBY] Client ${clientId.substring(0,8)} joined slot ${payload.slotId}.`);
-                broadcastLobbyState();
+                
+                const allJoined = lobbyState.slots.every(s => s.joined);
+                if (allJoined) {
+                    triggerGameStartSequence();
+                } else {
+                    broadcastLobbyState();
+                }
             }
             break;
         case 'startGame':
-            if (gameState) return; // Game already in progress
-            initializeGame();
-            broadcast({ event: 'gameStarted', payload: gameState });
+            // This is now triggered automatically by the server
             break;
         case 'playerInput':
             if (!gameState || !gameState.gameRunning) return;
