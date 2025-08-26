@@ -259,6 +259,12 @@
             font-family: monospace;
             cursor: pointer;
         }
+        .player-slot button:disabled {
+            background-color: #222;
+            color: #666;
+            border-color: #444;
+            cursor: not-allowed;
+        }
         #network-status {
             font-size: 0.6em;
             color: #aaa;
@@ -647,16 +653,27 @@
             render() {
                 const lobbyContainer = document.getElementById('lobby-container');
                 if (!lobbyContainer) return;
-                
+
+                const localPlayerIsJoined = this.lobbyState.slots.some(p => p.clientId === this.networkManager.clientId);
+
                 let lobbyHTML = '';
                 this.lobbyState.slots.forEach(slot => {
                     const isLocalPlayer = slot.clientId === this.networkManager.clientId;
                     const joinedClass = slot.joined ? 'joined' : '';
                     const localClass = isLocalPlayer ? 'local-player' : '';
 
-                    const buttonHTML = slot.joined 
-                        ? `<span>${isLocalPlayer ? 'YOU' : 'JOINED'}</span>` 
-                        : `<button class="join-btn" data-player-id="${slot.id}">Join</button>`;
+                    let buttonHTML;
+                    if (slot.joined) {
+                        buttonHTML = `<span>${isLocalPlayer ? 'YOU' : 'JOINED'}</span>`;
+                    } else {
+                        if (localPlayerIsJoined) {
+                            // This client has already joined another slot, so disable this empty one.
+                            buttonHTML = `<button class="join-btn" data-player-id="${slot.id}" disabled>Join</button>`;
+                        } else {
+                            // Slot is open and this client hasn't joined anywhere yet.
+                            buttonHTML = `<button class="join-btn" data-player-id="${slot.id}">Join</button>`;
+                        }
+                    }
 
                     lobbyHTML += `
                         <div class="player-slot ${joinedClass} ${localClass}" style="border-color: ${slot.color};">
@@ -668,7 +685,6 @@
                 lobbyContainer.innerHTML = lobbyHTML;
 
                 const joinedPlayers = this.lobbyState.slots.filter(p => p.joined).length;
-                const localPlayerIsJoined = this.lobbyState.slots.some(p => p.clientId === this.networkManager.clientId);
                 const startBtn = document.getElementById('start-game-btn');
                 if (startBtn) {
                    startBtn.disabled = joinedPlayers < 1 || !localPlayerIsJoined;
