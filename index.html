@@ -635,12 +635,11 @@
             }
             
             updateState(newLobbyState) {
-                this.lobbyState = newLobbyState;
-                const messageContainer = document.getElementById('message');
+                this.lobbyState = newLobbyState; // Always update the internal state
+                
+                // Only re-render the lobby UI if it is currently visible
                 const lobbyContainer = document.getElementById('lobby-container');
-                // Only re-render the lobby if it's currently being displayed.
-                // This prevents a server-sent lobby update from overwriting the game-over screen.
-                if (messageContainer.style.display === 'flex' && lobbyContainer) {
+                if (lobbyContainer) {
                     this.render();
                 }
             }
@@ -763,6 +762,8 @@
                 isNewHighScore = checkHighScore(topPlayer.score);
             }
             
+            const waitingMessage = `<div style="font-size: 0.7em; color: #ccc; margin-top: 20px;">Returning to lobby shortly...</div>`;
+
             if (isNewHighScore) {
                 playHighScoreSound();
                 messageButtons.innerHTML = `<div style="font-size: 0.8em; color: lime;">NEW HIGH SCORE! Enter your initials:</div><form id="highscore-form"><input type="text" id="name-input" maxlength="3" required pattern="[A-Z_]{3}" title="3 uppercase letters or underscores" autocomplete="off" placeholder="AAA"><button type="submit">SUBMIT</button></form>`;
@@ -777,12 +778,10 @@
                     saveHighScore(playerName, topPlayer.score);
                     
                     updateScreenContent(); // Re-render with new high score
-                    messageButtons.innerHTML = `<button id="play-again-btn">Play Again</button>`;
-                    document.getElementById('play-again-btn').addEventListener('click', () => lobby.init());
+                    messageButtons.innerHTML = waitingMessage;
                 });
             } else {
-                messageButtons.innerHTML = `<button id="play-again-btn">Play Again</button>`;
-                document.getElementById('play-again-btn').addEventListener('click', () => lobby.init());
+                messageButtons.innerHTML = waitingMessage;
             }
 
             messageContainer.style.display = 'flex';
@@ -1077,7 +1076,7 @@
 
             if (game && game.isGameOver) {
                 if (key === 'enter') {
-                    document.querySelector('#play-again-btn')?.click();
+                    // Enter no longer does anything on game over screen
                 }
                 return;
             }
@@ -1172,6 +1171,18 @@
                 if (game) {
                     game.updateStateFromServer(newState);
                 }
+            });
+            
+            networkManager.on('returnToLobby', (newLobbyState) => {
+                if (game) {
+                    game.gameRunning = false;
+                    game.isGameOver = true;
+                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                    game = null;
+                }
+                lobby.updateState(newLobbyState);
+                lobby.init();
             });
 
             networkManager.on('gameInProgress', () => {

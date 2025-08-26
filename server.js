@@ -326,29 +326,34 @@ function initializeGame() {
 }
 
 function gameLoop() {
-    if (!gameState || !gameState.gameRunning) {
+    if (!gameState) {
         clearInterval(gameLoopInterval);
         gameLoopInterval = null;
         return;
     }
     
     update(GAME_TICK_RATE);
-    broadcast({ event: 'gameStateUpdate', payload: gameState });
+
+    if (gameState) {
+        broadcast({ event: 'gameStateUpdate', payload: gameState });
+    }
 }
 
 // --- Core Game Logic (ported from client, adapted for server) ---
 function update(deltaTime) {
     if (gameState.isGameOver) {
         gameState.gameOverTimer -= deltaTime;
-        if(gameState.gameOverTimer <= 0) {
-             // Reset to lobby
-             gameState = null;
-             Object.values(lobbyState.slots).forEach(s => { s.joined = false; s.clientId = null; });
-             broadcastLobbyState();
-             console.log('[LOBBY] Game has ended. Returning all clients to lobby.');
+        if (gameState.gameOverTimer <= 0) {
+            // Reset to lobby
+            Object.values(lobbyState.slots).forEach(s => { s.joined = false; s.clientId = null; });
+            console.log('[LOBBY] Game has ended. Returning all clients to lobby.');
+            broadcast({ event: 'returnToLobby', payload: lobbyState });
+            gameState = null; // This will stop the game loop
         }
         return;
     };
+
+    if (!gameState.gameRunning) return;
 
     gameState.players.forEach(player => {
         if (player.powerUpTimer > 0) player.powerUpTimer -= deltaTime;
