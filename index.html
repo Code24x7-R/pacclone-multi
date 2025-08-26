@@ -930,11 +930,20 @@
             }
 
             playSounds() {
-                if (this.soundState.pelletEaten) playChompSound();
+                if (this.soundState.pelletEaten) {
+                    playChompSound();
+                } else {
+                    // If we didn't eat a pellet, check if we are moving to play the ambient move sound
+                    const localPlayerInstance = this.playerInstances.get(localPlayerId);
+                    if (localPlayerInstance && localPlayerInstance.isActive && (localPlayerInstance.dx !== 0 || localPlayerInstance.dy !== 0)) {
+                        playMoveSound();
+                    }
+                }
+                
                 if (this.soundState.powerupEaten) playPowerupSound();
                 if (this.soundState.ghostEaten) playEatGhostSound();
                 if (this.soundState.playerDied) playDeathSound();
-                
+
                 // Reset sounds for next frame
                 Object.keys(this.soundState).forEach(key => this.soundState[key] = false);
             }

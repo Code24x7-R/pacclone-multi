@@ -115,8 +115,8 @@ class Player {
         this.dashTimer = 0;
         this.powerUpTimer = 0;
         this.invulnerabilityTimer = 0;
-        if (this.score === undefined) this.score = 0;
-        if (this.lives === undefined) this.lives = 3;
+        this.score = 0;
+        this.lives = 3;
         this.isActive = true;
         this.isSpectator = false;
         this.isWinner = false;
