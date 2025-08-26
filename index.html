@@ -718,21 +718,306 @@
         let audioContext;
         let isMuted = false;
         let muteButton;
+        const sounds = {};
 
         function toggleMute() { isMuted = !isMuted; updateMuteButtonDisplay(); }
         function updateMuteButtonDisplay() { if (muteButton) { muteButton.textContent = isMuted ? 'Unmute' : 'Mute'; muteButton.title = isMuted ? 'Toggle Sound On (M)' : 'Toggle Sound Off (M)'; } }
-        function initializeAudio() { if (audioContext) { if (audioContext.state === 'suspended') { audioContext.resume(); } return; } try { audioContext = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { console.error("Web Audio API is not supported in this browser."); } }
-        function playChompSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = 0.05; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'square'; const baseFreq = 300; oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 50 - 25), now); gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.1, now + 0.02); gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration ); oscillator.start(now); oscillator.stop(now + duration); }
-        function playMoveSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = 0.15; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'square'; const baseFreq = 30; oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 20 - 10), now ); gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.09, now + 0.02); gainNode.gain.exponentialRampToValueAtTime(0.005, now + duration ); oscillator.start(now); oscillator.stop(now + duration ); }
-        function playPowerupSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = 0.4; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); const lfo = audioContext.createOscillator(); const lfoGain = audioContext.createGain(); lfo.type = 'sine'; lfo.frequency.setValueAtTime(10, now); lfoGain.gain.setValueAtTime(50, now); lfo.connect(lfoGain); lfoGain.connect(oscillator.frequency); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(440, now); gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.3, now + 0.05); gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); lfo.start(now); lfo.stop(now + duration); oscillator.start(now); oscillator.stop(now + duration); }
-        function playEatGhostSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = 0.2; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'square'; oscillator.frequency.setValueAtTime(500, now); oscillator.frequency.exponentialRampToValueAtTime(1200, now + duration); gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.4, now + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); oscillator.start(now); oscillator.stop(now + duration); }
-        function playDeathSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = .9; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'sawtooth'; oscillator.frequency.setValueAtTime(400, now); oscillator.frequency.exponentialRampToValueAtTime(50, now + duration); gainNode.gain.setValueAtTime(0.5, now); gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); oscillator.start(now); oscillator.stop(now + duration); }
-        function playGameOverSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const durationPerNote = 0.25; const notes = [330, 220, 165, 110, 55]; const volume = 0.4; notes.forEach((freq, index) => { const startTime = now + index * durationPerNote; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(freq, startTime); gainNode.gain.setValueAtTime(0, startTime); gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.02); gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durationPerNote); oscillator.start(startTime); oscillator.stop(startTime + durationPerNote); }); }
+
+        function initializeAudio() {
+            if (audioContext) {
+                // If context exists but is suspended, resume it.
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+                return;
+            }
+            try {
+                // Create the context if it doesn't exist.
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) {
+                console.error("Web Audio API is not supported in this browser.");
+            }
+        }
+
+        function playChompSound() {
+            if (isMuted || !audioContext) return;
+            const now = audioContext.currentTime;
+            const duration = 0.05; // 50ms
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // A square wave sounds more "chiptuney" and distinct than a sine wave.
+            oscillator.type = 'square';
+
+            // Add a slight, random pitch variation to make chomping less monotonous.
+            const baseFreq = 300;
+            oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 50 - 25), now);
+
+            // A fast attack and decay envelope makes the sound "plucky" or "sucky".
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.1, now + 0.02); // Quick attack
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); // Fast decay
+
+            oscillator.start(now);
+            oscillator.stop(now + duration);
+        }
+
+        function playMoveSound() {
+            if (isMuted || !audioContext) return;
+            const now = audioContext.currentTime;
+            const duration = 0.15; // 150ms
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // Use a sine wave for a softer, more subdued sound.
+            oscillator.type = 'square';
+
+            // Lower the frequency and reduce the random pitch variation.
+            const baseFreq = 30;
+            oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 20 - 10), now );
+
+            // Reduce the gain (volume) significantly.
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.09, now + 0.02); // Slightly increased peak volume
+            gainNode.gain.exponentialRampToValueAtTime(0.005, now + duration );
+
+            oscillator.start(now);
+            oscillator.stop(now + duration );
+        }
+
+        function playPowerupSound() {
+            if (isMuted || !audioContext) return;
+            const now = audioContext.currentTime;
+            const duration = 0.4; // 400ms
+
+            // An LFO modulates the main oscillator's frequency to create a "wobble".
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            const lfo = audioContext.createOscillator();
+            const lfoGain = audioContext.createGain();
+
+            lfo.type = 'sine';
+            lfo.frequency.setValueAtTime(10, now); // 10Hz wobble
+            lfoGain.gain.setValueAtTime(50, now); // 50Hz frequency deviation
+
+            lfo.connect(lfoGain);
+            lfoGain.connect(oscillator.frequency); // LFO modulates main oscillator frequency
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.type = 'triangle';
+            oscillator.frequency.setValueAtTime(440, now); // Base frequency A4
+
+            // Fade the sound in and out smoothly.
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.3, now + 0.05); // Fade in
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); // Fade out
+
+            lfo.start(now);
+            lfo.stop(now + duration);
+            oscillator.start(now);
+            oscillator.stop(now + duration);
+        }
+
+        function playEatGhostSound() {
+            if (isMuted || !audioContext) return;
+            const now = audioContext.currentTime;
+            const duration = 0.2; // 200ms
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.type = 'square';
+            
+            // A rapid upward frequency sweep for a celebratory "zap" sound.
+            oscillator.frequency.setValueAtTime(500, now);
+            oscillator.frequency.exponentialRampToValueAtTime(1200, now + duration);
+
+            // Sharp attack and quick decay.
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.4, now + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+            oscillator.start(now);
+            oscillator.stop(now + duration);
+        }
+
+        function playDeathSound() {
+            if (isMuted || !audioContext) return;
+            const now = audioContext.currentTime;
+            const duration = 0.6; // 600ms
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.type = 'sawtooth'; // A harsh, grating sound
+            
+            // A rapid downward frequency sweep, like a machine powering down.
+            oscillator.frequency.setValueAtTime(400, now);
+            oscillator.frequency.exponentialRampToValueAtTime(50, now + duration);
+
+            gainNode.gain.setValueAtTime(0.5, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+            oscillator.start(now);
+            oscillator.stop(now + duration);
+        }
+
+        function playGameOverSound() {
+            if (isMuted || !audioContext) return;
+            const now = audioContext.currentTime;
+            const durationPerNote = 0.25;
+            const notes = [220, 165, 110, 55]; // Descending arpeggio
+            const volume = 0.4;
+
+            notes.forEach((freq, index) => {
+                const startTime = now + index * durationPerNote;
+                
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.type = 'triangle'; // A softer, more melancholic tone
+                oscillator.frequency.setValueAtTime(freq, startTime);
+
+                gainNode.gain.setValueAtTime(0, startTime);
+                gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.02);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durationPerNote);
+
+                oscillator.start(startTime);
+                oscillator.stop(startTime + durationPerNote);
+            });
+        }
+        
+        function playDashSound() {
+            if (isMuted || !audioContext) return;
+            const now = audioContext.currentTime;
+            const duration = 0.2; // 200ms
+
+            // --- Tonal Part (the whoosh) ---
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(2500, now); // Start high
+            oscillator.frequency.exponentialRampToValueAtTime(150, now + duration);
+
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.2, now + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+            oscillator.start(now);
+            oscillator.stop(now + duration);
+
+            // --- Noise Part (the static/phase effect) ---
+            const bufferSize = audioContext.sampleRate * duration;
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const output = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = Math.random() * 2 - 1; // White noise
+            }
+
+            const noiseSource = audioContext.createBufferSource();
+            noiseSource.buffer = buffer;
+            const noiseGain = audioContext.createGain();
+            
+            noiseSource.connect(noiseGain);
+            noiseGain.connect(audioContext.destination);
+
+            // Noise fades in and out quickly like a burst of static.
+            noiseGain.gain.setValueAtTime(0, now);
+            noiseGain.gain.linearRampToValueAtTime(0.15, now + 0.02); // Quick fade in
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration); // Quick fade out
+
+            noiseSource.start(now);
+            noiseSource.stop(now + duration);
+        }
+
+        function playCelebrateSound() {
+            if (isMuted || !audioContext) return;
+            const now = audioContext.currentTime;
+            const durationPerNote = 0.1;
+            const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+            const volume = 0.35;
+
+            notes.forEach((freq, index) => {
+                const startTime = now + index * durationPerNote;
+                
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.type = 'triangle'; // A bright, happy tone
+                oscillator.frequency.setValueAtTime(freq, startTime);
+
+                // A quick attack and decay for each note
+                gainNode.gain.setValueAtTime(0, startTime);
+                gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durationPerNote);
+
+                oscillator.start(startTime);
+                oscillator.stop(startTime + durationPerNote);
+            });
+        }
+
+        function playHighScoreSound() {
+            if (isMuted || !audioContext) return;
+            const now = audioContext.currentTime;
+            const noteDuration = 0.08;
+            const gap = 0.02;
+            const startTime = now + 0.1; // Small delay
+            const volume = 0.35;
+
+            // Notes for a Pac-Man style jingle (C5, E5, G5, C6, G5, E5, C5)
+            const notes = [523.25, 659.25, 783.99, 1046.50, 783.99, 659.25, 523.25];
+
+            notes.forEach((freq, index) => {
+                const noteStartTime = startTime + index * (noteDuration + gap);
+                
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.type = 'square'; // Classic arcade sound
+                oscillator.frequency.setValueAtTime(freq, noteStartTime);
+
+                // A quick, sharp envelope for each note
+                gainNode.gain.setValueAtTime(0, noteStartTime);
+                gainNode.gain.linearRampToValueAtTime(volume, noteStartTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + noteDuration);
+
+                oscillator.start(noteStartTime);
+                oscillator.stop(noteStartTime + noteDuration);
+            });
+        }
+
+        // --- Functions kept from previous version ---
         function playWinSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const durationPerNote = 0.08; const notes = [ { freq: 523.25, dur: durationPerNote * 1.5 }, { freq: 659.25, dur: durationPerNote * 1.5 }, { freq: 783.99, dur: durationPerNote * 1.5 }, { freq: 1046.50, dur: durationPerNote * 3 } ]; const volume = 0.4; let cumulativeTime = now; notes.forEach(({ freq, dur }) => { const noteStartTime = cumulativeTime; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(freq, noteStartTime); gainNode.gain.setValueAtTime(0, noteStartTime); gainNode.gain.linearRampToValueAtTime(volume, noteStartTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + dur * 0.9); oscillator.start(noteStartTime); oscillator.stop(noteStartTime + dur); cumulativeTime += dur; }); }
-        function playDashSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const duration = 0.4; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'sawtooth'; oscillator.frequency.setValueAtTime(2500, now); oscillator.frequency.exponentialRampToValueAtTime(150, now + duration); gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.2, now + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); oscillator.start(now); oscillator.stop(now + duration); const bufferSize = audioContext.sampleRate * duration; const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate); const output = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; } const noiseSource = audioContext.createBufferSource(); noiseSource.buffer = buffer; const noiseGain = audioContext.createGain(); noiseSource.connect(noiseGain); noiseGain.connect(audioContext.destination); noiseGain.gain.setValueAtTime(0, now); noiseGain.gain.linearRampToValueAtTime(0.15, now + 0.02); noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration); noiseSource.start(now); noiseSource.stop(now + duration); }
-        function playCelebrateSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const durationPerNote = 0.1; const notes = [261.63, 329.63, 392.00, 523.25]; const volume = 0.35; notes.forEach((freq, index) => { const startTime = now + index * durationPerNote; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(freq, startTime); gainNode.gain.setValueAtTime(0, startTime); gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durationPerNote); oscillator.start(startTime); oscillator.stop(startTime + durationPerNote); }); }
-        function playHighScoreSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const noteDuration = 0.08; const gap = 0.02; const startTime = now + 0.1; const volume = 0.35; const notes = [523.25, 659.25, 783.99, 1046.50, 783.99, 659.25, 523.25]; notes.forEach((freq, index) => { const noteStartTime = startTime + index * (noteDuration + gap); const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'square'; oscillator.frequency.setValueAtTime(freq, noteStartTime); gainNode.gain.setValueAtTime(0, noteStartTime); gainNode.gain.linearRampToValueAtTime(volume, noteStartTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + noteDuration); oscillator.start(noteStartTime); oscillator.stop(noteStartTime + noteDuration); }); }
-        function playExtraLifeSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const durationPerNote = 0.09; const notes = [523.25, 659.25, 783.99, 1046.50]; const volume = 0.4; notes.forEach((freq, index) => { const startTime = now + index * durationPerNote; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'square'; oscillator.frequency.setValueAtTime(freq, startTime); gainNode.gain.setValueAtTime(0, startTime); gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + durationPerNote); oscillator.start(startTime); oscillator.stop(startTime + durationPerNote); }); }
         function playStartSound() { if (isMuted || !audioContext) return; const now = audioContext.currentTime; const startTime = now + 0.1; const volume = 0.35; const tempo = 180; const eighthNote = 60 / tempo / 2; const notes = [ { freq: 932.33, dur: eighthNote }, { freq: 0, dur: eighthNote/2 }, { freq: 932.33, dur: eighthNote }, { freq: 783.99, dur: eighthNote }, { freq: 698.46, dur: eighthNote }, { freq: 622.25, dur: eighthNote }, { freq: 0, dur: eighthNote/2 }, { freq: 698.46, dur: eighthNote }, { freq: 622.25, dur: eighthNote }, { freq: 523.25, dur: eighthNote }, { freq: 466.16, dur: eighthNote }, { freq: 0, dur: eighthNote/2 }, { freq: 523.25, dur: eighthNote }, { freq: 466.16, dur: eighthNote }, { freq: 392.00, dur: eighthNote }, { freq: 523.25, dur: eighthNote *8 } ]; let cumulativeTime = startTime; notes.forEach(({ freq, dur }) => { if (freq > 0) { const noteStartTime = cumulativeTime; const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(freq, noteStartTime); gainNode.gain.setValueAtTime(0, noteStartTime); gainNode.gain.linearRampToValueAtTime(volume, noteStartTime + 0.01); gainNode.gain.exponentialRampToValueAtTime(0.001, noteStartTime + dur * 0.9); oscillator.start(noteStartTime); oscillator.stop(noteStartTime + dur); } cumulativeTime += dur; }); }
 
         // --- High Score Logic ---
