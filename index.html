@@ -769,29 +769,27 @@
         function playMoveSound() {
             if (isMuted || !audioContext) return;
             const now = audioContext.currentTime;
-            const duration = 0.15; // 150ms
+            const duration = 0.06; // 60ms
 
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
 
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
-
-            // Use a sine wave for a softer, more subdued sound.
+            
             oscillator.type = 'square';
 
-            // Lower the frequency and reduce the random pitch variation.
-            const baseFreq = 530;
-            oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 20 - 10), now );
+            // Two octaves below the chomp sound for a bassier tone.
+            const baseFreq = 75; // 300Hz / 4
+            oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 10 - 5), now);
 
-            // Reduce the gain (volume) significantly.
+            // A similar envelope to chomp, but quieter.
             gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.09, now + 0.02); // Slightly increased peak volume
-            gainNode.gain.exponentialRampToValueAtTime(0.005, now + duration );
+            gainNode.gain.linearRampToValueAtTime(0.05, now + 0.02); // Quieter attack
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); // Fast decay
 
             oscillator.start(now);
-            oscillator.stop(now + duration );
-            
+            oscillator.stop(now + duration);
         }
 
         function playPowerupSound() {
