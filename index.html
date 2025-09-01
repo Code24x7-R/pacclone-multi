@@ -2,339 +2,627 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pacclone Multi</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pacclone Arcade - Multiplayer</title>
     <style>
         :root {
-            --dpad-size: clamp(120px, 25vmin, 160px);
-            --dash-btn-size: clamp(70px, 18vmin, 85px);
+            --player1-color: #FFFF00; /* Yellow */
+            --player2-color: #00FFFF; /* Cyan */
+            --player3-color: #00FF00; /* Green */
+            --player4-color: #FF00FF; /* Magenta */
         }
-        body {
+        html, body {
+            height: 100%;
+            margin: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        #lobby, #game-container, #end-screen {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            background-color: #000;
-            color: #fff;
-            font-family: monospace; /* Fallback to monospace for a retro feel */
-            overflow: hidden; /* Prevent scrollbars */
-            padding: 10px;
+            width: 100%;
+            max-width: 600px;
+            padding: 20px;
             box-sizing: border-box;
         }
-        #game-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+        #lobby h1 {
+            color: yellow;
+            text-shadow: 2px 2px #f0f;
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+        #player-slots {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
             width: 100%;
-            max-width: 600px; /* Set a max-width for larger screens */
+            margin-bottom: 20px;
+        }
+        .player-slot {
+            border: 2px solid #555;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1.2em;
+            transition: all 0.3s;
+        }
+        .player-slot.empty {
+            color: #777;
+        }
+        .player-slot.occupied {
+            border-color: var(--player-color);
+            color: var(--player-color);
+            text-shadow: 0 0 5px var(--player-color);
+        }
+        #join-controls input {
+            padding: 10px;
+            font-size: 1em;
+            background: #111;
+            border: 1px solid #fff;
+            color: #fff;
+            margin-right: 10px;
+            border-radius: 5px;
+        }
+        #join-controls button, #start-game-btn, #end-screen button {
+            padding: 10px 20px;
+            font-size: 1em;
+            font-family: 'Courier New', Courier, monospace;
+            color: #000;
+            background-color: #fff;
+            border: 2px solid yellow;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        #join-controls button:hover, #start-game-btn:hover, #end-screen button:hover {
+            background-color: yellow;
+            color: #000;
+        }
+        #start-game-btn {
+            margin-top: 20px;
+            width: 100%;
+        }
+        #status-message {
+            margin-top: 15px;
+            color: #aaa;
+            min-height: 20px;
+        }
+        #game-container {
+            display: none;
+        }
+        #hud {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .hud-player-info {
+            padding: 5px;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        .hud-player-info.spectating {
+            text-decoration: line-through;
+            opacity: 0.5;
         }
         canvas {
             background-color: #000;
             border: 2px solid #fff;
             display: block;
-            margin-bottom: 20px;
-            width: 100%; /* Make canvas responsive */
-            height: auto; /* Maintain aspect ratio */
-            aspect-ratio: 1 / 1; /* Enforce 1:1 aspect ratio */
-            image-rendering: pixelated; /* Keep pixels sharp when scaling */
-        }
-        /* Hide game elements by default until the game starts */
-        #game-info, #gameCanvas, #controls-info {
-            display: none;
-        }
-        #game-info {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
             width: 100%;
-            margin-bottom: 10px;
-            font-size: clamp(0.75rem, 2.5vw, 1.2rem);
-            flex-wrap: wrap;
-            gap: 10px;
+            max-width: 600px;
+            aspect-ratio: 1 / 1;
         }
-        #player-scores {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .player-hud {
-            border: 1px solid;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            min-width: 120px;
-            position: relative;
-        }
-        .player-hud.inactive {
-            opacity: 0.4;
-            border-style: dashed;
-        }
-        .player-hud .winner-text {
-            position: absolute;
-            top: -10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: black;
-            padding: 0 5px;
-            font-size: 0.9em;
-            font-weight: bold;
-            color: lime;
-        }
-        #control-status {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 24px;
-            height: 24px;
-            color: #aaa; /* Default color for the icon */
-        }
-        #control-status svg {
-            width: 100%;
-            height: 100%;
-            fill: currentColor; /* Use the color from the parent */
-        }
-        #message {
+        #spectator-message {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: clamp(1rem, 3vw, 2rem);
-            color: yellow;
-            text-align: center;
-            background-color: rgba(0, 0, 0, 0.85);
-            padding: 20px 40px;
-            border-radius: 10px;
-            border: 2px solid #fff;
-            display: none; /* Hidden by default */
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
-            width: 90%;
-            max-width: 500px;
-        }
-        #message h1 {
-            font-size: clamp(1.8rem, 8vw, 2.5rem);
-            margin: 0 0 15px 0;
-            color: yellow;
-            text-shadow: 3px 3px 0px #f00;
-            letter-spacing: 4px;
-        }
-        #high-scores table, #final-scores table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: clamp(0.7rem, 2.5vw, 0.9em);
-            margin-bottom: 20px;
-        }
-        #high-scores th, #high-scores td, #final-scores td {
-            padding: 5px;
-            text-align: center;
-        }
-        #high-scores th {
-            color: cyan;
-            border-bottom: 1px solid cyan;
-        }
-        #high-scores td:nth-child(1) { text-align: right; padding-right: 15px; color: #ccc; } /* Rank */
-        #high-scores td:nth-child(2) { text-align: right; padding-right: 15px; } /* Score */
-        #high-scores td:nth-child(3) { text-align: left; padding-left: 15px; } /* Initials */
-        #final-scores .player-name { font-weight: bold; }
-        .button {
-            background-color: #333;
-            color: #fff;
-            border: 2px solid #fff;
-            padding: 10px 20px;
-            font-family: inherit;
-            font-size: clamp(0.9rem, 3vw, 1.2rem);
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            border-radius: 5px;
-            transition: background-color 0.2s, color 0.2s;
-        }
-        .button:hover, .button:focus {
-            background-color: #fff;
-            color: #000;
-        }
-        .button:disabled {
-            background-color: #222;
-            color: #555;
-            border-color: #555;
-            cursor: not-allowed;
-        }
-        /* LOBBY STYLES */
-        #lobby {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
-            width: 100%;
-        }
-        .lobby-slots {
-            display: flex;
-            gap: 20px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        .slot {
-            border: 2px solid #555;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
-            min-width: 150px;
-            transition: border-color 0.3s, box-shadow 0.3s;
-        }
-        .slot.joined {
-            border-color: var(--player-color, #fff);
-            box-shadow: 0 0 10px var(--player-color, #fff);
-        }
-        .slot .player-name {
-            font-size: 1.2em;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: var(--player-color, #fff);
-        }
-        .slot .status {
-            font-style: italic;
-            color: #aaa;
-            height: 20px;
-            margin-bottom: 15px;
-        }
-        .slot .status.waiting {
-            color: #ff0;
-        }
-        #game-options {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px;
-        }
-        #game-options label {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        /* TOUCH CONTROLS (initially hidden) */
-        #touch-controls {
+            font-size: 3em;
+            color: rgba(255, 0, 0, 0.7);
+            text-shadow: 2px 2px #000;
             display: none;
-            position: fixed;
-            bottom: 20px;
-            left: 0;
-            right: 0;
-            justify-content: space-between;
-            align-items: flex-end;
-            padding: 0 20px;
-            pointer-events: none; /* Allow clicks through the container */
-            user-select: none; /* Prevent text selection */
-            -webkit-user-select: none;
-            z-index: 100;
+            pointer-events: none;
         }
-        #dpad-container {
-            position: relative;
-            width: var(--dpad-size);
-            height: var(--dpad-size);
-            pointer-events: auto; /* Enable clicks on dpad */
-        }
-        .dpad-btn {
+        #joystick-container {
             position: absolute;
-            width: 38%;
-            height: 38%;
-            background-color: rgba(128, 128, 128, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
+            bottom: 30px;
+            left: 30px;
+            width: 150px;
+            height: 150px;
+            display: none; /* Hidden by default, shown for touch devices */
         }
-        .dpad-btn.active {
-            background-color: rgba(255, 255, 255, 0.6);
-        }
-        #dpad-up { top: 0; left: 31%; border-radius: 5px 5px 0 0; }
-        #dpad-down { bottom: 0; left: 31%; border-radius: 0 0 5px 5px; }
-        #dpad-left { left: 0; top: 31%; border-radius: 5px 0 0 5px; }
-        #dpad-right { right: 0; top: 31%; border-radius: 0 5px 5px 0; }
-        #dash-btn-container {
-            pointer-events: auto; /* Enable clicks on dash button */
-        }
-        #dash-btn {
-            width: var(--dash-btn-size);
-            height: var(--dash-btn-size);
-            border-radius: 50%;
-            background-color: rgba(255, 82, 82, 0.5);
-            border: 2px solid rgba(255, 255, 255, 0.7);
-            color: white;
-            font-weight: bold;
-            font-size: 1.2rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        #dash-btn.active {
-            background-color: rgba(255, 82, 82, 0.8);
+        @media (hover: none) and (pointer: coarse) {
+            #joystick-container {
+                display: block;
+            }
         }
     </style>
 </head>
 <body>
+    <div id="lobby">
+        <h1>PACCLONE MULTI</h1>
+        <div id="player-slots">
+            <div id="slot-0" class="player-slot empty">[ Player 1 ]</div>
+            <div id="slot-1" class="player-slot empty">[ Player 2 ]</div>
+            <div id="slot-2" class="player-slot empty">[ Player 3 ]</div>
+            <div id="slot-3" class="player-slot empty">[ Player 4 ]</div>
+        </div>
+        <div id="join-controls">
+            <input type="text" id="player-name-input" placeholder="Enter Your Name" maxlength="12">
+            <button id="join-game-btn">Join Game</button>
+        </div>
+        <button id="start-game-btn" style="display: none;">Start Game</button>
+        <div id="status-message">Connecting to server...</div>
+    </div>
 
     <div id="game-container">
-        <div id="game-info">
-            <div id="player-scores"></div>
-            <div id="control-status" title="Gamepad status">
-                <!-- SVG Icon for Gamepad, keyboard, etc. -->
-            </div>
-        </div>
+        <div id="hud"></div>
         <canvas id="gameCanvas" width="600" height="600"></canvas>
+        <div id="spectator-message">SPECTATING</div>
+    </div>
+    
+    <div id="end-screen" style="display:none;">
+        <h2 id="winner-message"></h2>
+        <button id="return-to-lobby-btn">Return to Lobby</button>
     </div>
 
-    <div id="message">
-        <h1 id="message-title">Connecting...</h1>
-        <div id="message-body">Attempting to connect to the game server.</div>
-        <div id="final-scores"></div>
-        <div id="high-scores"></div>
-        <button id="spectate-btn" class="button" style="display: none;">Spectate</button>
-    </div>
+    <div id="joystick-container"></div>
 
-    <!-- LOBBY -->
-    <div id="lobby">
-        <h1>Pacclone Multi</h1>
-        <div class="lobby-slots">
-            <div class="slot" id="slot-1" data-slot-id="1" style="--player-color: yellow;">
-                <div class="player-name">Player 1</div>
-                <div class="status">Open</div>
-                <button class="button join-btn">Join</button>
-            </div>
-            <div class="slot" id="slot-2" data-slot-id="2" style="--player-color: #4ade80;">
-                <div class="player-name">Player 2</div>
-                <div class="status">Open</div>
-                <button class="button join-btn">Join</button>
-            </div>
-        </div>
-        <div id="lobby-message"></div>
-        <div id="game-options">
-            <label>
-                Game Speed: <input type="range" id="game-speed-slider" min="0.5" max="2" step="0.1" value="1.0">
-            </label>
-            <!-- Start button is now controlled by the server -->
-        </div>
-    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    <script>
+        const TILE_SIZE = 30;
+        const PLAYER_COLORS = ['#FFFF00', '#00FFFF', '#00FF00', '#FF00FF'];
 
+        // --- DOM Elements ---
+        const lobbyEl = document.getElementById('lobby');
+        const gameContainerEl = document.getElementById('game-container');
+        const endScreenEl = document.getElementById('end-screen');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusMessageEl = document.getElementById('status-message');
+        const playerNameInput = document.getElementById('player-name-input');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        const startGameBtn = document.getElementById('start-game-btn');
+        const returnToLobbyBtn = document.getElementById('return-to-lobby-btn');
+        const playerSlots = [
+            document.getElementById('slot-0'),
+            document.getElementById('slot-1'),
+            document.getElementById('slot-2'),
+            document.getElementById('slot-3'),
+        ];
+        const hudEl = document.getElementById('hud');
+        const spectatorMessageEl = document.getElementById('spectator-message');
 
-    <!-- TOUCH CONTROLS -->
-    <div id="touch-controls">
-        <div id="dpad-container">
-            <div id="dpad-up" class="dpad-btn">▲</div>
-            <div id="dpad-down" class="dpad-btn">▼</div>
-            <div id="dpad-left" class="dpad-btn">◀</div>
-            <div id="dpad-right" class="dpad-btn">▶</div>
-        </div>
-        <div id="dash-btn-container">
-            <div id="dash-btn">DASH</div>
-        </div>
-    </div>
+        // --- Client State ---
+        let ws;
+        let myPlayerId = null;
+        let latestGameState = null;
+        let animationFrameId;
 
-    <script type="module" src="index.tsx"></script>
+        // --- Audio ---
+        let audioContext;
+        const sounds = {}; // Will hold pre-generated sound functions
+
+        function initializeAudio() {
+            if (audioContext && audioContext.state !== 'closed') return;
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) {
+                console.error("Web Audio API is not supported.");
+            }
+        }
+        
+        function playSound(type, options = {}) {
+            if (!audioContext || audioContext.state === 'suspended') return;
+
+            let oscType = 'sine', freq = 440, duration = 0.1, vol = 0.2;
+            let freqSweep = false, sweepEndFreq = freq;
+
+            switch(type) {
+                case 'chomp':
+                    oscType = 'square';
+                    freq = 300 + Math.random() * 50;
+                    duration = 0.05;
+                    vol = 0.1;
+                    break;
+                case 'powerup':
+                     oscType = 'triangle';
+                    freq = 440;
+                    duration = 0.4;
+                    vol = 0.3;
+                    freqSweep = true;
+                    sweepEndFreq = 880;
+                    break;
+                case 'eatGhost':
+                    oscType = 'sawtooth';
+                    freq = 500;
+                    duration = 0.2;
+                    vol = 0.4;
+                    freqSweep = true;
+                    sweepEndFreq = 1200;
+                    break;
+                case 'death':
+                    oscType = 'sawtooth';
+                    freq = 400;
+                    duration = 0.6;
+                    vol = 0.5;
+                    freqSweep = true;
+                    sweepEndFreq = 50;
+                    break;
+                 case 'win':
+                    // Play a little victory jingle
+                    const notes = [523.25, 659.25, 783.99, 1046.50];
+                    notes.forEach((noteFreq, i) => {
+                        setTimeout(() => playSound('note', { freq: noteFreq, duration: 0.1 }), i * 110);
+                    });
+                    return;
+                case 'note':
+                    oscType = 'triangle';
+                    freq = options.freq || 440;
+                    duration = options.duration || 0.1;
+                    vol = 0.3;
+                    break;
+            }
+            
+            const now = audioContext.currentTime;
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.type = oscType;
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(vol, now + 0.01);
+            
+            oscillator.frequency.setValueAtTime(freq, now);
+            if(freqSweep) {
+                 oscillator.frequency.exponentialRampToValueAtTime(sweepEndFreq, now + duration);
+            }
+            
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+            oscillator.start(now);
+            oscillator.stop(now + duration);
+        }
+
+        // --- WebSocket Logic ---
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            ws = new WebSocket(`${protocol}//${host}`);
+
+            ws.onopen = () => {
+                statusMessageEl.textContent = "Connected. Join a game!";
+                console.log("Connected to server");
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                switch (message.type) {
+                    case 'assignId':
+                        myPlayerId = message.playerId;
+                        statusMessageEl.textContent = `Joined! You are Player ${message.playerIndex + 1}.`;
+                        joinGameBtn.disabled = true;
+                        playerNameInput.disabled = true;
+                        break;
+                    case 'lobbyUpdate':
+                        updateLobbyUI(message.lobby);
+                        break;
+                    case 'gameStart':
+                        latestGameState = message.gameState;
+                        startGame();
+                        break;
+                    case 'gameState':
+                        latestGameState = message.gameState;
+                        handleSoundEvents(message.events);
+                        break;
+                    case 'error':
+                        statusMessageEl.textContent = `Error: ${message.message}`;
+                        break;
+                    case 'gameOver':
+                        showEndScreen(message.winner);
+                        break;
+                }
+            };
+
+            ws.onclose = () => {
+                statusMessageEl.textContent = "Disconnected from server. Please refresh.";
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                showLobby();
+            };
+
+            ws.onerror = (err) => {
+                console.error("WebSocket error:", err);
+                statusMessageEl.textContent = "Connection error.";
+            };
+        }
+
+        function sendMessage(type, payload) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type, ...payload }));
+            }
+        }
+        
+        function handleSoundEvents(events = []) {
+            if (!events) return;
+            events.forEach(event => {
+                // Check if the event is for me, or if it's a global sound
+                if (event.playerId === myPlayerId || !event.playerId) {
+                    playSound(event.sound);
+                }
+            });
+        }
+
+        // --- UI Logic ---
+        function showLobby() {
+            lobbyEl.style.display = 'flex';
+            gameContainerEl.style.display = 'none';
+            endScreenEl.style.display = 'none';
+            joinGameBtn.disabled = false;
+            playerNameInput.disabled = false;
+        }
+
+        function startGame() {
+            lobbyEl.style.display = 'none';
+            gameContainerEl.style.display = 'flex';
+            endScreenEl.style.display = 'none';
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+        
+        function showEndScreen(winner) {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            gameContainerEl.style.display = 'none';
+            endScreenEl.style.display = 'flex';
+            if (winner) {
+                document.getElementById('winner-message').textContent = `${winner.name} is the winner!`;
+                playSound('win');
+            } else {
+                 document.getElementById('winner-message').textContent = `Game Over!`;
+            }
+        }
+
+        function updateLobbyUI(lobby) {
+            lobby.players.forEach((player, i) => {
+                const slot = playerSlots[i];
+                if (player) {
+                    slot.textContent = player.name + (player.id === myPlayerId ? " (You)" : "");
+                    slot.className = 'player-slot occupied';
+                    slot.style.setProperty('--player-color', PLAYER_COLORS[i]);
+                } else {
+                    slot.textContent = `[ Player ${i + 1} ]`;
+                    slot.className = 'player-slot empty';
+                }
+            });
+
+            // Show start button for the host (first player) when there are players
+            const amIHost = lobby.players[0] && lobby.players[0].id === myPlayerId;
+            startGameBtn.style.display = amIHost && lobby.players.some(p => p) ? 'block' : 'none';
+        }
+
+        function updateHUD(players) {
+            hudEl.innerHTML = '';
+            players.forEach(player => {
+                if(!player) return;
+                const playerInfo = document.createElement('div');
+                playerInfo.className = 'hud-player-info';
+                playerInfo.style.color = PLAYER_COLORS[player.index];
+                if (player.state === 'spectating') {
+                    playerInfo.classList.add('spectating');
+                }
+                playerInfo.textContent = `${player.name}: ${player.score} | Lives: ${player.lives}`;
+                hudEl.appendChild(playerInfo);
+            });
+        }
+
+        // --- Game Loop & Drawing ---
+        function gameLoop() {
+            if (latestGameState) {
+                draw();
+            }
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const state = latestGameState;
+            if (!state) return;
+
+            const me = state.players.find(p => p && p.id === myPlayerId);
+            if(me && me.state === 'spectating') {
+                spectatorMessageEl.style.display = 'block';
+            } else {
+                spectatorMessageEl.style.display = 'none';
+            }
+
+            drawMap(state.map);
+            drawPellets(state.map);
+            state.ghosts.forEach(ghost => drawGhost(ghost, state.ghostFrightenedTimer));
+            state.players.forEach(player => {
+                if (player && player.state === 'active') {
+                    drawPlayer(player);
+                }
+            });
+            updateHUD(state.players);
+        }
+
+        function drawMap(map) {
+            for (let r = 0; r < map.length; r++) {
+                for (let c = 0; c < map[r].length; c++) {
+                    if (map[r][c] === 1) { // Wall
+                        ctx.fillStyle = 'blue';
+                        ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    }
+                }
+            }
+        }
+
+        function drawPellets(map) {
+            for (let r = 0; r < map.length; r++) {
+                for (let c = 0; c < map[r].length; c++) {
+                    if (map[r][c] === 2) { // Pellet
+                        ctx.fillStyle = 'grey';
+                        ctx.beginPath();
+                        ctx.arc(c * TILE_SIZE + TILE_SIZE / 2, r * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 8, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (map[r][c] === 3) { // Power-up
+                        ctx.fillStyle = 'darkred';
+                        ctx.beginPath();
+                        ctx.arc(c * TILE_SIZE + TILE_SIZE / 2, r * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+        }
+
+        function drawPlayer(player) {
+            ctx.fillStyle = PLAYER_COLORS[player.index];
+            ctx.beginPath();
+
+            let directionAngle = 0;
+            if (player.dx > 0) directionAngle = 0;
+            else if (player.dx < 0) directionAngle = Math.PI;
+            else if (player.dy > 0) directionAngle = Math.PI / 2;
+            else if (player.dy < 0) directionAngle = -Math.PI / 2;
+
+            const startAngle = directionAngle + player.mouthAngle;
+            const endAngle = directionAngle + Math.PI * 2 - player.mouthAngle;
+
+            ctx.arc(player.x, player.y, player.radius, startAngle, endAngle);
+            ctx.lineTo(player.x, player.y);
+            ctx.fill();
+
+            // Draw player name above them
+            ctx.fillStyle = "white";
+            ctx.font = "10px Courier New";
+            ctx.textAlign = "center";
+            ctx.fillText(player.name, player.x, player.y - player.radius - 5);
+        }
+
+        function drawGhost(ghost, frightenedTimer) {
+            const ghostRadius = TILE_SIZE / 3;
+            if (ghost.eaten) {
+                // Draw only eyes if eaten
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2.5, 0, Math.PI * 2);
+                ctx.arc(ghost.x + ghostRadius / 2, ghost.y - ghostRadius / 2, ghostRadius / 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                return;
+            }
+            
+            ctx.fillStyle = ghost.frightened ? 'blue' : ghost.color;
+            if (ghost.frightened && frightenedTimer < 3000 && Math.floor(frightenedTimer / 250) % 2 === 0) {
+                 ctx.fillStyle = 'white';
+            }
+            
+            ctx.beginPath();
+            ctx.arc(ghost.x, ghost.y, ghostRadius, Math.PI, 0, false);
+            ctx.rect(ghost.x - ghostRadius, ghost.y, ghostRadius * 2, ghostRadius);
+            ctx.fill();
+            
+            // Eyes
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(ghost.x - ghostRadius / 2, ghost.y - ghostRadius / 4, ghostRadius / 2, 0, Math.PI * 2);
+            ctx.arc(ghost.x + ghostRadius / 2, ghost.y - ghostRadius / 4, ghostRadius / 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pupils
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            let pupilXOffset = ghost.dx * (ghostRadius / 4);
+            let pupilYOffset = ghost.dy * (ghostRadius / 4);
+            ctx.arc(ghost.x - ghostRadius / 2 + pupilXOffset, ghost.y - ghostRadius/4 + pupilYOffset, ghostRadius / 4, 0, Math.PI*2);
+            ctx.arc(ghost.x + ghostRadius / 2 + pupilXOffset, ghost.y - ghostRadius/4 + pupilYOffset, ghostRadius / 4, 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        // --- Input Handling ---
+        function setupInputListeners() {
+            document.addEventListener('keydown', (e) => {
+                let direction = null;
+                switch (e.key) {
+                    case 'ArrowUp': case 'w': direction = { dx: 0, dy: -1 }; break;
+                    case 'ArrowDown': case 's': direction = { dx: 0, dy: 1 }; break;
+                    case 'ArrowLeft': case 'a': direction = { dx: -1, dy: 0 }; break;
+                    case 'ArrowRight': case 'd': direction = { dx: 1, dy: 0 }; break;
+                }
+                if (direction) {
+                    e.preventDefault();
+                    sendMessage('input', { direction });
+                }
+            });
+            
+             // Touch controls
+            if ('ontouchstart' in window) {
+                const joystickManager = nipplejs.create({
+                    zone: document.getElementById('joystick-container'),
+                    mode: 'static',
+                    position: { left: '50%', top: '50%' },
+                    color: 'white',
+                    size: 120
+                });
+
+                let lastDirection = null;
+                joystickManager.on('move', (evt, data) => {
+                    if (data.direction) {
+                        let newDirection = data.direction.angle;
+                        if (newDirection !== lastDirection) {
+                            lastDirection = newDirection;
+                             sendMessage('input', { direction: getDirectionFromAngle(data.angle.degree) });
+                        }
+                    }
+                });
+                 joystickManager.on('end', () => {
+                    lastDirection = null;
+                });
+            }
+        }
+        
+        function getDirectionFromAngle(angle) {
+            if (angle >= 45 && angle < 135) return { dx: 0, dy: -1 }; // Up
+            if (angle >= 135 && angle < 225) return { dx: -1, dy: 0 }; // Left
+            if (angle >= 225 && angle < 315) return { dx: 0, dy: 1 }; // Down
+            return { dx: 1, dy: 0 }; // Right
+        }
+
+        // --- Window Load ---
+        window.onload = () => {
+            connect();
+            setupInputListeners();
+
+            joinGameBtn.onclick = () => {
+                initializeAudio(); // User gesture
+                const name = playerNameInput.value.trim();
+                if (name) {
+                    sendMessage('join', { name });
+                } else {
+                    statusMessageEl.textContent = "Please enter a name.";
+                }
+            };
+            
+            startGameBtn.onclick = () => {
+                sendMessage('startGame', {});
+            };
+            
+            returnToLobbyBtn.onclick = () => {
+                // This doesn't send a message; the client just returns to the lobby UI.
+                // The server will handle resetting the lobby state when all players disconnect or a new game starts.
+                latestGameState = null;
+                showLobby();
+            };
+        };
+    </script>
 </body>
 </html>
