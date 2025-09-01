@@ -298,7 +298,8 @@
         // --- WebSocket Logic ---
         function connect() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.host;
+            // Fallback to localhost if host is not available (e.g., when running from file://)
+            const host = window.location.host || 'localhost:8080';
             ws = new WebSocket(`${protocol}//${host}`);
 
             ws.onopen = () => {
