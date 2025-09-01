@@ -35,6 +35,7 @@ let mouthAngle = 0;
 let mouthAngleDirection = 1;
 let lastInputTimestamp = 0;
 const inputCooldown = 1000 / 15; // 15hz input rate
+let audioContext: AudioContext | null = null;
 
 const keys: { [key: string]: boolean } = {};
 const touchState = {
@@ -69,7 +70,9 @@ function connect() {
                 handleGameStarted(payload);
                 break;
             case 'gameStateUpdate':
+                const oldGameState = gameState;
                 gameState = payload;
+                handleAudioCues(oldGameState, gameState);
                 break;
             case 'gameInProgress':
                 handleGameInProgress();
@@ -101,6 +104,72 @@ function sendMessage(event: string, payload: any) {
         ws.send(JSON.stringify({ event, payload }));
     }
 }
+
+// --- Audio ---
+function initAudio() {
+    if (!audioContext) {
+        try {
+            audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        } catch (e) {
+            console.error("Web Audio API is not supported in this browser");
+        }
+    }
+}
+
+function playChompSound() {
+    if (!audioContext) return;
+    const now = audioContext.currentTime;
+    const duration = 0.05; // 50ms
+
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    // A square wave sounds more "chiptuney" and distinct than a sine wave.
+    oscillator.type = 'square';
+
+    // Add a slight, random pitch variation to make chomping less monotonous.
+    const baseFreq = 300;
+    oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 50 - 25), now);
+
+    // A fast attack and decay envelope makes the sound "plucky" or "sucky".
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(0.1, now + 0.02); // Quick attack
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration); // Fast decay
+
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+}
+
+function playMoveSound() {
+    if (!audioContext) return;
+    const now = audioContext.currentTime;
+    const duration = 0.15; // 150ms
+
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    // Use a square wave for a softer, more subdued sound.
+    oscillator.type = 'square';
+
+    // Lower the frequency and reduce the random pitch variation.
+    const baseFreq = 30;
+    oscillator.frequency.setValueAtTime(baseFreq + (Math.random() * 20 - 10), now );
+
+    // Reduce the gain (volume) significantly.
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(0.09, now + 0.02); // Slightly increased peak volume
+    gainNode.gain.exponentialRampToValueAtTime(0.005, now + duration );
+
+    oscillator.start(now);
+    oscillator.stop(now + duration );
+}
+
 
 // --- Message Handlers ---
 function handleConnected(payload: { clientId: string; lobbyState: any }) {
@@ -147,6 +216,34 @@ function handleReturnToLobby(payload: any) {
     lobbyDiv.style.display = 'flex';
     
     updateLobbyUI(payload);
+}
+
+function handleAudioCues(oldState: any, newState: any) {
+    if (!audioContext || !oldState || !newState) {
+        return;
+    }
+
+    // Chomp sound - if any pellet was eaten
+    if (newState.pelletsRemaining < oldState.pelletsRemaining) {
+        playChompSound();
+    }
+
+    // Move sound for the client's player
+    const myPlayer = newState.players.find((p: any) => p.clientId === clientId);
+    if (myPlayer && myPlayer.isActive) {
+        const oldPlayerState = oldState.players.find((p: any) => p.id === myPlayer.id);
+        if (oldPlayerState) {
+            // Check if player has moved to a new tile
+            const oldTileX = Math.floor(oldPlayerState.x / TILE_SIZE);
+            const oldTileY = Math.floor(oldPlayerState.y / TILE_SIZE);
+            const newTileX = Math.floor(myPlayer.x / TILE_SIZE);
+            const newTileY = Math.floor(myPlayer.y / TILE_SIZE);
+
+            if (oldTileX !== newTileX || oldTileY !== newTileY) {
+                playMoveSound();
+            }
+        }
+    }
 }
 
 
@@ -412,6 +509,7 @@ function setupEventListeners() {
 
     joinButtons.forEach(button => {
         button.addEventListener('click', () => {
+            initAudio(); // Create audio context on user interaction
             const slotId = parseInt((button.parentElement as HTMLElement).dataset.slotId!);
             sendMessage('joinLobby', { slotId });
         });
