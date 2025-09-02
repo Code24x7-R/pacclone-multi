@@ -1,4 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
-<body></body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pacclone Multi</title>
+    <style>
+        body { margin: 0; background-color: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { background-color: #000; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="520"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const TILE_SIZE = 40;
+
+        const ws = new WebSocket(`ws://${window.location.host}`);
+
+        ws.onopen = () => {
+            console.log('[CLIENT] Connected to server.');
+        };
+
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            if (message.type === 'welcome') {
+                console.log(`[SERVER] says: ${message.message}`);
+            } else if (message.type === 'gameState') {
+                render(message.gameState);
+            }
+        };
+
+        ws.onclose = () => {
+            console.log('[CLIENT] Disconnected from server.');
+        };
+
+        // Keyboard Input
+        document.addEventListener('keydown', (event) => {
+            let direction = null;
+            switch(event.key) {
+                case 'ArrowUp':
+                case 'w':
+                    direction = 'up';
+                    break;
+                case 'ArrowDown':
+                case 's':
+                    direction = 'down';
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                    direction = 'left';
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    direction = 'right';
+                    break;
+            }
+            if (direction) {
+                ws.send(JSON.stringify({ type: 'input', direction }));
+            }
+        });
+        
+        function render(gameState) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const { maze, players, ghosts, pellets } = gameState;
+
+            // Draw maze
+            for (let y = 0; y < maze.length; y++) {
+                for (let x = 0; x < maze[y].length; x++) {
+                    if (maze[y][x] === 1) { // Wall
+                        ctx.fillStyle = 'blue';
+                        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    }
+                }
+            }
+
+            // Draw pellets
+            ctx.fillStyle = 'white';
+            pellets.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x * TILE_SIZE + TILE_SIZE / 2, p.y * TILE_SIZE + TILE_SIZE / 2, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw players
+            players.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw ghosts
+            ghosts.forEach(g => {
+                ctx.fillStyle = g.color;
+                ctx.beginPath();
+                ctx.arc(g.x * TILE_SIZE, g.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+    </script>
+</body>
 </html>
