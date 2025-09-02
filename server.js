@@ -26,13 +26,19 @@ const maze = [
     [1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1],
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ];
-const players = [];
-const ghosts = [{ id: 1, x: 9.5, y: 5.5, color: 'red' }];
-const pellets = [];
-const powerPellets = [];
+let players = [];
+let ghosts = [];
+let pellets = [];
+let powerPellets = [];
 const PLAYER_SPEED = 0.05;
+const GHOST_SPEED = 0.04;
+const directions = ['up', 'down', 'left', 'right'];
 
-function initializePellets() {
+function initializeGameState() {
+    players = [];
+    ghosts = [{ id: 1, x: 9.5, y: 5.5, color: 'red', direction: 'left' }];
+    pellets = [];
+    powerPellets = [];
     for (let y = 0; y < maze.length; y++) {
         for (let x = 0; x < maze[y].length; x++) {
             if (maze[y][x] === 0) {
@@ -43,12 +49,15 @@ function initializePellets() {
         }
     }
 }
-initializePellets();
+initializeGameState();
 
 function isWall(x, y) {
     const tileX = Math.floor(x);
     const tileY = Math.floor(y);
-    return maze[tileY] && (maze[tileY][tileX] === 1);
+    if (tileY < 0 || tileY >= maze.length || tileX < 0 || tileX >= maze[0].length) {
+        return true;
+    }
+    return maze[tileY][tileX] === 1;
 }
 
 // Game Loop
@@ -56,7 +65,7 @@ const GAME_LOOP_INTERVAL = 1000 / 60; // 60 FPS
 let gameInterval = null;
 
 function gameLoop() {
-    // Update player positions and check for pellet collision
+    // Player movement and pellet collision
     players.forEach(player => {
         let nextX = player.x;
         let nextY = player.y;
@@ -68,16 +77,14 @@ function gameLoop() {
             case 'right': nextX += PLAYER_SPEED; break;
         }
         
-        if (!isWall(nextX, nextY)) {
-            player.x = nextX;
-            player.y = nextY;
-        }
+        if (!isWall(nextX, player.y)) player.x = nextX;
+        if (!isWall(player.x, nextY)) player.y = nextY;
 
         // Pellet collision
         for (let i = pellets.length - 1; i >= 0; i--) {
             const p = pellets[i];
             const dist = Math.hypot(player.x - (p.x + 0.5), player.y - (p.y + 0.5));
-            if (dist < 0.5) {
+            if (dist < 0.4) {
                 pellets.splice(i, 1);
                 player.score += 10;
             }
@@ -93,10 +100,56 @@ function gameLoop() {
                 player.poweredUp = true;
                 setTimeout(() => {
                     player.poweredUp = false;
-                }, 10000); // 10 seconds
+                }, 10000);
             }
         }
     });
+
+    // Ghost movement and player collision
+    ghosts.forEach(ghost => {
+        let nextX = ghost.x;
+        let nextY = ghost.y;
+
+        switch (ghost.direction) {
+            case 'up': nextY -= GHOST_SPEED; break;
+            case 'down': nextY += GHOST_SPEED; break;
+            case 'left': nextX -= GHOST_SPEED; break;
+            case 'right': nextX += GHOST_SPEED; break;
+        }
+
+        if (isWall(nextX, nextY) || Math.random() < 0.01) {
+            ghost.direction = directions[Math.floor(Math.random() * directions.length)];
+        } else {
+            ghost.x = nextX;
+            ghost.y = nextY;
+        }
+
+        // Player collision
+        players.forEach((player, playerIndex) => {
+            const dist = Math.hypot(player.x - ghost.x, player.y - ghost.y);
+            if (dist < 0.5) {
+                if (player.poweredUp) {
+                    ghost.x = 9.5; // respawn ghost
+                    ghost.y = 5.5;
+                    player.score += 200;
+                } else {
+                    player.lives--;
+                    if (player.lives <= 0) {
+                        players.splice(playerIndex, 1);
+                    } else {
+                        player.x = 1.5; // respawn player
+                        player.y = 1.5;
+                    }
+                }
+            }
+        });
+    });
+
+    // Win/Loss Conditions
+    if (pellets.length === 0 && powerPellets.length === 0) {
+        // Win condition - Reset game
+        initializeGameState();
+    }
 
     // Broadcast state to all clients
     const gameState = { maze, players, ghosts, pellets, powerPellets };
@@ -114,10 +167,12 @@ wss.on('connection', (ws) => {
     const playerId = Date.now();
     const player = { id: playerId, x: 1.5, y: 1.5, color: 'yellow', lives: 3, score: 0, direction: null, poweredUp: false };
     players.push(player);
+    ws.playerId = playerId;
 
     ws.on('message', (message) => {
         const data = JSON.parse(message);
-        if (data.type === 'input') {
+        const player = players.find(p => p.id === ws.playerId);
+        if (data.type === 'input' && player) {
             player.direction = data.direction;
         }
     });
@@ -129,7 +184,7 @@ wss.on('connection', (ws) => {
 
     ws.on('close', () => {
         console.log('[SERVER] Client disconnected.');
-        const index = players.findIndex(p => p.id === playerId);
+        const index = players.findIndex(p => p.id === ws.playerId);
         if (index !== -1) {
             players.splice(index, 1);
         }
@@ -138,6 +193,7 @@ wss.on('connection', (ws) => {
             console.log('[SERVER] No clients left. Stopping game loop.');
             clearInterval(gameInterval);
             gameInterval = null;
+            initializeGameState(); // Reset game when all players leave
         }
     });
 });

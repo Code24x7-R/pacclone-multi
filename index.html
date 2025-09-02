@@ -15,6 +15,7 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const TILE_SIZE = 40;
+        let myPlayerId = null;
 
         const ws = new WebSocket(`ws://${window.location.host}`);
 
@@ -26,6 +27,7 @@
             const message = JSON.parse(event.data);
             if (message.type === 'welcome') {
                 console.log(`[SERVER] says: ${message.message}`);
+                myPlayerId = message.playerId;
             } else if (message.type === 'gameState') {
                 render(message.gameState);
             }
@@ -64,7 +66,8 @@
         function render(gameState) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            const { maze, players, ghosts, pellets } = gameState;
+            const { maze, players, ghosts, pellets, powerPellets } = gameState;
+            const myPlayer = players.find(p => p.id === myPlayerId);
 
             // Draw maze
             for (let y = 0; y < maze.length; y++) {
@@ -84,9 +87,17 @@
                 ctx.fill();
             });
 
+            // Draw power pellets
+            ctx.fillStyle = 'orange';
+            powerPellets.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x * TILE_SIZE + TILE_SIZE / 2, p.y * TILE_SIZE + TILE_SIZE / 2, 8, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
             // Draw players
             players.forEach(p => {
-                ctx.fillStyle = p.color;
+                ctx.fillStyle = p.poweredUp ? 'orange' : p.color;
                 ctx.beginPath();
                 ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
                 ctx.fill();
@@ -94,11 +105,26 @@
 
             // Draw ghosts
             ghosts.forEach(g => {
-                ctx.fillStyle = g.color;
+                ctx.fillStyle = g.poweredUp && myPlayer && myPlayer.poweredUp ? 'lightblue' : g.color;
                 ctx.beginPath();
                 ctx.arc(g.x * TILE_SIZE, g.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
                 ctx.fill();
             });
+
+            // Draw scores and lives
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            players.forEach((p, index) => {
+                ctx.fillText(`Player ${index + 1}: ${p.score} Lives: ${p.lives}`, 10, 25 * (index + 1));
+            })
+
+            // Game Over
+            if (myPlayerId && !myPlayer) {
+                ctx.fillStyle = 'red';
+                ctx.font = '80px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2);
+            }
         }
 
     </script>
