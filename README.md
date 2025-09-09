@@ -6,7 +6,7 @@ A classic arcade-style game reminiscent of Pac-Man, built with HTML, CSS, and Ja
 
 - **Real time Multiplayer**: Player versus player client-server powered by a Node.js WebSocket server.
 - **Authoritative Server Model**: The server runs the authoritative game engine, ensuring a fair and synchronized experience for all players.
-- **Game Lobby**: A simple 4 player lobby system to gather players before starting a match.  Support for 1, 2, 3, and 4 players
+- **Game Lobby**: A simple 4 player lobby system to gather players before starting a match.  Support for a single player or 2, 3, and 4 players
 - **Player vs. Player Combat**: Eat a power pellet to turn the tables and gobble up not only ghosts but other players too!
 - **Morphing Effects**: Player morphs through other players when power pellet is not active.
 - **Spectator Mode**: Once you're out of the game, you can stick around and watch the rest of the match.
@@ -16,7 +16,7 @@ A classic arcade-style game reminiscent of Pac-Man, built with HTML, CSS, and Ja
 
 ## Client/Server Architecture
 
-This project uses a true client-server model:
+This project uses a client-server model:
 
 - **`server.js`**: A Node.js application that acts as the authoritative game server engine. It manages the game state, processes all game logic (movement, collisions, AI), synchronizes clients, and serves the game client.
 - **`index.html`**: The frontend client that connects to the server. It is responsible for sending user input to the server and rendering the game state it receives.
@@ -28,13 +28,12 @@ This setup requires you to run the server application before you can play the ga
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (which includes npm) must be installed on your computer or hosted with a node server and domain name.
-- modern mobile, tv or desktop web browser.
+- modern mobile, tv or desktop web browser for clients to connect to the server
 
 ### Running the Game
 
 1. **Download Files**: Save `index.html`, `server.js`, and `package.json` into a new folder on your computer.
 1a. **Optional**: git pull <https://github.com/Code24x7-R/pacclone-multi>
-
 
 2. **Open a Terminal**: Navigate your terminal or command prompt to the folder where you saved the files.
 
@@ -74,5 +73,5 @@ The game automatically detects your input method. Each browser window/tab can be
 
 1. **Lobby**: Join as Player 1, 2, 3, or 4. The game can be started by the host (Player 1) once at least one player has joined.
 2. **Gameplay**: Control your Pacclone, eat pellets, eat power up pellets, chase and eat your opponents, and compete to be the last player with lives remaining or clear all pellets.
-3. **Spectator Mode**: If you lose all your lives, you enter spectator mode.
-4. **Game Over**: The game ends when only one player remains, who is declared the winner.
+3. **Spectator Mode**: If you lose all your lives, you enter spectator mode in multiplayer games.
+4. **Game Over**: The game ends when only one player remains, who is declared the winner, or all pellets are eaten by the players.
