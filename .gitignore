@@ -1,1 +1,20 @@
-Nothing should be ignored based on the provided file changes. The added files (`plan.md`, `todo.md`) are markdown documentation files that should typically be version controlled.
+```
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+```

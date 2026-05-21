@@ -3,42 +3,966 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pacclone Multi</title>
+    <title>Pacclone Multi - Lobby</title>
     <style>
-        body { margin: 0; background-color: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        canvas { background-color: #000; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            margin: 0;
+            background-color: #000;
+            font-family: 'Arial', sans-serif;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        #app {
+            width: 100%;
+            max-width: 900px;
+            padding: 20px;
+        }
+        
+        /* Lobby Styles */
+        .lobby-container {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #ffff00;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #aaa;
+            margin-bottom: 30px;
+        }
+        
+        .player-name-input {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.2em;
+            border: 2px solid #00ffff;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            margin-bottom: 20px;
+        }
+        
+        .player-name-input:focus {
+            outline: none;
+            border-color: #ffff00;
+            box-shadow: 0 0 10px rgba(255, 255, 0, 0.5);
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            font-size: 1em;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #00ffff 0%, #0080ff 100%);
+            color: #000;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 255, 255, 0.4);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+            color: #000;
+        }
+        
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 255, 0, 0.4);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 68, 68, 0.4);
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, #666 0%, #444 100%);
+            color: white;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .room-list {
+            margin-top: 20px;
+        }
+        
+        .room-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.3s;
+        }
+        
+        .room-item:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        .room-info {
+            flex: 1;
+        }
+        
+        .room-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #00ffff;
+        }
+        
+        .room-details {
+            color: #aaa;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        
+        .player-count {
+            background: rgba(0, 255, 255, 0.2);
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin-right: 10px;
+        }
+        
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 15px;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+        }
+        
+        .modal h2 {
+            color: #00ffff;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #00ffff;
+            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            font-size: 1em;
+        }
+        
+        .form-group input[type="range"] {
+            padding: 0;
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        
+        /* Room View Styles */
+        .room-view {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 15px;
+            padding: 30px;
+        }
+        
+        .room-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .player-list {
+            margin: 20px 0;
+        }
+        
+        .player-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .player-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+        
+        .ready-badge {
+            background: #00ff00;
+            color: #000;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        
+        .not-ready-badge {
+            background: #666;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+        }
+        
+        .host-badge {
+            background: #ffff00;
+            color: #000;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        
+        .room-settings {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        
+        .room-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        /* Game Canvas */
+        #gameCanvas {
+            background-color: #000;
+            border: 3px solid #00ffff;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        /* Countdown Overlay */
+        .countdown-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        
+        .countdown-number {
+            font-size: 150px;
+            color: #ffff00;
+            font-weight: bold;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        /* Error Message */
+        .error-message {
+            background: rgba(255, 68, 68, 0.2);
+            border: 2px solid #ff4444;
+            color: #ff4444;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        /* Hidden utility */
+        .hidden {
+            display: none !important;
+        }
+        
+        /* Responsive */
+        @media (max-width: 600px) {
+            .lobby-container, .room-view {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 1.8em;
+            }
+            
+            .room-actions {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="520"></canvas>
+    <div id="app">
+        <!-- Lobby List View -->
+        <div id="lobbyView" class="lobby-container">
+            <h1>🎮 PACCLONE MULTI</h1>
+            <p class="subtitle">Multiplayer Arcade Action</p>
+            
+            <div id="errorContainer"></div>
+            
+            <input 
+                type="text" 
+                id="playerNameInput" 
+                class="player-name-input" 
+                placeholder="Enter your name..."
+                maxlength="20"
+            />
+            
+            <button id="joinLobbyBtn" class="btn btn-primary" style="width: 100%;">
+                Join Lobby
+            </button>
+            
+            <div id="roomListContainer" class="room-list hidden">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2 style="color: #00ffff;">Available Rooms</h2>
+                    <button id="createRoomBtn" class="btn btn-success">+ Create Room</button>
+                </div>
+                <div id="roomList"></div>
+            </div>
+        </div>
+        
+        <!-- Room View -->
+        <div id="roomView" class="room-view hidden">
+            <div class="room-header">
+                <div>
+                    <h2 id="roomNameDisplay" style="color: #00ffff;">Room Name</h2>
+                    <span id="roomPlayerCount" class="player-count">0/4</span>
+                </div>
+                <button id="leaveRoomBtn" class="btn btn-secondary">Leave Room</button>
+            </div>
+            
+            <div class="room-settings">
+                <h3 style="color: #00ffff; margin-bottom: 10px;">Game Settings</h3>
+                <div id="settingsDisplay">
+                    <p>Ghosts: <span id="settingGhosts">1</span></p>
+                    <p>Lives: <span id="settingLives">3</span></p>
+                    <p>Power-up Duration: <span id="settingPowerUp">10</span>s</p>
+                </div>
+                <div id="settingsControls" class="hidden">
+                    <div class="form-group">
+                        <label>Ghosts: <span id="ghostCountValue">1</span></label>
+                        <input type="range" id="ghostCountSlider" min="1" max="4" value="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Lives: <span id="livesValue">3</span></label>
+                        <input type="range" id="livesSlider" min="1" max="5" value="3">
+                    </div>
+                    <div class="form-group">
+                        <label>Power-up Duration: <span id="powerUpValue">10</span>s</label>
+                        <input type="range" id="powerUpSlider" min="5" max="30" value="10">
+                    </div>
+                </div>
+            </div>
+            
+            <h3 style="color: #00ffff; margin-bottom: 10px;">Players</h3>
+            <div id="playerList" class="player-list"></div>
+            
+            <div class="room-actions">
+                <button id="readyBtn" class="btn btn-success" style="flex: 1;">Ready</button>
+                <button id="startGameBtn" class="btn btn-primary" style="flex: 1;" disabled>Start Game</button>
+            </div>
+        </div>
+        
+        <!-- Game Canvas -->
+        <canvas id="gameCanvas" width="800" height="520"></canvas>
+    </div>
+    
+    <!-- Create Room Modal -->
+    <div id="createRoomModal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2>Create New Room</h2>
+            
+            <div class="form-group">
+                <label>Room Name</label>
+                <input type="text" id="newRoomName" placeholder="My Awesome Room" maxlength="30">
+            </div>
+            
+            <div class="form-group">
+                <label>Max Players</label>
+                <select id="newRoomMaxPlayers">
+                    <option value="2">2 Players</option>
+                    <option value="3">3 Players</option>
+                    <option value="4" selected>4 Players</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Ghost Count: <span id="modalGhostValue">1</span></label>
+                <input type="range" id="modalGhostSlider" min="1" max="4" value="1">
+            </div>
+            
+            <div class="form-group">
+                <label>Lives: <span id="modalLivesValue">3</span></label>
+                <input type="range" id="modalLivesSlider" min="1" max="5" value="3">
+            </div>
+            
+            <div class="form-group">
+                <label>Power-up Duration: <span id="modalPowerUpValue">10</span>s</label>
+                <input type="range" id="modalPowerUpSlider" min="5" max="30" value="10">
+            </div>
+            
+            <div class="modal-actions">
+                <button id="cancelCreateRoomBtn" class="btn btn-secondary">Cancel</button>
+                <button id="confirmCreateRoomBtn" class="btn btn-success">Create Room</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Countdown Overlay -->
+    <div id="countdownOverlay" class="countdown-overlay hidden">
+        <div class="countdown-number" id="countdownNumber">3</div>
+    </div>
+    
     <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const TILE_SIZE = 40;
-        let myPlayerId = null;
-
-        const ws = new WebSocket(`ws://${window.location.host}`);
-
-        ws.onopen = () => {
-            console.log('[CLIENT] Connected to server.');
+        // State
+        const state = {
+            ws: null,
+            playerId: null,
+            playerName: '',
+            inLobby: false,
+            currentRoom: null,
+            isHost: false,
+            inGame: false,
+            myPlayerId: null
         };
-
-        ws.onmessage = (event) => {
-            const message = JSON.parse(event.data);
-            if (message.type === 'welcome') {
-                console.log(`[SERVER] says: ${message.message}`);
-                myPlayerId = message.playerId;
-            } else if (message.type === 'gameState') {
-                render(message.gameState);
+        
+        // DOM Elements
+        const lobbyView = document.getElementById('lobbyView');
+        const roomView = document.getElementById('roomView');
+        const gameCanvas = document.getElementById('gameCanvas');
+        const roomListContainer = document.getElementById('roomListContainer');
+        const roomList = document.getElementById('roomList');
+        const playerNameInput = document.getElementById('playerNameInput');
+        const joinLobbyBtn = document.getElementById('joinLobbyBtn');
+        const createRoomBtn = document.getElementById('createRoomBtn');
+        const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+        const readyBtn = document.getElementById('readyBtn');
+        const startGameBtn = document.getElementById('startGameBtn');
+        const errorContainer = document.getElementById('errorContainer');
+        const createRoomModal = document.getElementById('createRoomModal');
+        const countdownOverlay = document.getElementById('countdownOverlay');
+        const countdownNumber = document.getElementById('countdownNumber');
+        
+        // WebSocket Connection
+        function connect() {
+            state.ws = new WebSocket(`ws://${window.location.host}`);
+            
+            state.ws.onopen = () => {
+                console.log('[CLIENT] Connected to server.');
+                showError(null);
+            };
+            
+            state.ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                handleMessage(message);
+            };
+            
+            state.ws.onclose = () => {
+                console.log('[CLIENT] Disconnected from server.');
+                showError('Disconnected from server. Reconnecting...');
+                setTimeout(connect, 2000);
+            };
+            
+            state.ws.onerror = (error) => {
+                console.error('[CLIENT] WebSocket error:', error);
+                showError('Connection error. Please refresh.');
+            };
+        }
+        
+        function sendMessage(data) {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify(data));
             }
-        };
-
-        ws.onclose = () => {
-            console.log('[CLIENT] Disconnected from server.');
-        };
-
-        // Keyboard Input
+        }
+        
+        function handleMessage(message) {
+            switch (message.type) {
+                case 'welcome':
+                    console.log('[SERVER] says:', message.message);
+                    break;
+                    
+                case 'lobbyState':
+                    renderRoomList(message.rooms);
+                    break;
+                    
+                case 'roomCreated':
+                    console.log('Room created:', message.roomId);
+                    break;
+                    
+                case 'roomState':
+                    renderRoomView(message.room);
+                    break;
+                    
+                case 'roomJoined':
+                    console.log('Joined room:', message.roomId);
+                    break;
+                    
+                case 'roomLeft':
+                    console.log('Left room');
+                    break;
+                    
+                case 'gameStarting':
+                    showCountdown(message.countdown);
+                    break;
+                    
+                case 'gameState':
+                    renderGame(message.gameState);
+                    break;
+                    
+                case 'gameResults':
+                    showGameResults(message.players);
+                    break;
+                    
+                case 'error':
+                    showError(message.message);
+                    console.error('[SERVER ERROR]:', message.message, message.code);
+                    break;
+                    
+                case 'kicked':
+                    showError('You were kicked from the room');
+                    setTimeout(() => {
+                        showLobbyView();
+                    }, 2000);
+                    break;
+            }
+        }
+        
+        // UI Rendering
+        function renderRoomList(rooms) {
+            if (!state.inLobby || state.currentRoom) {
+                return;
+            }
+            
+            roomList.innerHTML = '';
+            
+            if (rooms.length === 0) {
+                roomList.innerHTML = '<p style="color: #aaa; text-align: center; padding: 20px;">No rooms available. Create one!</p>';
+                return;
+            }
+            
+            rooms.forEach(room => {
+                const roomEl = document.createElement('div');
+                roomEl.className = 'room-item';
+                roomEl.innerHTML = `
+                    <div class="room-info">
+                        <div class="room-name">${escapeHtml(room.name)}</div>
+                        <div class="room-details">
+                            Host: ${escapeHtml(room.players.find(p => p.id === room.hostId)?.name || 'Unknown')} | 
+                            Ghosts: ${room.settings.ghostCount} | 
+                            Lives: ${room.settings.lives}
+                        </div>
+                    </div>
+                    <span class="player-count">${room.players.length}/${room.maxPlayers}</span>
+                    <button class="btn btn-primary join-room-btn" data-room-id="${room.id}" ${room.players.length >= room.maxPlayers ? 'disabled' : ''}>
+                        Join
+                    </button>
+                `;
+                roomList.appendChild(roomEl);
+            });
+            
+            // Add event listeners
+            document.querySelectorAll('.join-room-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const roomId = btn.dataset.roomId;
+                    sendMessage({ type: 'joinRoom', roomId });
+                });
+            });
+        }
+        
+        function renderRoomView(room) {
+            if (!state.currentRoom || room.id !== state.currentRoom.id) {
+                return;
+            }
+            
+            state.currentRoom = room;
+            state.isHost = room.hostId === state.playerId;
+            
+            document.getElementById('roomNameDisplay').textContent = room.name;
+            document.getElementById('roomPlayerCount').textContent = `${room.players.length}/${room.maxPlayers}`;
+            
+            // Settings
+            document.getElementById('settingGhosts').textContent = room.settings.ghostCount;
+            document.getElementById('settingLives').textContent = room.settings.lives;
+            document.getElementById('settingPowerUp').textContent = room.settings.powerUpDuration / 1000;
+            
+            // Show settings controls if host
+            const settingsControls = document.getElementById('settingsControls');
+            if (state.isHost) {
+                settingsControls.classList.remove('hidden');
+                document.getElementById('ghostCountSlider').value = room.settings.ghostCount;
+                document.getElementById('livesSlider').value = room.settings.lives;
+                document.getElementById('powerUpSlider').value = room.settings.powerUpDuration / 1000;
+            } else {
+                settingsControls.classList.add('hidden');
+            }
+            
+            // Player list
+            const playerList = document.getElementById('playerList');
+            playerList.innerHTML = '';
+            
+            room.players.forEach(player => {
+                const isMe = player.id === state.playerId;
+                const isHostPlayer = player.id === room.hostId;
+                
+                const playerEl = document.createElement('div');
+                playerEl.className = 'player-item';
+                playerEl.innerHTML = `
+                    <div class="player-info">
+                        <div class="player-color" style="background-color: ${player.color};"></div>
+                        <span>${escapeHtml(player.name)}${isMe ? ' (You)' : ''}${isHostPlayer ? '<span class="host-badge">HOST</span>' : ''}</span>
+                    </div>
+                    <div>
+                        <span class="${player.ready ? 'ready-badge' : 'not-ready-badge'}">
+                            ${player.ready ? 'READY' : 'NOT READY'}
+                        </span>
+                        ${state.isHost && !isHostPlayer && !isMe ? `<button class="btn btn-danger kick-btn" style="padding: 3px 8px; font-size: 0.8em; margin-left: 10px;" data-player-id="${player.id}">Kick</button>` : ''}
+                    </div>
+                `;
+                playerList.appendChild(playerEl);
+            });
+            
+            // Kick button handlers
+            document.querySelectorAll('.kick-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const playerId = btn.dataset.playerId;
+                    if (confirm('Kick this player?')) {
+                        sendMessage({ type: 'kickPlayer', playerId });
+                    }
+                });
+            });
+            
+            // Ready button
+            const myPlayer = room.players.find(p => p.id === state.playerId);
+            if (myPlayer) {
+                readyBtn.textContent = myPlayer.ready ? 'Not Ready' : 'Ready';
+                readyBtn.classList.toggle('btn-success', !myPlayer.ready);
+                readyBtn.classList.toggle('btn-secondary', myPlayer.ready);
+            }
+            
+            // Start game button
+            const allReady = room.players.every(p => p.ready);
+            startGameBtn.disabled = !allReady || !state.isHost;
+            if (!state.isHost) {
+                startGameBtn.textContent = 'Waiting for host...';
+            } else {
+                startGameBtn.textContent = 'Start Game';
+            }
+        }
+        
+        function renderGame(gameState) {
+            if (!state.inGame) return;
+            
+            const ctx = gameCanvas.getContext('2d');
+            const TILE_SIZE = 40;
+            
+            ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+            
+            const { maze, players, ghosts, pellets, powerPellets } = gameState;
+            const myPlayer = players.find(p => p.id === state.myPlayerId);
+            
+            // Draw maze
+            for (let y = 0; y < maze.length; y++) {
+                for (let x = 0; x < maze[y].length; x++) {
+                    if (maze[y][x] === 1) {
+                        ctx.fillStyle = 'blue';
+                        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    }
+                }
+            }
+            
+            // Draw pellets
+            ctx.fillStyle = 'white';
+            pellets.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x * TILE_SIZE + TILE_SIZE / 2, p.y * TILE_SIZE + TILE_SIZE / 2, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw power pellets
+            ctx.fillStyle = 'orange';
+            powerPellets.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x * TILE_SIZE + TILE_SIZE / 2, p.y * TILE_SIZE + TILE_SIZE / 2, 8, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw players
+            players.forEach(p => {
+                ctx.fillStyle = p.poweredUp ? 'orange' : p.color;
+                ctx.beginPath();
+                ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw ghosts
+            ghosts.forEach(g => {
+                const isPowered = myPlayer && myPlayer.poweredUp;
+                ctx.fillStyle = isPowered ? 'lightblue' : g.color;
+                ctx.beginPath();
+                ctx.arc(g.x * TILE_SIZE, g.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw scores
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            players.forEach((p, index) => {
+                ctx.fillText(`${p.name}: ${p.score} Lives: ${p.lives}`, 10, 25 * (index + 1));
+            });
+        }
+        
+        function showCountdown(count) {
+            countdownOverlay.classList.remove('hidden');
+            countdownNumber.textContent = count;
+            
+            if (count > 0) {
+                setTimeout(() => {
+                    showCountdown(count - 1);
+                }, 1000);
+            } else {
+                countdownOverlay.classList.add('hidden');
+            }
+        }
+        
+        function showGameResults(players) {
+            // Show results briefly then return to lobby
+            const sorted = players.sort((a, b) => b.score - a.score);
+            let resultsHtml = '<h2 style="color: #ffff00;">Game Over!</h2>';
+            sorted.forEach((p, i) => {
+                resultsHtml += `<p>${i + 1}. ${escapeHtml(p.name)}: ${p.score} points</p>`;
+            });
+            
+            // Could show in a modal, for now just log
+            console.log('Game Results:', resultsHtml);
+            
+            // Return to lobby after delay
+            setTimeout(() => {
+                showLobbyView();
+            }, 3000);
+        }
+        
+        // View Management
+        function showLobbyView() {
+            lobbyView.classList.remove('hidden');
+            roomView.classList.add('hidden');
+            gameCanvas.style.display = 'none';
+            state.currentRoom = null;
+            state.inGame = false;
+        }
+        
+        function showRoomView() {
+            lobbyView.classList.add('hidden');
+            roomView.classList.remove('hidden');
+            gameCanvas.style.display = 'none';
+        }
+        
+        function showGameView() {
+            lobbyView.classList.add('hidden');
+            roomView.classList.add('hidden');
+            gameCanvas.style.display = 'block';
+            state.inGame = true;
+        }
+        
+        function showError(message) {
+            if (message) {
+                errorContainer.innerHTML = `<div class="error-message">${escapeHtml(message)}</div>`;
+            } else {
+                errorContainer.innerHTML = '';
+            }
+        }
+        
+        // Utility
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Event Handlers
+        joinLobbyBtn.addEventListener('click', () => {
+            const name = playerNameInput.value.trim() || 'Anonymous';
+            state.playerName = name;
+            sendMessage({ type: 'joinLobby', playerName: name });
+            state.inLobby = true;
+            roomListContainer.classList.remove('hidden');
+            joinLobbyBtn.classList.add('hidden');
+            playerNameInput.classList.add('hidden');
+        });
+        
+        createRoomBtn.addEventListener('click', () => {
+            createRoomModal.classList.remove('hidden');
+        });
+        
+        document.getElementById('cancelCreateRoomBtn').addEventListener('click', () => {
+            createRoomModal.classList.add('hidden');
+        });
+        
+        document.getElementById('confirmCreateRoomBtn').addEventListener('click', () => {
+            const roomName = document.getElementById('newRoomName').value.trim() || `${state.playerName}'s Room`;
+            const maxPlayers = parseInt(document.getElementById('newRoomMaxPlayers').value);
+            const ghostCount = parseInt(document.getElementById('modalGhostSlider').value);
+            const lives = parseInt(document.getElementById('modalLivesSlider').value);
+            const powerUpDuration = parseInt(document.getElementById('modalPowerUpSlider').value) * 1000;
+            
+            sendMessage({
+                type: 'createRoom',
+                roomName,
+                maxPlayers,
+                settings: {
+                    ghostCount,
+                    lives,
+                    powerUpDuration
+                }
+            });
+            
+            createRoomModal.classList.add('hidden');
+            // Clear form
+            document.getElementById('newRoomName').value = '';
+        });
+        
+        leaveRoomBtn.addEventListener('click', () => {
+            if (state.currentRoom) {
+                sendMessage({ type: 'leaveRoom', roomId: state.currentRoom.id });
+                showLobbyView();
+            }
+        });
+        
+        readyBtn.addEventListener('click', () => {
+            if (state.currentRoom) {
+                const myPlayer = state.currentRoom.players.find(p => p.id === state.playerId);
+                sendMessage({
+                    type: 'setReady',
+                    roomId: state.currentRoom.id,
+                    ready: !myPlayer?.ready
+                });
+            }
+        });
+        
+        startGameBtn.addEventListener('click', () => {
+            if (state.currentRoom && state.isHost) {
+                sendMessage({ type: 'startGame', roomId: state.currentRoom.id });
+            }
+        });
+        
+        // Settings sliders (host only)
+        ['ghostCount', 'lives', 'powerUp'].forEach(setting => {
+            const slider = document.getElementById(`${setting}Slider`);
+            const valueDisplay = document.getElementById(`${setting}Value`);
+            
+            slider.addEventListener('input', () => {
+                valueDisplay.textContent = slider.value;
+                
+                if (state.currentRoom && state.isHost) {
+                    const settings = {};
+                    if (setting === 'ghostCount') settings.ghostCount = parseInt(slider.value);
+                    if (setting === 'lives') settings.lives = parseInt(slider.value);
+                    if (setting === 'powerUp') settings.powerUpDuration = parseInt(slider.value) * 1000;
+                    
+                    sendMessage({
+                        type: 'updateSettings',
+                        roomId: state.currentRoom.id,
+                        settings
+                    });
+                }
+            });
+        });
+        
+        // Modal slider displays
+        ['modalGhost', 'modalLives', 'modalPowerUp'].forEach(prefix => {
+            const slider = document.getElementById(`${prefix}Slider`);
+            const valueDisplay = document.getElementById(`${prefix}Value`);
+            
+            slider.addEventListener('input', () => {
+                valueDisplay.textContent = slider.value;
+            });
+        });
+        
+        // Keyboard input for game
         document.addEventListener('keydown', (event) => {
+            if (!state.inGame) return;
+            
             let direction = null;
             switch(event.key) {
                 case 'ArrowUp':
@@ -58,75 +982,14 @@
                     direction = 'right';
                     break;
             }
+            
             if (direction) {
-                ws.send(JSON.stringify({ type: 'input', direction }));
+                sendMessage({ type: 'input', direction });
             }
         });
         
-        function render(gameState) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            const { maze, players, ghosts, pellets, powerPellets } = gameState;
-            const myPlayer = players.find(p => p.id === myPlayerId);
-
-            // Draw maze
-            for (let y = 0; y < maze.length; y++) {
-                for (let x = 0; x < maze[y].length; x++) {
-                    if (maze[y][x] === 1) { // Wall
-                        ctx.fillStyle = 'blue';
-                        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                    }
-                }
-            }
-
-            // Draw pellets
-            ctx.fillStyle = 'white';
-            pellets.forEach(p => {
-                ctx.beginPath();
-                ctx.arc(p.x * TILE_SIZE + TILE_SIZE / 2, p.y * TILE_SIZE + TILE_SIZE / 2, 3, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Draw power pellets
-            ctx.fillStyle = 'orange';
-            powerPellets.forEach(p => {
-                ctx.beginPath();
-                ctx.arc(p.x * TILE_SIZE + TILE_SIZE / 2, p.y * TILE_SIZE + TILE_SIZE / 2, 8, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Draw players
-            players.forEach(p => {
-                ctx.fillStyle = p.poweredUp ? 'orange' : p.color;
-                ctx.beginPath();
-                ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Draw ghosts
-            ghosts.forEach(g => {
-                ctx.fillStyle = g.poweredUp && myPlayer && myPlayer.poweredUp ? 'lightblue' : g.color;
-                ctx.beginPath();
-                ctx.arc(g.x * TILE_SIZE, g.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Draw scores and lives
-            ctx.fillStyle = 'white';
-            ctx.font = '20px Arial';
-            players.forEach((p, index) => {
-                ctx.fillText(`Player ${index + 1}: ${p.score} Lives: ${p.lives}`, 10, 25 * (index + 1));
-            })
-
-            // Game Over
-            if (myPlayerId && !myPlayer) {
-                ctx.fillStyle = 'red';
-                ctx.font = '80px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2);
-            }
-        }
-
+        // Initialize
+        connect();
     </script>
 </body>
 </html>
