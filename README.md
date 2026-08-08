@@ -53,6 +53,49 @@ This setup requires you to run the server application before you can play the ga
 
 5. **Play the Game**: Open your web browser and navigate to `http://localhost:8080`. The game will load into the lobby. Enter your name and join. To play with friends, have them open the same URL in their browsers on the same network.
 
+## Development
+
+### Quick Commands
+
+| Command | Description |
+| :--- | :--- |
+| `npm start` | Start the game server (production mode) |
+| `npm run dev` | Start with auto-reload via nodemon |
+| `npm test` | Run all Jest tests with coverage |
+| `npm run test:watch` | Run tests in watch mode |
+| `npm run lint` | Lint server.js and tests/ |
+| `npm run lint:fix` | Lint with auto-fix |
+| `npm run verify` | Full pass: lint + test |
+
+### Project Structure
+
+```
+server.js              # Express + WebSocket server, game loop, state management
+index.html             # Canvas client: rendering, input (keyboard/gamepad/touch), audio
+src/gameLogic.js       # Pure game logic (maze, collision, movement) — fully unit-tested
+tests/
+  server/              # Server-side game logic tests (Jest, node env)
+  client/              # Client-side rendering & input tests (Jest, jsdom env)
+  integration/         # WebSocket message flow tests
+eslint.config.js       # ESLint configuration
+Dockerfile             # Container image for deployment
+.github/workflows/ci.yml  # CI pipeline (lint + test + Docker build)
+```
+
+### Testing
+
+Tests live in `tests/` and use Jest. The pure game logic in `src/gameLogic.js` has 100% coverage. Run `npm test` to execute all suites with coverage reporting.
+
+### Deployment
+
+**Docker**:
+```bash
+docker build -t pacclone-multi .
+docker run -p 8080:8080 pacclone-multi
+```
+
+**Platform**: Any Node.js 18+ host with WebSocket support (Railway, Render, Fly.io, or a VPS).
+
 ## Controls
 
 The game automatically detects your input method. Each browser window/tab can be controlled independently.

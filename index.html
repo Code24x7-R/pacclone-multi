@@ -10,26 +10,204 @@
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="520"></canvas>
+    <div id="lobby" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; width: 100vw; background-color: #000; color: white;">
+        <h1>Pacclone Multi Lobby</h1>
+        <div style="margin-bottom: 20px;">
+            <label for="playerNameInput">Your Name:</label>
+            <input type="text" id="playerNameInput" placeholder="Enter your name" style="padding: 8px; font-size: 16px;">
+            <button id="joinLobbyButton" style="padding: 8px 15px; font-size: 16px; margin-left: 10px;">Join Lobby</button>
+        </div>
+        <div id="lobbyPlayersList" style="margin-bottom: 20px;">
+            <h2>Players in Lobby:</h2>
+            <ul id="playersList" style="list-style-type: none; padding: 0;">
+                <!-- Player names will be inserted here by JavaScript -->
+            </ul>
+        </div>
+        <button id="startGameButton" style="padding: 10px 20px; font-size: 18px; background-color: green; color: white; border: none; cursor: pointer;" disabled>Start Game</button>
+    </div>
+    <canvas id="gameCanvas" width="800" height="520" style="display: none;"></canvas>
+
+    <!-- Virtual Joystick for Touch Controls (NEW) -->
+    <div id="joystick" style="display: none; position: fixed; bottom: 50px; left: 50px; width: 100px; height: 100px; background-color: rgba(255, 255, 255, 0.3); border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.5);">
+        <div id="joystick-handle" style="position: absolute; top: 25px; left: 25px; width: 50px; height: 50px; background-color: rgba(255, 255, 255, 0.7); border-radius: 50%;"></div>
+    </div>
+
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const lobbyDiv = document.getElementById('lobby');
+        const playerNameInput = document.getElementById('playerNameInput');
+        const joinLobbyButton = document.getElementById('joinLobbyButton');
+        const playersList = document.getElementById('playersList');
+        const startGameButton = document.getElementById('startGameButton');
+        
         const TILE_SIZE = 40;
         let myPlayerId = null;
+        let clientGameState = 'LOBBY'; // Client-side representation of game state
+        let lastScore = 0; // for chomp sound
+        let lastPoweredUpState = false; // for power-up sound
+        let lastGhostPositions = []; // for ghost eaten sound
+
+        // NEW: Audio elements
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let chompSound, powerupSound, ghostEatenSound, playerEatenSound, gameOverSound;
+
+        // Function to load sounds (simplified, would typically load from files)
+        async function loadSounds() {
+            // Placeholder for loading actual audio files
+            // For now, we'll create simple oscillator sounds for demonstration
+            chompSound = createOscillatorSound(261.63, 0.05); // C4
+            powerupSound = createOscillatorSound(392.00, 0.1, 'triangle'); // G4
+            ghostEatenSound = createOscillatorSound(523.25, 0.15); // C5
+            playerEatenSound = createOscillatorSound(110.00, 0.2, 'sawtooth'); // A2
+            gameOverSound = createOscillatorSound(78.00, 0.5, 'square'); // D2
+        }
+
+        function createOscillatorSound(frequency, duration, type = 'sine') {
+            return function() {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.type = type;
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); // Volume
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.start();
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioContext.currentTime + duration); // Fade out
+                oscillator.stop(audioContext.currentTime + duration);
+            };
+        }
+
+        loadSounds(); // Load sounds on startup
+
+
+        // Initial UI state
+        canvas.style.display = 'none';
+        lobbyDiv.style.display = 'flex';
 
         const ws = new WebSocket(`ws://${window.location.host}`);
 
         ws.onopen = () => {
             console.log('[CLIENT] Connected to server.');
+            // When connected, if there's a stored player name, pre-fill it
+            const storedPlayerName = localStorage.getItem('pacclonePlayerName');
+            if (storedPlayerName) {
+                playerNameInput.value = storedPlayerName;
+            }
+            // Do NOT automatically join lobby here. Wait for lobbyState from server.
         };
+
+        // NEW: Event Listeners for Lobby Buttons
+        joinLobbyButton.addEventListener('click', () => {
+            const playerName = playerNameInput.value.trim();
+            if (playerName) {
+                localStorage.setItem('pacclonePlayerName', playerName); // Store name
+                ws.send(JSON.stringify({ type: 'joinLobby', name: playerName }));
+            } else {
+                alert('Please enter your name to join the lobby.');
+            }
+        });
+
+        startGameButton.addEventListener('click', () => {
+            ws.send(JSON.stringify({ type: 'startGame' }));
+        });
 
         ws.onmessage = (event) => {
             const message = JSON.parse(event.data);
-            if (message.type === 'welcome') {
-                console.log(`[SERVER] says: ${message.message}`);
-                myPlayerId = message.playerId;
-            } else if (message.type === 'gameState') {
-                render(message.gameState);
+            console.log('[CLIENT] Message received:', message.type);
+            switch (message.type) {
+                case 'welcome':
+                    console.log(`[SERVER] says: ${message.message}`);
+                    myPlayerId = message.clientId; // Capture clientId from welcome message
+                    break;
+                case 'lobbyState':
+                    clientGameState = message.currentGameState;
+                    // Update lobby player list
+                    playersList.innerHTML = '';
+                    if (message.lobbyPlayers && message.lobbyPlayers.length > 0) {
+                        message.lobbyPlayers.forEach(p => {
+                            const li = document.createElement('li');
+                            li.textContent = p.name;
+                            playersList.appendChild(li);
+                        });
+                        // Assume the first player in the lobby is the host
+                        const isHost = (message.lobbyPlayers[0].id === myPlayerId);
+                        startGameButton.disabled = !(isHost && message.lobbyPlayers.length >= 1); // Enable if host and at least 1 player
+                    } else {
+                        startGameButton.disabled = true;
+                    }
+                    // NEW: Explicitly manage UI visibility based on currentGameState
+                    if (clientGameState === 'LOBBY') {
+                         lobbyDiv.style.display = 'flex';
+                         canvas.style.display = 'none';
+                    } else { // If we receive lobbyState while not in LOBBY, e.g., during IN_PROGRESS for some reason
+                         lobbyDiv.style.display = 'none';
+                         canvas.style.display = 'block';
+                    }
+                    break;
+                case 'gameState':
+                    console.log('[CLIENT] GameState received. Current State:', clientGameState, 'My Player ID:', myPlayerId);
+                    clientGameState = message.gameState.currentGameState; // Assuming server sends currentGameState in gameState
+                    if (clientGameState === 'IN_PROGRESS' || clientGameState === 'GAME_OVER') { // Handle GAME_OVER for spectating
+                        lobbyDiv.style.display = 'none';
+                        canvas.style.display = 'block';
+
+                        console.log('[CLIENT] Calling render() with gameState:', message.gameState);
+                        render(message.gameState); // Always render the game elements
+
+                        const activePlayer = message.gameState.players.find(p => p.id === myPlayerId);
+
+                        // If spectating in IN_PROGRESS state, draw a spectator message
+                        if (!activePlayer && clientGameState === 'IN_PROGRESS') {
+                            ctx.fillStyle = 'white';
+                            ctx.font = '30px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('You are spectating...', canvas.width / 2, canvas.height / 2 + 50);
+                        }
+
+                        // If game is over, display message
+                        if (clientGameState === 'GAME_OVER') {
+                            ctx.fillStyle = 'red';
+                            ctx.font = '80px Arial';
+                            ctx.textAlign = 'center';
+                            const winner = message.gameState.players.length > 0 ? message.gameState.players[0].name : 'No one';
+                            ctx.fillText(`Game Over! Winner: ${winner}`, canvas.width / 2, canvas.height / 2);
+
+                            if (!activePlayer) { // If spectating during game over
+                                ctx.fillStyle = 'white';
+                                ctx.font = '30px Arial';
+                                ctx.fillText('You are spectating.', canvas.width / 2, canvas.height / 2 + 100);
+                            }
+                        }
+                    } else if (clientGameState === 'LOBBY') { // Back to lobby state
+                         lobbyDiv.style.display = 'flex';
+                         canvas.style.display = 'none';
+                    }
+                    if (clientGameState === 'GAME_OVER') {
+                        if (gameOverSound) gameOverSound(); // Play game over sound
+                    }
+                    break;
+                                            case 'spectatorMode': // Handle spectatorMode message
+                                                clientGameState = 'SPECTATING';
+                                                myPlayerId = null; // Ensure client also knows it's no longer an active player
+                                                lobbyDiv.style.display = 'none';
+                                                canvas.style.display = 'block';
+                                                // Display a message to the user that they are spectating
+                                                ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+                                                ctx.fillStyle = 'white';
+                                                ctx.font = '40px Arial';
+                                                ctx.textAlign = 'center';
+                                                ctx.fillText(message.message, canvas.width / 2, canvas.height / 2 - 50);
+                                                ctx.fillText('Spectating...', canvas.width / 2, canvas.height / 2 + 50);
+                                                if (playerEatenSound) playerEatenSound(); // Play player eaten sound
+                                                break;
+                case 'error':
+                    console.error('[SERVER ERROR]:', message.message);
+                    alert(`Error: ${message.message}`);
+                    break;
             }
         };
 
@@ -39,6 +217,9 @@
 
         // Keyboard Input
         document.addEventListener('keydown', (event) => {
+            if (!myPlayerId) { // Do not send input if spectating
+                return;
+            }
             let direction = null;
             switch(event.key) {
                 case 'ArrowUp':
@@ -63,11 +244,162 @@
             }
         });
         
+        // Gamepad Input (NEW SECTION)
+        let gamepads = {};
+
+        function gamepadHandler(event, connected) {
+            const gamepad = event.gamepad;
+            if (connected) {
+                gamepads[gamepad.index] = gamepad;
+                console.log(`Gamepad ${gamepad.index} connected: ${gamepad.id}`);
+            } else {
+                delete gamepads[gamepad.index];
+                console.log(`Gamepad ${gamepad.index} disconnected: ${gamepad.id}`);
+            }
+        }
+
+        window.addEventListener('gamepadconnected', (e) => gamepadHandler(e, true));
+        window.addEventListener('gamepaddisconnected', (e) => gamepadHandler(e, false));
+
+        function pollGamepads() {
+            if (!myPlayerId) { // Do not process gamepad input if spectating
+                requestAnimationFrame(pollGamepads);
+                return;
+            }
+
+            const currentGamepads = navigator.getGamepads();
+            for (const gamepad of currentGamepads) {
+                if (gamepad) {
+                    // Check D-pad or Left Analog Stick
+                    let direction = null;
+
+                    // D-pad
+                    if (gamepad.buttons[12] && gamepad.buttons[12].pressed) direction = 'up';
+                    else if (gamepad.buttons[13] && gamepad.buttons[13].pressed) direction = 'down';
+                    else if (gamepad.buttons[14] && gamepad.buttons[14].pressed) direction = 'left';
+                    else if (gamepad.buttons[15] && gamepad.buttons[15].pressed) direction = 'right';
+
+                    // Left Analog Stick (axes[0] for X, axes[1] for Y)
+                    const AXIS_THRESHOLD = 0.5;
+                    if (gamepad.axes[1] < -AXIS_THRESHOLD) direction = 'up';
+                    else if (gamepad.axes[1] > AXIS_THRESHOLD) direction = 'down';
+                    else if (gamepad.axes[0] < -AXIS_THRESHOLD) direction = 'left';
+                    else if (gamepad.axes[0] > AXIS_THRESHOLD) direction = 'right';
+
+                    if (direction) {
+                        ws.send(JSON.stringify({ type: 'input', direction }));
+                    }
+                }
+            }
+            requestAnimationFrame(pollGamepads);
+        }
+        requestAnimationFrame(pollGamepads); // Start polling
+
+        // Touch Controls (Virtual Joystick) (NEW SECTION)
+        const joystick = document.getElementById('joystick');
+        const joystickHandle = document.getElementById('joystick-handle');
+        const joystickBaseSize = 100; // Base size of the joystick area
+        const joystickHandleSize = 50; // Size of the movable handle
+        let joystickActive = false;
+        let joystickStartX, joystickStartY;
+        let joystickCurrentX, joystickCurrentY;
+
+        // Function to show/hide joystick based on device type (simple check)
+        function toggleJoystickVisibility() {
+            // Check for touch support
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0) {
+                // Joystick is initially hidden, will show on first touch
+                // We'll manage its display based on game state
+            }
+        }
+        toggleJoystickVisibility(); // Call once on load
+
+        document.addEventListener('touchstart', (e) => {
+            if (!myPlayerId || clientGameState !== 'IN_PROGRESS') {
+                return; // Only process input if active player and game in progress
+            }
+            if (e.target === canvas) { // Only activate joystick if touch starts on canvas
+                joystickActive = true;
+                joystick.style.display = 'block'; // Show joystick
+                
+                const touch = e.touches[0];
+                joystickStartX = touch.clientX;
+                joystickStartY = touch.clientY;
+                
+                // Position joystick dynamically at touch start location
+                joystick.style.left = `${joystickStartX - joystickBaseSize / 2}px`;
+                joystick.style.top = `${joystickStartY - joystickBaseSize / 2}px`;
+
+                joystickHandle.style.left = `${joystickBaseSize / 4}px`;
+                joystickHandle.style.top = `${joystickBaseSize / 4}px`;
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!joystickActive || !myPlayerId || clientGameState !== 'IN_PROGRESS') {
+                return;
+            }
+            const touch = e.touches[0];
+            joystickCurrentX = touch.clientX;
+            joystickCurrentY = touch.clientY;
+
+            const deltaX = joystickCurrentX - joystickStartX;
+            const deltaY = joystickCurrentY - joystickStartY;
+
+            const maxDistance = joystickBaseSize / 2 - joystickHandleSize / 2;
+            const angle = Math.atan2(deltaY, deltaX);
+            const distance = Math.min(maxDistance, Math.hypot(deltaX, deltaY));
+
+            const handleX = maxDistance + distance * Math.cos(angle) - joystickHandleSize / 2;
+            const handleY = maxDistance + distance * Math.sin(angle) - joystickHandleSize / 2;
+
+            joystickHandle.style.left = `${handleX}px`;
+            joystickHandle.style.top = `${handleY}px`;
+
+            let direction = null;
+            if (distance > maxDistance * 0.5) { // Only send direction if moved enough
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                    direction = deltaX > 0 ? 'right' : 'left';
+                } else {
+                    direction = deltaY > 0 ? 'down' : 'up';
+                }
+            }
+            if (direction) {
+                ws.send(JSON.stringify({ type: 'input', direction }));
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        document.addEventListener('touchend', () => {
+            joystickActive = false;
+            joystick.style.display = 'none'; // Hide joystick
+            joystickHandle.style.left = `${joystickBaseSize / 4}px`; // Reset handle position
+            joystickHandle.style.top = `${joystickBaseSize / 4}px`;
+        });
+        
         function render(gameState) {
+            console.log('[CLIENT] Entering render function. GameState:', gameState);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const { maze, players, ghosts, pellets, powerPellets } = gameState;
             const myPlayer = players.find(p => p.id === myPlayerId);
+            console.log('[CLIENT] My Player:', myPlayer);
+
+            // NEW: Sound triggers for current player
+            if (myPlayer) {
+                // Chomp sound
+                if (myPlayer.score > lastScore) {
+                    if (chompSound) chompSound();
+                }
+                lastScore = myPlayer.score;
+
+                // Power-up sound
+                if (myPlayer.poweredUp && !lastPoweredUpState) {
+                    if (powerupSound) powerupSound();
+                }
+                lastPoweredUpState = myPlayer.poweredUp;
+            }
 
             // Draw maze
             for (let y = 0; y < maze.length; y++) {
@@ -110,6 +442,24 @@
                 ctx.arc(g.x * TILE_SIZE, g.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
                 ctx.fill();
             });
+
+            // NEW: Ghost eaten sound heuristic
+            if (myPlayer && myPlayer.poweredUp && ghostEatenSound) {
+                const eatenGhosts = lastGhostPositions.filter(lastGhost => {
+                    return !ghosts.some(currentGhost => currentGhost.id === lastGhost.id);
+                });
+                if (eatenGhosts.length > 0) {
+                    // Check if any of the eaten ghosts were close to myPlayer's last known position
+                    const eatenByMe = eatenGhosts.some(eGhost => {
+                        const dist = Math.hypot(myPlayer.x - eGhost.x, myPlayer.y - eGhost.y);
+                        return dist < 1.0; // Within a reasonable distance
+                    });
+                    if (eatenByMe) {
+                        ghostEatenSound();
+                    }
+                }
+            }
+            lastGhostPositions = ghosts.map(g => ({ id: g.id, x: g.x, y: g.y })); // Update last positions
 
             // Draw scores and lives
             ctx.fillStyle = 'white';

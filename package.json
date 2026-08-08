@@ -5,7 +5,12 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon server.js",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "lint": "eslint server.js tests/",
+    "lint:fix": "eslint server.js tests/ --fix",
+    "verify": "npm run lint && npm test"
   },
   "author": "",
   "license": "ISC",
@@ -13,5 +18,42 @@
     "express": "^5.1.0",
     "uuid": "^9.0.1",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.0",
+    "jest": "^30.4.1",
+    "jest-environment-jsdom": "^30.4.1",
+    "nodemon": "^3.1.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "src/**/*.js"
+    ],
+    "coveragePathIgnorePatterns": [
+      "/node_modules/"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 80,
+        "branches": 70
+      }
+    },
+    "projects": [
+      {
+        "displayName": "server",
+        "testEnvironment": "node",
+        "testMatch": [
+          "<rootDir>/tests/server/**/*.test.js"
+        ]
+      },
+      {
+        "displayName": "client",
+        "testEnvironment": "jsdom",
+        "testMatch": [
+          "<rootDir>/tests/client/**/*.test.js"
+        ]
+      }
+    ]
   }
 }
