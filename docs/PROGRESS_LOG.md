@@ -25,3 +25,11 @@
 - Added inline SVG ghost favicon to `index.html` to prevent `/favicon.ico` 404.
 - Added 5 regression tests in `tests/server/buildGameStatePayload.test.js`.
 - Verification: 52 tests pass, 100% coverage, lint clean, server starts on :8080.
+
+### [FEATURE] Phase 1 — Ghost AI port from single-player pacclone
+- Ported 4 classic ghost personalities: Blinky (chase), Pinky (ambush +4 tiles), Inky (flank via Blinky vector), Clyde (shy: chase if far, scatter if close).
+- Ghost state machine: `inHouse` → `exitingHouse` → `scatter`/`chase` → `frightened` → `eaten` → `inHouse` with house bobbing, gate release thresholds (blinky=0, pinky=15, inky=30, clyde=50), and scatter/chase mode cycling.
+- New `src/ghostAI.js` (28 pure functions) + `tests/server/ghostAI.test.js` (67 tests).
+- New maze in `src/gameLogic.js`: ghost house with gate (type 6), tunnels (type 4), corner power pellets (type 2/3).
+- Server: AI-driven ghost movement replaces random walk; power pellet frightens all active ghosts; eaten ghosts return to house and re-release.
+- 120 total tests pass, lint clean, 97.97% line / 88.55% branch coverage.
