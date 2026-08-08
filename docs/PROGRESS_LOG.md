@@ -56,3 +56,10 @@
 - Client: displays current level (top-right), shows "Level Complete" overlay between levels.
 - `buildGameStatePayload` now includes `level`; ghost flash timing scales with level-adjusted frightened duration.
 - 176 total tests pass, lint clean, new modules at 100% coverage.
+
+### [FEATURE] Phase 4 — Polish: extra lives, dash, high scores
+- Extra lives: new `extraLivesEarned(score, threshold)` pure function — one life per 10,000 pts. Server tracks `extraLivesAwarded` per player, awards on threshold crossing. 7 tests.
+- Dash: new `updateDashState()` and `dashSpeedMultiplier()` pure functions — 15-tick burst at 1.8× speed, 180-tick cooldown. Server applies to movement, resets on respawn. Client triggers via Shift (keyboard), R1 (gamepad), double-tap (touch). 9 tests.
+- High scores: new `src/highScores.js` UMD module with load/save/insert/escapeHtml. Persisted in localStorage, displayed in lobby, recorded on game over. 16 tests.
+- Fixed: server input handler no longer clears direction on dash-only inputs; player name included in game state for high score attribution.
+- 208 total tests pass, lint clean.
