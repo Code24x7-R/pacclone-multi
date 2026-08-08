@@ -226,6 +226,25 @@ function isValidDirection(dir) {
   return DIRECTIONS.includes(dir);
 }
 
+/**
+ * Build the gameState payload sent from server to clients via WebSocket.
+ *
+ * This is the single source of truth for the wire format. It guarantees
+ * `currentGameState` is always present so the client knows whether to
+ * render the lobby or the game board.
+ *
+ * @param {number[][]} maze
+ * @param {Array} players
+ * @param {Array} ghosts
+ * @param {Array} pellets
+ * @param {Array} powerPellets
+ * @param {string} currentGameState - One of GAME_STATES (LOBBY, IN_PROGRESS, GAME_OVER).
+ * @returns {{maze: number[][], players: Array, ghosts: Array, pellets: Array, powerPellets: Array, currentGameState: string}}
+ */
+function buildGameStatePayload(maze, players, ghosts, pellets, powerPellets, currentGameState) {
+  return { maze, players, ghosts, pellets, powerPellets, currentGameState };
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -255,4 +274,5 @@ module.exports = {
   randomDirection,
   checkGameOver,
   isValidDirection,
+  buildGameStatePayload,
 };

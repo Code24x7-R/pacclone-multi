@@ -4,13 +4,13 @@
 
 | # | Symptom | Suspected File | Date | Impact | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| — | *(none logged yet)* | | | | |
+| — | *(none — all resolved below)* | | | | |
 
 ## Recently Fixed
 
 | # | Symptom | Root Cause | Fix | Date | Commit |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| — | *(none yet)* | | | | |
+| B-001 | Game starts → blank screen; console shows `Current State: undefined` | `server.js` `gameLoop` broadcast payload `{ maze, players, ghosts, pellets, powerPellets }` omits `currentGameState`. Only the game-over branch included it. Client reads `undefined` → never enters render branch. | Extracted `buildGameStatePayload()` into `src/gameLogic.js` (pure, tested) and used it in `server.js` so `currentGameState` is always included. Added lobby host-status UI. Added inline favicon to prevent 404. | 2026-08-08 | — |
 
 ## Notes
 

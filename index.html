@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pacclone Multi</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👻</text></svg>">
     <style>
         body { margin: 0; background-color: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
         canvas { background-color: #000; }
@@ -24,6 +25,7 @@
             </ul>
         </div>
         <button id="startGameButton" style="padding: 10px 20px; font-size: 18px; background-color: green; color: white; border: none; cursor: pointer;" disabled>Start Game</button>
+        <div id="hostStatus" style="margin-top: 15px; font-size: 14px; color: #aaa; min-height: 20px;"></div>
     </div>
     <canvas id="gameCanvas" width="800" height="520" style="display: none;"></canvas>
 
@@ -40,6 +42,7 @@
         const joinLobbyButton = document.getElementById('joinLobbyButton');
         const playersList = document.getElementById('playersList');
         const startGameButton = document.getElementById('startGameButton');
+        const hostStatus = document.getElementById('hostStatus');
         
         const TILE_SIZE = 40;
         let myPlayerId = null;
@@ -136,8 +139,20 @@
                         // Assume the first player in the lobby is the host
                         const isHost = (message.lobbyPlayers[0].id === myPlayerId);
                         startGameButton.disabled = !(isHost && message.lobbyPlayers.length >= 1); // Enable if host and at least 1 player
+
+                        // UI feedback: tell players who the host is and who can start
+                        if (isHost) {
+                            hostStatus.textContent = 'You are the host — press Start Game when ready.';
+                            hostStatus.style.color = '#4ade80'; // green
+                        } else {
+                            const hostName = message.lobbyPlayers[0].name;
+                            hostStatus.textContent = `Host: ${hostName} — waiting for them to start the game.`;
+                            hostStatus.style.color = '#fbbf24'; // amber
+                        }
                     } else {
                         startGameButton.disabled = true;
+                        hostStatus.textContent = 'Waiting for players to join...';
+                        hostStatus.style.color = '#aaa';
                     }
                     // NEW: Explicitly manage UI visibility based on currentGameState
                     if (clientGameState === 'LOBBY') {

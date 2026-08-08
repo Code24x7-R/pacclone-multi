@@ -3,6 +3,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const { buildGameStatePayload, GAME_STATES } = require('./src/gameLogic');
 
 const app = express();
 const server = http.createServer(app);
@@ -34,12 +35,7 @@ const PLAYER_SPEED = 0.05;
 const GHOST_SPEED = 0.04;
 const directions = ['up', 'down', 'left', 'right'];
 
-// NEW: Define game states and current game state
-const GAME_STATES = {
-    LOBBY: 'LOBBY',
-    IN_PROGRESS: 'IN_PROGRESS',
-    GAME_OVER: 'GAME_OVER',
-};
+// GAME_STATES is imported from src/gameLogic.js (single source of truth)
 let currentGameState = GAME_STATES.LOBBY;
 let lobbyPlayers = []; // Array to hold players in the lobby
 const spectators = []; // Array to hold WebSocket connections of players in spectator mode
@@ -272,7 +268,7 @@ function gameLoop() {
             gameInterval = null; // Stop game loop
 
             // Notify clients of game over and winner
-            const finalGameState = { maze, players, ghosts, pellets, powerPellets, currentGameState: GAME_STATES.GAME_OVER };
+            const finalGameState = buildGameStatePayload(maze, players, ghosts, pellets, powerPellets, GAME_STATES.GAME_OVER);
             wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send(JSON.stringify({ type: 'gameState', gameState: finalGameState }));
@@ -288,7 +284,7 @@ function gameLoop() {
     }
 
     // Broadcast state to all clients
-    const gameState = { maze, players, ghosts, pellets, powerPellets };
+    const gameState = buildGameStatePayload(maze, players, ghosts, pellets, powerPellets, currentGameState);
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'gameState', gameState }));
