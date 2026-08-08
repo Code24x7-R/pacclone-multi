@@ -232,7 +232,7 @@ function gameLoop() {
 
                     if (otherPlayer.lives <= 0) {
                         // Move to spectator mode
-                        const clientWs = wss.clients.find(client => client.playerId === otherPlayer.id);
+                        const clientWs = Array.from(wss.clients).find(client => client.playerId === otherPlayer.id);
                         if (clientWs) {
                             spectators.push(clientWs); // Add to spectators array
                             clientWs.send(JSON.stringify({ type: 'spectatorMode', message: 'You were eaten! You are now spectating.' }));
