@@ -150,6 +150,15 @@ function gameLoop() {
     }
     // Player movement and pellet collision
     players.forEach(player => {
+        // Tick down power-up timer (avoids setTimeout + circular JSON)
+        if (player.poweredUp && player.poweredUpTicks > 0) {
+            player.poweredUpTicks--;
+            if (player.poweredUpTicks <= 0) {
+                player.poweredUp = false;
+                player.poweredUpTicks = 0;
+            }
+        }
+
         let nextX = player.x;
         let nextY = player.y;
 
@@ -159,7 +168,7 @@ function gameLoop() {
             case 'left': nextX -= PLAYER_SPEED; break;
             case 'right': nextX += PLAYER_SPEED; break;
         }
-        
+
         if (!isWall(nextX, player.y)) player.x = nextX;
         if (!isWall(player.x, nextY)) player.y = nextY;
 
@@ -181,6 +190,9 @@ function gameLoop() {
                 powerPellets.splice(i, 1);
                 player.score += 50;
                 player.poweredUp = true;
+                // Tick-based power-up countdown (avoids storing non-serializable
+                // Timeout objects on the player and prevents timer drift).
+                player.poweredUpTicks = Math.ceil(FRIGHTENED_DURATION_MS / GAME_LOOP_INTERVAL);
                 // Frighten all active ghosts
                 ghostFrightenedTimer = FRIGHTENED_DURATION_MS;
                 ghosts.forEach(ghost => {
@@ -193,11 +205,6 @@ function gameLoop() {
                         }
                     }
                 });
-                // Reset power-up timer (clear any existing timeout by tracking)
-                if (player.powerTimeout) clearTimeout(player.powerTimeout);
-                player.powerTimeout = setTimeout(() => {
-                    player.poweredUp = false;
-                }, FRIGHTENED_DURATION_MS);
             }
         }
 

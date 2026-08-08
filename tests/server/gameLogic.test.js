@@ -20,6 +20,7 @@ const {
   createPlayersFromLobby,
   randomDirection,
   checkGameOver,
+  buildGameStatePayload,
   isValidDirection,
 } = require("../../src/gameLogic");
 
@@ -302,6 +303,92 @@ describe("createInitialState", () => {
     const state2 = createInitialState();
     state1.pellets.pop();
     expect(state2.pellets.length).toBeGreaterThan(state1.pellets.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: gameState payload must be JSON-serializable
+// ---------------------------------------------------------------------------
+describe("buildGameStatePayload JSON safety", () => {
+  test("serializes without circular-reference errors (regression for Timeout crash)", () => {
+    // Simulate a live game state with powered-up players (the bug was caused
+    // by storing a setTimeout Timeout object on the player, which has circular
+    // _idlePrev/_idleNext references).
+    const players = [
+      {
+        id: 1,
+        name: "Henry",
+        x: 1.5,
+        y: 1.5,
+        color: "yellow",
+        lives: 3,
+        score: 100,
+        direction: "left",
+        poweredUp: true,
+        poweredUpTicks: 480, // tick-based timer (plain number, serializable)
+      },
+      {
+        id: 2,
+        name: "Suzi",
+        x: 18.5,
+        y: 1.5,
+        color: "lime",
+        lives: 3,
+        score: 50,
+        direction: "right",
+        poweredUp: false,
+        poweredUpTicks: 0,
+      },
+    ];
+    const ghosts = [
+      { id: "blinky", name: "Blinky", x: 9.5, y: 8.5, color: "red", direction: "left", state: "chase", frightened: false, eaten: false, speed: 0.8 },
+      { id: "pinky", name: "Pinky", x: 9.5, y: 9.5, color: "pink", direction: "down", state: "frightened", frightened: true, eaten: false, speed: 0.5 },
+    ];
+    const pellets = [{ x: 1, y: 1 }];
+    const powerPellets = [{ x: 1, y: 3 }];
+
+    const payload = buildGameStatePayload(
+      MAZE,
+      players,
+      ghosts,
+      pellets,
+      powerPellets,
+      GAME_STATES.IN_PROGRESS,
+    );
+
+    // This must not throw "Converting circular structure to JSON"
+    expect(() => JSON.stringify(payload)).not.toThrow();
+
+    // Round-trip check
+    const roundTripped = JSON.parse(JSON.stringify(payload));
+    expect(roundTripped.players[0].poweredUp).toBe(true);
+    expect(roundTripped.ghosts[1].state).toBe("frightened");
+    expect(roundTripped.currentGameState).toBe("IN_PROGRESS");
+  });
+
+  test("a player with a real Timeout object WOULD throw (documents the original bug)", () => {
+    // Proves the test above actually catches the class of bug that crashed the server
+    const playerWithTimeout = {
+      id: 1,
+      name: "Bug",
+      x: 1.5,
+      y: 1.5,
+      color: "yellow",
+      lives: 3,
+      score: 0,
+      direction: null,
+      poweredUp: true,
+      powerTimeout: setTimeout(() => {}, 1000), // circular!
+    };
+    const payload = buildGameStatePayload(
+      MAZE,
+      [playerWithTimeout],
+      [],
+      [],
+      [],
+      GAME_STATES.IN_PROGRESS,
+    );
+    expect(() => JSON.stringify(payload)).toThrow(TypeError);
   });
 });
 

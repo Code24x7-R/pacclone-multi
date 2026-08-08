@@ -205,6 +205,7 @@ function createPlayersFromLobby(lobbyPlayers) {
     score: 0,
     direction: null,
     poweredUp: false,
+    poweredUpTicks: 0,
   }));
 }
 
