@@ -9,21 +9,27 @@
 // ---------------------------------------------------------------------------
 // Maze definition
 // ---------------------------------------------------------------------------
-// 0 = pellet path, 1 = wall, 2 = power pellet
+// 0 = pellet path, 1 = wall, 2 = power pellet, 3 = power pellet (corner),
+// 4 = empty walkable (tunnel / ghost house interior — no pellet),
+// 6 = ghost house gate (passable only by ghosts exiting/returning)
+//
+// Adapted from the single-player pacclone reference. The ghost house sits
+// at rows 8-11, cols 7-12 with a gate at row 7, cols 9-10. Tunnels wrap
+// at rows 8 and 12.
 const MAZE = [
   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 1],
-  [1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1],
-  [1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1],
-  [1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1],
-  [1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1],
-  [1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1],
-  [1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1],
-  [1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1],
-  [1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1],
-  [1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1],
-  [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1],
+  [1, 2, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 2, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1],
+  [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+  [1, 1, 1, 1, 1, 0, 1, 1, 1, 6, 6, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+  [4, 4, 4, 4, 1, 0, 1, 4, 4, 4, 4, 4, 4, 1, 0, 1, 4, 4, 4, 4],
+  [1, 1, 1, 1, 1, 0, 1, 4, 4, 4, 4, 4, 4, 1, 0, 1, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0, 0, 0, 4, 1, 4, 4, 1, 4, 0, 0, 0, 0, 0, 0, 1],
+  [1, 1, 1, 1, 1, 0, 1, 4, 1, 1, 1, 1, 4, 1, 0, 1, 1, 1, 1, 1],
+  [4, 4, 4, 4, 1, 0, 1, 4, 4, 4, 4, 4, 4, 1, 0, 1, 4, 4, 4, 4],
 ];
 
 const TILE_SIZE = 40;
@@ -62,6 +68,8 @@ const GHOST_SPAWN = { x: 9.5, y: 5.5 };
 
 /**
  * Check whether the given continuous-coordinate position is inside a wall.
+ * Tile types: 0=pellet, 1=wall, 2=power, 3=power(corner), 4=empty walkable,
+ * 6=ghost gate. Players treat the gate as a wall; ghosts have separate logic.
  * @param {number} x - Continuous X position (in tile units).
  * @param {number} y - Continuous Y position (in tile units).
  * @param {number[][]} [maze=MAZE] - Optional maze override (for testing).
@@ -73,7 +81,9 @@ function isWall(x, y, maze = MAZE) {
   if (tileY < 0 || tileY >= maze.length || tileX < 0 || tileX >= maze[0].length) {
     return true;
   }
-  return maze[tileY][tileX] === 1;
+  const tile = maze[tileY][tileX];
+  // 1 = wall, 6 = ghost gate (impassable for players)
+  return tile === 1 || tile === 6;
 }
 
 /**
@@ -136,6 +146,7 @@ function isColliding(a, b, threshold) {
 
 /**
  * Scan the maze and extract pellet and power-pellet positions.
+ * Tile types: 0=pellet, 1=wall, 2=power, 3=power(corner), 4=empty, 6=gate.
  * @param {number[][]} [maze=MAZE] - Optional maze override.
  * @returns {{ pellets: Array<{x: number, y: number}>, powerPellets: Array<{x: number, y: number}> }}
  */
@@ -144,11 +155,13 @@ function extractPellets(maze = MAZE) {
   const powerPellets = [];
   for (let y = 0; y < maze.length; y++) {
     for (let x = 0; x < maze[y].length; x++) {
-      if (maze[y][x] === 0) {
+      const tile = maze[y][x];
+      if (tile === 0) {
         pellets.push({ x, y });
-      } else if (maze[y][x] === 2) {
+      } else if (tile === 2 || tile === 3) {
         powerPellets.push({ x, y });
       }
+      // tile 4 (empty walkable) and tile 6 (gate) produce no pellets
     }
   }
   return { pellets, powerPellets };

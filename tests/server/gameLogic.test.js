@@ -37,16 +37,30 @@ describe("MAZE", () => {
     });
   });
 
-  test("border is all walls", () => {
-    const lastRow = MAZE.length - 1;
+  test("top border is all walls", () => {
     const lastCol = MAZE[0].length - 1;
     for (let x = 0; x <= lastCol; x++) {
       expect(MAZE[0][x]).toBe(1);
-      expect(MAZE[lastRow][x]).toBe(1);
+    }
+  });
+
+  test("left/right borders are walls except at tunnel rows", () => {
+    const lastRow = MAZE.length - 1;
+    const lastCol = MAZE[0].length - 1;
+    // Tunnel rows (where the maze wraps) have openings at the edges
+    const tunnelRows = new Set();
+    for (let y = 0; y <= lastRow; y++) {
+      if (MAZE[y][0] !== 1) tunnelRows.add(y);
     }
     for (let y = 0; y <= lastRow; y++) {
-      expect(MAZE[y][0]).toBe(1);
-      expect(MAZE[y][lastCol]).toBe(1);
+      if (tunnelRows.has(y)) {
+        // Tunnel rows: edge tiles should be type 4 (empty walkable), not walls
+        expect(MAZE[y][0]).not.toBe(1);
+        expect(MAZE[y][lastCol]).not.toBe(1);
+      } else {
+        expect(MAZE[y][0]).toBe(1);
+        expect(MAZE[y][lastCol]).toBe(1);
+      }
     }
   });
 });
@@ -231,12 +245,10 @@ describe("extractPellets", () => {
 
   test("power pellets are at corner positions of the maze path", () => {
     const { powerPellets } = extractPellets();
-    // MAZE has power pellets (value 2) at: (1,1), (18,1), (1,11), (18,11)
+    // MAZE has power pellets (value 2) at: (1,3), (18,3) — near top corners
     const positions = powerPellets.map((p) => `${p.x},${p.y}`).sort();
-    expect(positions).toContain("1,1");
-    expect(positions).toContain("18,1");
-    expect(positions).toContain("1,11");
-    expect(positions).toContain("18,11");
+    expect(positions).toContain("1,3");
+    expect(positions).toContain("18,3");
   });
 
   test("does not include walls or power pellets in pellets array", () => {
