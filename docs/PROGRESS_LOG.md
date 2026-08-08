@@ -26,6 +26,12 @@
 - Added 5 regression tests in `tests/server/buildGameStatePayload.test.js`.
 - Verification: 52 tests pass, 100% coverage, lint clean, server starts on :8080.
 
+### [BUGFIX] Circular JSON crash when broadcasting game state with power-up active
+- Root cause: `setTimeout` returned a `Timeout` object stored on `player.powerTimeout`; `player` was serialized into the gameState broadcast, and `Timeout` objects have circular `_idlePrev`/`_idleNext` references → `JSON.stringify` threw.
+- Replaced `setTimeout` with a tick-based countdown (`player.powerUpTicks`) decremented in the game loop — avoids non-serializable objects and prevents timer drift.
+- Added regression tests proving the payload is JSON-safe and documenting the original failure class.
+- Committed as af84726.
+
 ### [FEATURE] Phase 1 — Ghost AI port from single-player pacclone
 - Ported 4 classic ghost personalities: Blinky (chase), Pinky (ambush +4 tiles), Inky (flank via Blinky vector), Clyde (shy: chase if far, scatter if close).
 - Ghost state machine: `inHouse` → `exitingHouse` → `scatter`/`chase` → `frightened` → `eaten` → `inHouse` with house bobbing, gate release thresholds (blinky=0, pinky=15, inky=30, clyde=50), and scatter/chase mode cycling.
