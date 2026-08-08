@@ -33,3 +33,11 @@
 - New maze in `src/gameLogic.js`: ghost house with gate (type 6), tunnels (type 4), corner power pellets (type 2/3).
 - Server: AI-driven ghost movement replaces random walk; power pellet frightens all active ghosts; eaten ghosts return to house and re-release.
 - 120 total tests pass, lint clean, 97.97% line / 88.55% branch coverage.
+
+### [FEATURE] Phase 2 — Frightened state visuals (blue body, white flash, eaten eyes)
+- Ghost rendering rewritten: proper ghost shape (dome + body + skirt scallops) replaces plain circles.
+- Three visual states: normal (personality color), frightened (blue + white flash in last 1/3 of power-up), eaten (eyes only with direction-tracking pupils).
+- Server computes per-ghost `flashing` flag via new `shouldGhostFlash()` pure function (8000ms duration → flash below 2667ms, toggle every 100ms).
+- Extracted drawing to `src/ghostRenderer.js` (UMD module: `window.GhostRenderer` in browser, `module.exports` for Jest).
+- Client rewired to `GhostRenderer.drawGhost()`; ghost-eaten sound now detects `eaten` state transitions (eaten ghosts stay in list).
+- 13 new client rendering tests with mock Canvas2D context; 135 total tests pass, lint clean.
