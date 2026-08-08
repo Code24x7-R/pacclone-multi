@@ -528,9 +528,10 @@ describe("checkGameOver", () => {
 // Constants sanity checks
 // ---------------------------------------------------------------------------
 describe("constants", () => {
-  test("GAME_STATES has all three states", () => {
+  test("GAME_STATES has all four states", () => {
     expect(GAME_STATES.LOBBY).toBe("LOBBY");
     expect(GAME_STATES.IN_PROGRESS).toBe("IN_PROGRESS");
+    expect(GAME_STATES.LEVEL_COMPLETE).toBe("LEVEL_COMPLETE");
     expect(GAME_STATES.GAME_OVER).toBe("GAME_OVER");
   });
 

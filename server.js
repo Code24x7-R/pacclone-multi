@@ -3,7 +3,9 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const { buildGameStatePayload, GAME_STATES, MAZE } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, getLevelTransition } = require('./src/gameLogic');
+const { generateMaze } = require('./src/mazeGenerator');
+const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
   createInitialGhosts,
   getDefaultHouseConfig,
@@ -17,7 +19,6 @@ const {
   isGhostWalkable,
   shouldGhostFlash,
   GHOST_EAT_SCORE,
-  FRIGHTENED_DURATION_MS,
   GHOST_FRIGHTENED_SPEED,
   GHOST_NORMAL_SPEED,
   GHOST_EATEN_SPEED,
@@ -32,14 +33,19 @@ const wss = new WebSocket.Server({ server });
 app.use(express.static(path.join(__dirname, '.')));
 
 // Game State
-// MAZE is imported from src/gameLogic.js (single source of truth)
+// currentMaze holds the active maze (swapped each level). It starts as the
+// default MAZE from gameLogic.js and is replaced by procedurally generated
+// mazes on level advancement.
 // Tile types: 0=pellet, 1=wall, 2=power, 4=empty, 6=ghost gate
+let currentMaze = MAZE;
+let currentLevel = 1;
 let players = [];
 let ghosts = [];
 let pellets = [];
 let powerPellets = [];
 const PLAYER_SPEED = 0.05; // tiles per tick
-const GHOST_BASE_SPEED = 0.08; // base tiles per tick (personalities apply multiplier)
+let ghostBaseSpeed = 0.08; // base tiles per tick (personalities apply multiplier); scales with level
+let frightenedDurationMs = frightenedDurationForLevel(1); // scales with level
 
 // Ghost AI state
 let modeCycle = null; // { mode, timer, index }
@@ -57,10 +63,14 @@ function initializeGameState() {
     pellets = [];
     powerPellets = [];
 
-    // Extract pellets and power pellets from the maze
-    for (let y = 0; y < MAZE.length; y++) {
-        for (let x = 0; x < MAZE[y].length; x++) {
-            const tile = MAZE[y][x];
+    // Reset difficulty scaling to level-1 defaults.
+    ghostBaseSpeed = ghostSpeedForLevel(1);
+    frightenedDurationMs = frightenedDurationForLevel(1);
+
+    // Extract pellets and power pellets from the current maze
+    for (let y = 0; y < currentMaze.length; y++) {
+        for (let x = 0; x < currentMaze[y].length; x++) {
+            const tile = currentMaze[y][x];
             if (tile === 0) {
                 pellets.push({ x: x, y: y });
             } else if (tile === 2 || tile === 3) {
@@ -71,7 +81,7 @@ function initializeGameState() {
     totalPelletsInLevel = pellets.length + powerPellets.length;
 
     // Initialize ghost house config and create 4 AI-driven ghosts
-    ghostHouseConfig = getDefaultHouseConfig(MAZE);
+    ghostHouseConfig = getDefaultHouseConfig(currentMaze);
     ghosts = createInitialGhosts(ghostHouseConfig);
 
     // Initialize scatter/chase mode cycle
@@ -93,9 +103,9 @@ function startGame() {
     // (avoiding the ghost house area in the center)
     const startingPositions = [
         { x: 1.5, y: 1.5 }, // top-left
-        { x: MAZE[0].length - 1.5, y: 1.5 }, // top-right
+        { x: currentMaze[0].length - 1.5, y: 1.5 }, // top-right
         { x: 1.5, y: 4.5 }, // mid-left
-        { x: MAZE[0].length - 1.5, y: 4.5 }, // mid-right
+        { x: currentMaze[0].length - 1.5, y: 4.5 }, // mid-right
     ];
 
     players = lobbyPlayers.map((lp, index) => ({
@@ -130,13 +140,13 @@ function startGame() {
     // The gameLoop will immediately broadcast gameState
 }
 
-function isWall(x, y) {
+function isWall(x, y, maze = currentMaze) {
     const tileX = Math.floor(x);
     const tileY = Math.floor(y);
-    if (tileY < 0 || tileY >= MAZE.length || tileX < 0 || tileX >= MAZE[0].length) {
+    if (tileY < 0 || tileY >= maze.length || tileX < 0 || tileX >= maze[0].length) {
         return true;
     }
-    const tile = MAZE[tileY][tileX];
+    const tile = maze[tileY][tileX];
     // 1 = wall, 6 = ghost gate (impassable for players)
     return tile === 1 || tile === 6;
 }
@@ -193,9 +203,9 @@ function gameLoop() {
                 player.poweredUp = true;
                 // Tick-based power-up countdown (avoids storing non-serializable
                 // Timeout objects on the player and prevents timer drift).
-                player.poweredUpTicks = Math.ceil(FRIGHTENED_DURATION_MS / GAME_LOOP_INTERVAL);
+                player.poweredUpTicks = Math.ceil(frightenedDurationMs / GAME_LOOP_INTERVAL);
                 // Frighten all active ghosts
-                ghostFrightenedTimer = FRIGHTENED_DURATION_MS;
+                ghostFrightenedTimer = frightenedDurationMs;
                 ghosts.forEach(ghost => {
                     if (ghost.state !== 'eaten' && ghost.state !== 'inHouse') {
                         ghost.frightened = true;
@@ -268,7 +278,7 @@ function gameLoop() {
     // (flash in the last 1/3 of the duration, toggling every 100ms)
     ghosts.forEach(ghost => {
         if (ghost.frightened) {
-            ghost.flashing = shouldGhostFlash(ghostFrightenedTimer);
+            ghost.flashing = shouldGhostFlash(ghostFrightenedTimer, frightenedDurationMs);
         } else {
             ghost.flashing = false;
         }
@@ -312,7 +322,7 @@ function gameLoop() {
 
         // Choose direction at tile centers (AI decision point)
         if (ghost.state !== 'inHouse') {
-            const atCenter = isAtTileCenter(ghost.x, ghost.y, GHOST_BASE_SPEED / 2);
+            const atCenter = isAtTileCenter(ghost.x, ghost.y, ghostBaseSpeed / 2);
             if (atCenter) {
                 const snapped = snapToTileCenter(ghost);
                 ghost.x = snapped.x;
@@ -322,21 +332,21 @@ function gameLoop() {
                     players,
                     blinky: blinkyGhost,
                     mode: modeCycle ? modeCycle.mode : 'scatter',
-                    mazeWidth: MAZE[0].length,
-                    mazeHeight: MAZE.length,
+                    mazeWidth: currentMaze[0].length,
+                    mazeHeight: currentMaze.length,
                     houseConfig: ghostHouseConfig,
                 });
-                ghost.direction = chooseDirection(ghost, target, MAZE, MAZE[0].length, MAZE.length);
+                ghost.direction = chooseDirection(ghost, target, currentMaze, currentMaze[0].length, currentMaze.length);
             }
 
             // Move ghost in current direction
             const vec = DIRECTION_VECTORS[ghost.direction] || { dx: 0, dy: 0 };
-            const moveAmount = GHOST_BASE_SPEED * (ghost.speed || GHOST_NORMAL_SPEED);
+            const moveAmount = ghostBaseSpeed * (ghost.speed || GHOST_NORMAL_SPEED);
             const nextX = ghost.x + vec.dx * moveAmount;
             const nextY = ghost.y + vec.dy * moveAmount;
 
             // Check wall collision (use ghost-aware walkability for gates)
-            if (!isGhostWalkable(MAZE, Math.floor(nextX), Math.floor(nextY), ghost.state, MAZE[0].length, MAZE.length)) {
+            if (!isGhostWalkable(currentMaze, Math.floor(nextX), Math.floor(nextY), ghost.state, currentMaze[0].length, currentMaze.length)) {
                 // Hit a wall — stop and let next tick pick a new direction
                 // Snap to tile edge to prevent overshoot
                 if (vec.dx > 0) ghost.x = Math.floor(ghost.x) + 0.99;
@@ -351,10 +361,10 @@ function gameLoop() {
             // Tunnel wrapping: only tunnel rows (type 4 at the horizontal edges) wrap.
             // Type 0 at edges is a regular pellet path and does NOT wrap.
             const tileY = Math.floor(ghost.y);
-            const isTunnelRow = tileY >= 0 && tileY < MAZE.length && MAZE[tileY][0] === 4;
-            if (isTunnelRow && (ghost.x < 0 || ghost.x >= MAZE[0].length)) {
-                if (ghost.x < 0) ghost.x = MAZE[0].length + ghost.x;
-                else if (ghost.x >= MAZE[0].length) ghost.x = ghost.x - MAZE[0].length;
+            const isTunnelRow = tileY >= 0 && tileY < currentMaze.length && currentMaze[tileY][0] === 4;
+            if (isTunnelRow && (ghost.x < 0 || ghost.x >= currentMaze[0].length)) {
+                if (ghost.x < 0) ghost.x = currentMaze[0].length + ghost.x;
+                else if (ghost.x >= currentMaze[0].length) ghost.x = ghost.x - currentMaze[0].length;
             }
         }
 
@@ -391,46 +401,137 @@ function gameLoop() {
         });
     });
 
-    // Win/Loss Conditions (Last Man Standing or All Pellets Eaten)
+    // Win/Loss Conditions
+    //   - Last Man Standing (1 player left)        -> GAME_OVER (match ends)
+    //   - All pellets eaten (2+ players alive)     -> LEVEL_COMPLETE -> next level
     if (currentGameState === GAME_STATES.IN_PROGRESS) {
-        let gameEnded = false;
-
-        if (players.length === 1) {
-            console.log(`[SERVER] Game Over: ${players[0].name} is the Last Man Standing!`);
-            gameEnded = true;
-        } else if (pellets.length === 0 && powerPellets.length === 0) {
-            console.log('[SERVER] Game Over: All pellets eaten!');
-            gameEnded = true;
-        }
-
-        if (gameEnded) {
-            currentGameState = GAME_STATES.GAME_OVER;
-            clearInterval(gameInterval);
-            gameInterval = null; // Stop game loop
-
-            // Notify clients of game over and winner
-            const finalGameState = buildGameStatePayload(MAZE, players, ghosts, pellets, powerPellets, GAME_STATES.GAME_OVER);
-            wss.clients.forEach(client => {
-                if (client.readyState === WebSocket.OPEN) {
-                    client.send(JSON.stringify({ type: 'gameState', gameState: finalGameState }));
-                }
-            });
-            // After a delay, reset to lobby
-            setTimeout(() => {
-                initializeGameState();
-                currentGameState = GAME_STATES.LOBBY;
-                broadcastLobbyState(); // Inform clients the game is reset to lobby
-            }, 5000); // 5 seconds to show game over screen
+        const transition = getLevelTransition(players, pellets, powerPellets);
+        if (transition === GAME_STATES.GAME_OVER) {
+            endMatch(players[0] || null);
+        } else if (transition === GAME_STATES.LEVEL_COMPLETE) {
+            startNextLevel();
         }
     }
 
     // Broadcast state to all clients
-    const gameState = buildGameStatePayload(MAZE, players, ghosts, pellets, powerPellets, currentGameState);
+    const gameState = buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, currentGameState, currentLevel);
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'gameState', gameState }));
         }
     });
+}
+
+/**
+ * End the match: stop the loop, broadcast GAME_OVER, then reset to lobby.
+ * @param {Object} winner - The last surviving player.
+ */
+function endMatch(winner) {
+    console.log(`[SERVER] Game Over: ${winner ? winner.name : 'No winner'} is the Last Man Standing!`);
+    currentGameState = GAME_STATES.GAME_OVER;
+    clearInterval(gameInterval);
+    gameInterval = null;
+
+    const finalGameState = buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, GAME_STATES.GAME_OVER, currentLevel);
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'gameState', gameState: finalGameState }));
+        }
+    });
+    // After a delay, reset to lobby.
+    setTimeout(() => {
+        currentLevel = 1;
+        currentMaze = MAZE;
+        initializeGameState();
+        currentGameState = GAME_STATES.LOBBY;
+        broadcastLobbyState();
+    }, 5000);
+}
+
+/**
+ * Advance to the next level: generate a new maze, scale difficulty, reset
+ * pellets/ghosts, keep player scores & lives, then resume the game loop.
+ */
+function startNextLevel() {
+    currentLevel++;
+    console.log(`[SERVER] Level ${currentLevel - 1} complete! Advancing to level ${currentLevel}...`);
+
+    // Stop the loop during the transition.
+    clearInterval(gameInterval);
+    gameInterval = null;
+
+    // Generate a fresh maze for the new level.
+    currentMaze = generateMaze();
+
+    // Re-extract pellets and power pellets from the new maze.
+    pellets = [];
+    powerPellets = [];
+    for (let y = 0; y < currentMaze.length; y++) {
+        for (let x = 0; x < currentMaze[y].length; x++) {
+            const tile = currentMaze[y][x];
+            if (tile === 0) {
+                pellets.push({ x, y });
+            } else if (tile === 2 || tile === 3) {
+                powerPellets.push({ x, y });
+            }
+        }
+    }
+    totalPelletsInLevel = pellets.length + powerPellets.length;
+
+    // Reset ghosts for the new maze.
+    ghostHouseConfig = getDefaultHouseConfig(currentMaze);
+    ghosts = createInitialGhosts(ghostHouseConfig);
+
+    // Reset mode cycle and frightened timer.
+    modeCycle = createModeCycle();
+    ghostFrightenedTimer = 0;
+
+    // Difficulty scaling per level.
+    applyDifficultyScaling();
+
+    // Move players back to starting positions (keep scores/lives).
+    const startingPositions = [
+        { x: 1.5, y: 1.5 },
+        { x: currentMaze[0].length - 1.5, y: 1.5 },
+        { x: 1.5, y: 4.5 },
+        { x: currentMaze[0].length - 1.5, y: 4.5 },
+    ];
+    players.forEach((player, index) => {
+        player.x = startingPositions[index % startingPositions.length].x;
+        player.y = startingPositions[index % startingPositions.length].y;
+        player.direction = null;
+        player.poweredUp = false;
+        player.poweredUpTicks = 0;
+    });
+
+    // Brief pause so the client can show "Level Complete", then resume.
+    currentGameState = GAME_STATES.LEVEL_COMPLETE;
+    const levelCompleteState = buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, GAME_STATES.LEVEL_COMPLETE, currentLevel);
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'gameState', gameState: levelCompleteState }));
+        }
+    });
+
+    setTimeout(() => {
+        currentGameState = GAME_STATES.IN_PROGRESS;
+        console.log(`[SERVER] Level ${currentLevel} started.`);
+        if (!gameInterval) {
+            gameInterval = setInterval(gameLoop, GAME_LOOP_INTERVAL);
+        }
+    }, 3000);
+}
+
+/**
+ * Scale difficulty with the current level: faster ghosts and shorter
+ * frightened duration. Values are capped to keep the game playable.
+ */
+function applyDifficultyScaling() {
+    ghostBaseSpeed = ghostSpeedForLevel(currentLevel);
+    frightenedDurationMs = frightenedDurationForLevel(currentLevel);
+
+    const speedMultiplier = ghostBaseSpeed / 0.08;
+    console.log(`[SERVER] Difficulty L${currentLevel}: ghost speed x${speedMultiplier.toFixed(2)}, frightened ${frightenedDurationMs}ms`);
 }
 
 wss.on('connection', (ws) => {

@@ -48,6 +48,7 @@ const DIRECTIONS = ["up", "down", "left", "right"];
 const GAME_STATES = {
   LOBBY: "LOBBY",
   IN_PROGRESS: "IN_PROGRESS",
+  LEVEL_COMPLETE: "LEVEL_COMPLETE",
   GAME_OVER: "GAME_OVER",
 };
 
@@ -232,6 +233,24 @@ function checkGameOver(players, pellets, powerPellets) {
 }
 
 /**
+ * Determine the end-of-level transition based on game state.
+ *
+ * @param {Array} players - Active players.
+ * @param {Array} pellets - Remaining pellets.
+ * @param {Array} powerPellets - Remaining power pellets.
+ * @returns {null | 'GAME_OVER' | 'LEVEL_COMPLETE'} The transition to
+ *   apply, or null if the level should continue.
+ */
+function getLevelTransition(players, pellets, powerPellets) {
+  // Last man standing — the match is over.
+  if (players.length <= 1) return "GAME_OVER";
+  // All pellets cleared with multiple players alive — advance level.
+  if (pellets.length === 0 && powerPellets.length === 0) return "LEVEL_COMPLETE";
+  // Otherwise the level continues.
+  return null;
+}
+
+/**
  * Validate a direction string.
  * @param {string} dir
  * @returns {boolean}
@@ -252,11 +271,12 @@ function isValidDirection(dir) {
  * @param {Array} ghosts
  * @param {Array} pellets
  * @param {Array} powerPellets
- * @param {string} currentGameState - One of GAME_STATES (LOBBY, IN_PROGRESS, GAME_OVER).
- * @returns {{maze: number[][], players: Array, ghosts: Array, pellets: Array, powerPellets: Array, currentGameState: string}}
+ * @param {string} currentGameState - One of GAME_STATES (LOBBY, IN_PROGRESS, LEVEL_COMPLETE, GAME_OVER).
+ * @param {number} [level=1] - Current level number.
+ * @returns {{maze: number[][], players: Array, ghosts: Array, pellets: Array, powerPellets: Array, currentGameState: string, level: number}}
  */
-function buildGameStatePayload(maze, players, ghosts, pellets, powerPellets, currentGameState) {
-  return { maze, players, ghosts, pellets, powerPellets, currentGameState };
+function buildGameStatePayload(maze, players, ghosts, pellets, powerPellets, currentGameState, level = 1) {
+  return { maze, players, ghosts, pellets, powerPellets, currentGameState, level };
 }
 
 // ---------------------------------------------------------------------------
@@ -287,6 +307,7 @@ module.exports = {
   createPlayersFromLobby,
   randomDirection,
   checkGameOver,
+  getLevelTransition,
   isValidDirection,
   buildGameStatePayload,
 };

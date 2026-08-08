@@ -68,7 +68,7 @@ describe("buildGameStatePayload", () => {
     expect(payload.powerPellets).toBe(powerPellets);
   });
 
-  test("returns exactly the six expected keys", () => {
+  test("returns exactly the expected keys", () => {
     const payload = buildGameStatePayload(
       maze,
       players,
@@ -78,7 +78,46 @@ describe("buildGameStatePayload", () => {
       GAME_STATES.IN_PROGRESS,
     );
     expect(Object.keys(payload).sort()).toEqual(
-      ["currentGameState", "ghosts", "maze", "pellets", "players", "powerPellets"].sort(),
+      ["currentGameState", "ghosts", "level", "maze", "pellets", "players", "powerPellets"].sort(),
     );
+  });
+
+  test("level defaults to 1 when omitted", () => {
+    const payload = buildGameStatePayload(
+      maze,
+      players,
+      ghosts,
+      pellets,
+      powerPellets,
+      GAME_STATES.IN_PROGRESS,
+    );
+    expect(payload.level).toBe(1);
+  });
+
+  test("level reflects the provided value", () => {
+    const payload = buildGameStatePayload(
+      maze,
+      players,
+      ghosts,
+      pellets,
+      powerPellets,
+      GAME_STATES.IN_PROGRESS,
+      5,
+    );
+    expect(payload.level).toBe(5);
+  });
+
+  test("includes LEVEL_COMPLETE in supported states", () => {
+    const payload = buildGameStatePayload(
+      maze,
+      players,
+      ghosts,
+      pellets,
+      powerPellets,
+      GAME_STATES.LEVEL_COMPLETE,
+      2,
+    );
+    expect(payload.currentGameState).toBe("LEVEL_COMPLETE");
+    expect(payload.level).toBe(2);
   });
 });

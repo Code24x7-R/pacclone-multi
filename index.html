@@ -167,7 +167,7 @@
                 case 'gameState':
                     console.log('[CLIENT] GameState received. Current State:', clientGameState, 'My Player ID:', myPlayerId);
                     clientGameState = message.gameState.currentGameState; // Assuming server sends currentGameState in gameState
-                    if (clientGameState === 'IN_PROGRESS' || clientGameState === 'GAME_OVER') { // Handle GAME_OVER for spectating
+                    if (clientGameState === 'IN_PROGRESS' || clientGameState === 'GAME_OVER' || clientGameState === 'LEVEL_COMPLETE') {
                         lobbyDiv.style.display = 'none';
                         canvas.style.display = 'block';
 
@@ -197,6 +197,17 @@
                                 ctx.font = '30px Arial';
                                 ctx.fillText('You are spectating.', canvas.width / 2, canvas.height / 2 + 100);
                             }
+                        }
+
+                        // Level complete overlay (brief transition between levels)
+                        if (clientGameState === 'LEVEL_COMPLETE') {
+                            ctx.fillStyle = 'lime';
+                            ctx.font = '60px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillText(`Level ${message.gameState.level - 1} Complete!`, canvas.width / 2, canvas.height / 2 - 20);
+                            ctx.fillStyle = 'white';
+                            ctx.font = '30px Arial';
+                            ctx.fillText(`Get ready for Level ${message.gameState.level}...`, canvas.width / 2, canvas.height / 2 + 30);
                         }
                     } else if (clientGameState === 'LOBBY') { // Back to lobby state
                          lobbyDiv.style.display = 'flex';
@@ -398,7 +409,7 @@
             console.log('[CLIENT] Entering render function. GameState:', gameState);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            const { maze, players, ghosts, pellets, powerPellets } = gameState;
+            const { maze, players, ghosts, pellets, powerPellets, level = 1 } = gameState;
             const myPlayer = players.find(p => p.id === myPlayerId);
             console.log('[CLIENT] My Player:', myPlayer);
 
@@ -480,7 +491,16 @@
             ctx.font = '20px Arial';
             players.forEach((p, index) => {
                 ctx.fillText(`Player ${index + 1}: ${p.score} Lives: ${p.lives}`, 10, 25 * (index + 1));
-            })
+            });
+
+            // Draw current level (top-right corner) during active play
+            if (clientGameState === 'IN_PROGRESS') {
+                ctx.fillStyle = 'yellow';
+                ctx.font = '18px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(`Level ${level}`, canvas.width - 10, 25);
+                ctx.textAlign = 'left';
+            }
 
             // Game Over
             if (myPlayerId && !myPlayer) {

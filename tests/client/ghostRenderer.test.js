@@ -190,4 +190,14 @@ describe('shouldGhostFlash (server logic)', () => {
     expect(shouldGhostFlash(0)).toBe(false);
     expect(shouldGhostFlash(-100)).toBe(false);
   });
+
+  test('flash scales with a shorter total duration', () => {
+    // Simulate level 5: frightened duration scaled to 6000ms.
+    // Flash starts at 1/3 = 2000ms.
+    const total = 6000;
+    expect(shouldGhostFlash(6000, total)).toBe(false);
+    expect(shouldGhostFlash(2000, total)).toBe(false); // exactly at threshold
+    expect(shouldGhostFlash(1900, total)).toBe(false); // below, odd toggle (floor(1900/100)=19)
+    expect(shouldGhostFlash(1800, total)).toBe(true);  // below, even toggle (floor(1800/100)=18)
+  });
 });
