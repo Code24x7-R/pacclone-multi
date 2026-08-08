@@ -41,3 +41,12 @@
 - Extracted drawing to `src/ghostRenderer.js` (UMD module: `window.GhostRenderer` in browser, `module.exports` for Jest).
 - Client rewired to `GhostRenderer.drawGhost()`; ghost-eaten sound now detects `eaten` state transitions (eaten ghosts stay in list).
 - 13 new client rendering tests with mock Canvas2D context; 135 total tests pass, lint clean.
+
+### [FEATURE] Phase 3 — Procedural maze generation + level progression
+- New `src/mazeGenerator.js`: symmetric recursive-backtracking maze generation with ghost house (gate), tunnels, corner power pellets, guaranteed connectivity, and forced-walkable player spawns. 19 unit tests.
+- New `src/difficulty.js`: pure per-level scaling — ghost speed +10%/level (capped 2x), frightened duration -500ms/level (floored 3s). 12 unit tests.
+- New `src/gameLogic.js#getLevelTransition`: pure win-condition decision (last man standing → GAME_OVER, all pellets eaten → LEVEL_COMPLETE). 8 unit tests.
+- Server: `currentMaze`/`currentLevel` state, `startNextLevel()` generates fresh maze + scales difficulty, `endMatch()` resets to lobby. `LEVEL_COMPLETE` drives a 3s transition.
+- Client: displays current level (top-right), shows "Level Complete" overlay between levels.
+- `buildGameStatePayload` now includes `level`; ghost flash timing scales with level-adjusted frightened duration.
+- 176 total tests pass, lint clean, new modules at 100% coverage.
