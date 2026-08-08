@@ -16,6 +16,9 @@ dist-ssr
 coverage/
 .nyc_output/
 
+# Local agent memory (session-scoped, not committed)
+.pi/
+
 # Environment
 .env
 .env.local
