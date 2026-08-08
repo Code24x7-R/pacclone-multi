@@ -616,6 +616,20 @@ function updateModeCycle(cycle, deltaTime) {
   return { mode, timer, index, changed };
 }
 
+/**
+ * Determine whether a frightened ghost should render as the white "flash"
+ * (near the end of the power-up). Classic Pac-Man flashes in the last third
+ * of the frightened duration, toggling every 100ms.
+ * @param {number} timerMs - Remaining frightened time in ms.
+ * @returns {boolean} True if the ghost body should render white.
+ */
+function shouldGhostFlash(timerMs) {
+  if (timerMs <= 0) return false;
+  const oneThird = FRIGHTENED_DURATION_MS / 3;
+  if (timerMs >= oneThird) return false;
+  return Math.floor(timerMs / 100) % 2 === 0;
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -658,4 +672,6 @@ module.exports = {
   // Mode cycling
   createModeCycle,
   updateModeCycle,
+  // Frightened visuals
+  shouldGhostFlash,
 };

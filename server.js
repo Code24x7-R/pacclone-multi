@@ -15,6 +15,7 @@ const {
   createModeCycle,
   updateModeCycle,
   isGhostWalkable,
+  shouldGhostFlash,
   GHOST_EAT_SCORE,
   FRIGHTENED_DURATION_MS,
   GHOST_FRIGHTENED_SPEED,
@@ -263,7 +264,15 @@ function gameLoop() {
         }
     }
 
-    // Tick down frightened timer
+    // Tick down frightened timer & compute white-flash flag
+    // (flash in the last 1/3 of the duration, toggling every 100ms)
+    ghosts.forEach(ghost => {
+        if (ghost.frightened) {
+            ghost.flashing = shouldGhostFlash(ghostFrightenedTimer);
+        } else {
+            ghost.flashing = false;
+        }
+    });
     if (ghostFrightenedTimer > 0) {
         ghostFrightenedTimer -= GAME_LOOP_INTERVAL;
         if (ghostFrightenedTimer <= 0) {
@@ -272,6 +281,7 @@ function gameLoop() {
             ghosts.forEach(ghost => {
                 if (ghost.state === 'frightened') {
                     ghost.frightened = false;
+                    ghost.flashing = false;
                     ghost.speed = GHOST_NORMAL_SPEED;
                     ghost.state = modeCycle ? modeCycle.mode : 'scatter';
                 }

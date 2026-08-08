@@ -34,6 +34,7 @@
         <div id="joystick-handle" style="position: absolute; top: 25px; left: 25px; width: 50px; height: 50px; background-color: rgba(255, 255, 255, 0.7); border-radius: 50%;"></div>
     </div>
 
+    <script src="src/ghostRenderer.js"></script>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -450,31 +451,29 @@
                 ctx.fill();
             });
 
-            // Draw ghosts
+            // Draw ghosts (colored body, blue+flash when frightened, eyes-only when eaten)
             ghosts.forEach(g => {
-                ctx.fillStyle = g.poweredUp && myPlayer && myPlayer.poweredUp ? 'lightblue' : g.color;
-                ctx.beginPath();
-                ctx.arc(g.x * TILE_SIZE, g.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
-                ctx.fill();
+                GhostRenderer.drawGhost(ctx, g, TILE_SIZE);
             });
 
-            // NEW: Ghost eaten sound heuristic
+            // Ghost eaten sound: detect when a ghost transitions to eaten state near us.
+            // Eaten ghosts stay in the list (they return to the house), so we track the
+            // previous eaten flag per ghost rather than looking for vanished ghosts.
             if (myPlayer && myPlayer.poweredUp && ghostEatenSound) {
-                const eatenGhosts = lastGhostPositions.filter(lastGhost => {
-                    return !ghosts.some(currentGhost => currentGhost.id === lastGhost.id);
+                const newlyEaten = ghosts.filter(g => {
+                    if (!g.eaten) return false;
+                    const prev = lastGhostPositions.find(lg => lg.id === g.id);
+                    return prev && !prev.eaten; // was not eaten last frame, now eaten
                 });
-                if (eatenGhosts.length > 0) {
-                    // Check if any of the eaten ghosts were close to myPlayer's last known position
-                    const eatenByMe = eatenGhosts.some(eGhost => {
-                        const dist = Math.hypot(myPlayer.x - eGhost.x, myPlayer.y - eGhost.y);
-                        return dist < 1.0; // Within a reasonable distance
-                    });
-                    if (eatenByMe) {
-                        ghostEatenSound();
-                    }
+                const eatenByMe = newlyEaten.some(g => {
+                    const dist = Math.hypot(myPlayer.x - g.x, myPlayer.y - g.y);
+                    return dist < 1.0;
+                });
+                if (eatenByMe) {
+                    ghostEatenSound();
                 }
             }
-            lastGhostPositions = ghosts.map(g => ({ id: g.id, x: g.x, y: g.y })); // Update last positions
+            lastGhostPositions = ghosts.map(g => ({ id: g.id, x: g.x, y: g.y, eaten: g.eaten }));
 
             // Draw scores and lives
             ctx.fillStyle = 'white';
