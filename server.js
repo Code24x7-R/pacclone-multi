@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const { buildGameStatePayload, GAME_STATES, MAZE, getLevelTransition } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -110,6 +110,7 @@ function startGame() {
 
     players = lobbyPlayers.map((lp, index) => ({
         id: lp.id,
+        name: lp.name,
         x: startingPositions[index % startingPositions.length].x,
         y: startingPositions[index % startingPositions.length].y,
         color: ['yellow', 'lime', 'cyan', 'magenta'][index % 4], // Assign different colors
@@ -117,6 +118,13 @@ function startGame() {
         score: 0,
         direction: null,
         poweredUp: false,
+        poweredUpTicks: 0,
+        // Extra-lives tracking: how many extra lives have been awarded so far.
+        extraLivesAwarded: 0,
+        // Dash state.
+        dashActiveTicks: 0,
+        dashCooldownTicks: 0,
+        dashing: false,
     }));
     lobbyPlayers = []; // Clear lobby after starting game
 
@@ -170,14 +178,32 @@ function gameLoop() {
             }
         }
 
+        // --- Dash: update state from input flag, apply speed multiplier ---
+        const dashResult = updateDashState(player, player._dashTriggered || false);
+        player.dashActiveTicks = dashResult.dashActiveTicks;
+        player.dashCooldownTicks = dashResult.dashCooldownTicks;
+        player.dashing = dashResult.dashing;
+        player._dashTriggered = false; // consume the flag
+        const speedMul = dashSpeedMultiplier(player);
+
+        // --- Extra lives: award at score thresholds ---
+        const earned = extraLivesEarned(player.score);
+        if (earned > player.extraLivesAwarded) {
+            const newLives = earned - player.extraLivesAwarded;
+            player.lives += newLives;
+            player.extraLivesAwarded = earned;
+            console.log(`[SERVER] ${player.name || player.id} earned extra life! (${player.lives} total)`);
+        }
+
         let nextX = player.x;
         let nextY = player.y;
 
+        const moveSpeed = PLAYER_SPEED * speedMul;
         switch (player.direction) {
-            case 'up': nextY -= PLAYER_SPEED; break;
-            case 'down': nextY += PLAYER_SPEED; break;
-            case 'left': nextX -= PLAYER_SPEED; break;
-            case 'right': nextX += PLAYER_SPEED; break;
+            case 'up': nextY -= moveSpeed; break;
+            case 'down': nextY += moveSpeed; break;
+            case 'left': nextX -= moveSpeed; break;
+            case 'right': nextX += moveSpeed; break;
         }
 
         if (!isWall(nextX, player.y)) player.x = nextX;
@@ -248,6 +274,9 @@ function gameLoop() {
                         otherPlayer.x = 1.5; // Or some other safe respawn point
                         otherPlayer.y = 1.5;
                         otherPlayer.poweredUp = false; // Lose power-up on respawn
+                        // Reset dash state on respawn.
+                        otherPlayer.dashActiveTicks = 0;
+                        otherPlayer.dashing = false;
                     }
                 } else if (!player.poweredUp && otherPlayer.poweredUp) {
                     // Other player is powered up and eats current player (handled by otherPlayer's loop iteration)
@@ -395,6 +424,9 @@ function gameLoop() {
                     } else {
                         player.x = 1.5;
                         player.y = 1.5;
+                        // Reset dash state on respawn.
+                        player.dashActiveTicks = 0;
+                        player.dashing = false;
                     }
                 }
             }
@@ -558,7 +590,13 @@ wss.on('connection', (ws) => {
         } else if (data.type === 'input' && currentGameState === GAME_STATES.IN_PROGRESS) {
             const player = players.find(p => p.id === ws.playerId);
             if (player) {
-                player.direction = data.direction;
+                // Only update direction when one is provided. A dash-only input
+                // (direction === undefined/null) must not clear the current direction.
+                if (data.direction) {
+                    player.direction = data.direction;
+                }
+                // Store dash trigger flag for the game loop to consume.
+                player._dashTriggered = !!data.dash;
             }
         } else if (data.type === 'startGame' && currentGameState === GAME_STATES.LOBBY) {
             // For now, let any client start the game. Later, this could be restricted to a host.

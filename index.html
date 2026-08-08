@@ -24,6 +24,10 @@
                 <!-- Player names will be inserted here by JavaScript -->
             </ul>
         </div>
+        <div id="highScores" style="margin-bottom: 20px; color: #ffd700;">
+            <h2 style="color: #ffd700;">High Scores</h2>
+            <ol id="highScoresList" style="padding-left: 20px; margin: 5px 0;"></ol>
+        </div>
         <button id="startGameButton" style="padding: 10px 20px; font-size: 18px; background-color: green; color: white; border: none; cursor: pointer;" disabled>Start Game</button>
         <div id="hostStatus" style="margin-top: 15px; font-size: 14px; color: #aaa; min-height: 20px;"></div>
     </div>
@@ -35,6 +39,7 @@
     </div>
 
     <script src="src/ghostRenderer.js"></script>
+    <script src="src/highScores.js"></script>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -47,10 +52,25 @@
         
         const TILE_SIZE = 40;
         let myPlayerId = null;
+        let currentPlayerName = '';
         let clientGameState = 'LOBBY'; // Client-side representation of game state
         let lastScore = 0; // for chomp sound
         let lastPoweredUpState = false; // for power-up sound
         let lastGhostPositions = []; // for ghost eaten sound
+        let highScores = HighScores.loadHighScores();
+        let finalScoreRecorded = false;
+
+        // Render the high score list into an element using the HighScores module.
+        function renderHighScores(el) {
+            if (!el) return;
+            if (highScores.length === 0) {
+                el.innerHTML = '<li style="color:#666">No scores yet</li>';
+                return;
+            }
+            el.innerHTML = highScores.map((e, i) =>
+                `<li>${i + 1}. ${HighScores.escapeHtml(e.name)} — ${e.score}</li>`
+            ).join('');
+        }
 
         // NEW: Audio elements
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -87,6 +107,8 @@
 
         loadSounds(); // Load sounds on startup
 
+        // High score functions are provided by src/highScores.js (HighScores global).
+
 
         // Initial UI state
         canvas.style.display = 'none';
@@ -109,6 +131,7 @@
             const playerName = playerNameInput.value.trim();
             if (playerName) {
                 localStorage.setItem('pacclonePlayerName', playerName); // Store name
+                currentPlayerName = playerName;
                 ws.send(JSON.stringify({ type: 'joinLobby', name: playerName }));
             } else {
                 alert('Please enter your name to join the lobby.');
@@ -137,6 +160,10 @@
                             li.textContent = p.name;
                             playersList.appendChild(li);
                         });
+                    }
+                    // Refresh high score display whenever we return to lobby.
+                    renderHighScores(document.getElementById('highScoresList'));
+                    if (message.lobbyPlayers && message.lobbyPlayers.length > 0) {
                         // Assume the first player in the lobby is the host
                         const isHost = (message.lobbyPlayers[0].id === myPlayerId);
                         startGameButton.disabled = !(isHost && message.lobbyPlayers.length >= 1); // Enable if host and at least 1 player
@@ -166,7 +193,12 @@
                     break;
                 case 'gameState':
                     console.log('[CLIENT] GameState received. Current State:', clientGameState, 'My Player ID:', myPlayerId);
+                    const prevState = clientGameState;
                     clientGameState = message.gameState.currentGameState; // Assuming server sends currentGameState in gameState
+                    // Reset high score recording flag when a new game/level starts.
+                    if (clientGameState === 'IN_PROGRESS' && prevState !== 'IN_PROGRESS') {
+                        finalScoreRecorded = false;
+                    }
                     if (clientGameState === 'IN_PROGRESS' || clientGameState === 'GAME_OVER' || clientGameState === 'LEVEL_COMPLETE') {
                         lobbyDiv.style.display = 'none';
                         canvas.style.display = 'block';
@@ -192,10 +224,34 @@
                             const winner = message.gameState.players.length > 0 ? message.gameState.players[0].name : 'No one';
                             ctx.fillText(`Game Over! Winner: ${winner}`, canvas.width / 2, canvas.height / 2);
 
+                            // Record high score once per game over.
+                            if (!finalScoreRecorded) {
+                                finalScoreRecorded = true;
+                                // At GAME_OVER, dead players are removed from the players array
+                                // (they became spectators). Use the client-tracked score as the
+                                // authoritative final score; fall back to the server's player
+                                // object only for the winner (who remains in the array).
+                                const myFinalPlayer = message.gameState.players.find(p => p.id === myPlayerId);
+                                const finalScore = myFinalPlayer ? myFinalPlayer.score : lastScore;
+                                const previousTop = highScores.length ? highScores[0].score : 0;
+                                highScores = HighScores.insertHighScore(currentPlayerName, finalScore);
+                                const isNewTop = highScores.length > 0 && highScores[0].score === finalScore && finalScore > 0;
+                                const isHighScore = finalScore > 0 && highScores.some(e => e.score === finalScore && e.name === currentPlayerName);
+                                if (isNewTop && finalScore > previousTop) {
+                                    ctx.fillStyle = '#ffd700';
+                                    ctx.font = '36px Arial';
+                                    ctx.fillText('New High Score!', canvas.width / 2, canvas.height / 2 + 80);
+                                } else if (isHighScore) {
+                                    ctx.fillStyle = '#ffd700';
+                                    ctx.font = '28px Arial';
+                                    ctx.fillText('High Score!', canvas.width / 2, canvas.height / 2 + 80);
+                                }
+                            }
+
                             if (!activePlayer) { // If spectating during game over
                                 ctx.fillStyle = 'white';
                                 ctx.font = '30px Arial';
-                                ctx.fillText('You are spectating.', canvas.width / 2, canvas.height / 2 + 100);
+                                ctx.fillText('You are spectating.', canvas.width / 2, canvas.height / 2 + 120);
                             }
                         }
 
@@ -243,7 +299,19 @@
         };
 
         // Keyboard Input
+        // Track Shift key state for dash (held = dash active).
+        let shiftHeld = false;
+        let lastDirection = null;
         document.addEventListener('keydown', (event) => {
+            if (event.key === 'Shift') {
+                shiftHeld = true;
+                event.preventDefault();
+                // Re-send current direction so the dash takes effect immediately.
+                if (myPlayerId && lastDirection) {
+                    ws.send(JSON.stringify({ type: 'input', direction: lastDirection, dash: true }));
+                }
+                return;
+            }
             if (!myPlayerId) { // Do not send input if spectating
                 return;
             }
@@ -267,7 +335,13 @@
                     break;
             }
             if (direction) {
-                ws.send(JSON.stringify({ type: 'input', direction }));
+                lastDirection = direction;
+                ws.send(JSON.stringify({ type: 'input', direction, dash: shiftHeld }));
+            }
+        });
+        document.addEventListener('keyup', (event) => {
+            if (event.key === 'Shift') {
+                shiftHeld = false;
             }
         });
         
@@ -313,8 +387,11 @@
                     else if (gamepad.axes[0] < -AXIS_THRESHOLD) direction = 'left';
                     else if (gamepad.axes[0] > AXIS_THRESHOLD) direction = 'right';
 
-                    if (direction) {
-                        ws.send(JSON.stringify({ type: 'input', direction }));
+                    // Dash: right shoulder button (button 5 / R1).
+                    const dash = gamepad.buttons[5] && gamepad.buttons[5].pressed;
+
+                    if (direction || dash) {
+                        ws.send(JSON.stringify({ type: 'input', direction, dash }));
                     }
                 }
             }
@@ -340,6 +417,10 @@
             }
         }
         toggleJoystickVisibility(); // Call once on load
+
+        // Touch state for dash (double-tap) and joystick direction memory.
+        let lastTouchDirection = null;
+        const DOUBLE_TAP_MS = 300;
 
         document.addEventListener('touchstart', (e) => {
             if (!myPlayerId || clientGameState !== 'IN_PROGRESS') {
@@ -393,6 +474,7 @@
                 }
             }
             if (direction) {
+                lastTouchDirection = direction;
                 ws.send(JSON.stringify({ type: 'input', direction }));
             }
             e.preventDefault();
@@ -404,6 +486,19 @@
             joystickHandle.style.left = `${joystickBaseSize / 4}px`; // Reset handle position
             joystickHandle.style.top = `${joystickBaseSize / 4}px`;
         });
+
+        // Double-tap detection for dash (touch). Uses the last joystick direction.
+        let lastTapTime = 0;
+        document.addEventListener('touchstart', (e) => {
+            if (!myPlayerId || clientGameState !== 'IN_PROGRESS') return;
+            const now = Date.now();
+            if (now - lastTapTime < DOUBLE_TAP_MS && lastTouchDirection) {
+                ws.send(JSON.stringify({ type: 'input', direction: lastTouchDirection, dash: true }));
+                lastTapTime = 0; // prevent triple-tap retrigger
+            } else {
+                lastTapTime = now;
+            }
+        }, { passive: false });
         
         function render(gameState) {
             console.log('[CLIENT] Entering render function. GameState:', gameState);
@@ -456,6 +551,15 @@
 
             // Draw players
             players.forEach(p => {
+                // Dash glow effect: cyan outline when dashing.
+                if (p.dashing) {
+                    ctx.strokeStyle = '#0ff';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2.5 + 3, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.lineWidth = 1;
+                }
                 ctx.fillStyle = p.poweredUp ? 'orange' : p.color;
                 ctx.beginPath();
                 ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
@@ -499,6 +603,29 @@
                 ctx.font = '18px Arial';
                 ctx.textAlign = 'right';
                 ctx.fillText(`Level ${level}`, canvas.width - 10, 25);
+                ctx.textAlign = 'left';
+            }
+
+            // Draw dash cooldown indicator (bottom-left) for the current player.
+            if (clientGameState === 'IN_PROGRESS' && myPlayer) {
+                const cooldown = myPlayer.dashCooldownTicks || 0;
+                const active = myPlayer.dashActiveTicks || 0;
+                const TICKS_PER_SECOND = 60;
+                const cooldownSec = (cooldown / TICKS_PER_SECOND).toFixed(1);
+                const DASH_COOLDOWN_TICKS = 180;
+                const DASH_DURATION_TICKS = 15;
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'left';
+                if (active > 0) {
+                    ctx.fillStyle = '#0ff';
+                    ctx.fillText(`DASHING! ${active}/${DASH_DURATION_TICKS}`, 10, canvas.height - 10);
+                } else if (cooldown > 0) {
+                    ctx.fillStyle = '#888';
+                    ctx.fillText(`Dash: ${cooldownSec}s`, 10, canvas.height - 10);
+                } else {
+                    ctx.fillStyle = '#0f0';
+                    ctx.fillText('Dash ready [Shift]', 10, canvas.height - 10);
+                }
                 ctx.textAlign = 'left';
             }
 

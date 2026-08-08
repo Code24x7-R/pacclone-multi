@@ -45,6 +45,17 @@ const PLAYER_EAT_SCORE = 100;
 const PLAYER_COLORS = ["yellow", "lime", "cyan", "magenta"];
 const DIRECTIONS = ["up", "down", "left", "right"];
 
+// --- Extra lives ---
+// Classic arcade style: earn an extra life every N points.
+const EXTRA_LIFE_THRESHOLD = 10000;
+
+// --- Dash ---
+// A short burst of speed triggered by the player (Shift / gamepad button /
+// touch double-tap). Governed by a cooldown so it can't be spammed.
+const DASH_SPEED_MULTIPLIER = 1.8; // 80% faster while dashing
+const DASH_DURATION_TICKS = 15; // ~0.25s at 60 FPS
+const DASH_COOLDOWN_TICKS = 180; // 3s cooldown before next dash
+
 const GAME_STATES = {
   LOBBY: "LOBBY",
   IN_PROGRESS: "IN_PROGRESS",
@@ -207,6 +218,10 @@ function createPlayersFromLobby(lobbyPlayers) {
     direction: null,
     poweredUp: false,
     poweredUpTicks: 0,
+    extraLivesAwarded: 0,
+    dashActiveTicks: 0,
+    dashCooldownTicks: 0,
+    dashing: false,
   }));
 }
 
@@ -248,6 +263,68 @@ function getLevelTransition(players, pellets, powerPellets) {
   if (pellets.length === 0 && powerPellets.length === 0) return "LEVEL_COMPLETE";
   // Otherwise the level continues.
   return null;
+}
+
+/**
+ * Determine whether a player should earn an extra life based on score.
+ * Classic arcade style: one extra life per EXTRA_LIFE_THRESHOLD points.
+ *
+ * @param {number} score - The player's current score.
+ * @param {number} lives - Current life count (for reference).
+ * @param {number} [threshold=EXTRA_LIFE_THRESHOLD] - Points per extra life.
+ * @returns {number} Number of new extra lives earned at the current score
+ *   (0 if no threshold has been crossed since creation).
+ */
+function extraLivesEarned(score, threshold = EXTRA_LIFE_THRESHOLD) {
+  if (score < threshold) return 0;
+  return Math.floor(score / threshold);
+}
+
+/**
+ * Update a player's dash state for one tick.
+ *
+ * The dash cycle is:
+ *   idle → (trigger) → active → (duration expires) → cooldown → idle
+ *
+ * @param {Object} player - Player object with dash fields.
+ * @param {boolean} [triggerDash=false] - Whether the player triggered a dash this tick.
+ * @returns {Object} A new player-like object with updated dash fields:
+ *   dashActiveTicks, dashCooldownTicks, dashing.
+ */
+function updateDashState(player, triggerDash = false) {
+  let active = player.dashActiveTicks || 0;
+  let cooldown = player.dashCooldownTicks || 0;
+
+  // Start a dash if triggered and fully idle (not active, not cooling down).
+  if (triggerDash && active <= 0 && cooldown <= 0) {
+    active = DASH_DURATION_TICKS;
+  }
+
+  // Tick down active duration.
+  if (active > 0) {
+    active--;
+    // When active expires, begin cooldown.
+    if (active === 0) {
+      cooldown = DASH_COOLDOWN_TICKS;
+    }
+  } else if (cooldown > 0) {
+    cooldown--;
+  }
+
+  return {
+    dashActiveTicks: active,
+    dashCooldownTicks: cooldown,
+    dashing: active > 0,
+  };
+}
+
+/**
+ * Get the effective speed multiplier for a player given their dash state.
+ * @param {Object} player - Player object with dash fields.
+ * @returns {number} 1.0 when idle, DASH_SPEED_MULTIPLIER when dashing.
+ */
+function dashSpeedMultiplier(player) {
+  return player.dashing ? DASH_SPEED_MULTIPLIER : 1.0;
 }
 
 /**
@@ -298,6 +375,10 @@ module.exports = {
   GAME_STATES,
   STARTING_POSITIONS,
   GHOST_SPAWN,
+  EXTRA_LIFE_THRESHOLD,
+  DASH_SPEED_MULTIPLIER,
+  DASH_DURATION_TICKS,
+  DASH_COOLDOWN_TICKS,
   isWall,
   moveEntity,
   distance,
@@ -308,6 +389,9 @@ module.exports = {
   randomDirection,
   checkGameOver,
   getLevelTransition,
+  extraLivesEarned,
+  updateDashState,
+  dashSpeedMultiplier,
   isValidDirection,
   buildGameStatePayload,
 };
