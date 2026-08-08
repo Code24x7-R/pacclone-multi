@@ -87,7 +87,7 @@ describe('updateDashState', () => {
   });
 
   test('cannot trigger during cooldown', () => {
-    let state = { dashActiveTicks: 0, dashCooldownTicks: 10 };
+    const state = { dashActiveTicks: 0, dashCooldownTicks: 10 };
     const result = updateDashState(state, true);
     // Cooldown ticks down, no dash starts.
     expect(result.dashing).toBe(false);
