@@ -31,6 +31,11 @@
 - Added 8 client tests in `tests/client/aboutModal.test.js`.
 - Verification: 322 tests pass, lint clean.
 
+### [REFACTOR] Lobby UI — two-column layout to eliminate scrollbars
+- Symptom: The lobby rendered all sections (title, name row, players, high scores, buttons, footer) in a single vertical column. With up to 10 high scores the total height exceeded the viewport, forcing a scrollbar that pushed the Single Player / Start Game buttons out of view.
+- Fix: Reorganized the lobby into a two-column flex layout. Left column (58%) holds the player list + action buttons; right column (42%) holds the high scores. The two lists sit side-by-side so height is shared rather than summed. Capped lobby high-score display at 6 entries (`renderHighScores` slices to `LOBBY_MAX_SCORES`) for a predictable, compact column. Tightened score-entry padding (5px), player-slot padding (7px), subtitle/button spacing, and widened the lobby (`min(720px, 94vw)`, `max-height: 96vh`) to fit comfortably without scrolling.
+- Verification: 349 tests pass, lint clean.
+
 ### [FEATURE] Lobby overhaul — warm rejoin, ready-up, countdown, reconnection grace (A–E)
 - Symptom: The lobby was a cold start every match (group dissolved on game over), there was no ready-up, no start countdown, and a disconnected player lost their slot permanently.
 - Fix (server): Introduced a stable `playerToken` (uuid) as player identity — decouples identity from the ephemeral WebSocket connection id so reconnects reclaim the slot. New protocol messages: `lobbyJoined` (echoes token), `toggleReady`, and enriched `lobbyState` (carries `ready` per player + `countdown` tick). New `COUNTDOWN` game state with a 3-2-1-GO before match start. Pure helpers in `src/gameLogic.js`: `rebuildLobbyFromMatch`, `areAllReady`, `togglePlayerReady`, `getCountdownTick`, `isWithinGracePeriod`, plus `COUNTDOWN_DURATION_MS`/`RECONNECT_GRACE_MS` constants.
