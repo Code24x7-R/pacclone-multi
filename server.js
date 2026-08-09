@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const { buildGameStatePayload, GAME_STATES, MAZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -627,6 +627,15 @@ wss.on('connection', (ws) => {
                 // Only update direction when one is provided. A dash-only input
                 // (direction === undefined/null) must not clear the current direction.
                 if (data.direction) {
+                    // Snap the perpendicular axis to the nearest corridor center on
+                    // every turn. Without this, turning at a non-half-tile offset
+                    // (e.g. x=1.8) leaves the player drifting off the pellet line,
+                    // and the offset compounds over multiple turns into visible drift.
+                    if (data.direction !== player.direction) {
+                        const snapped = snapPerpendicular(player.x, player.y, data.direction);
+                        player.x = snapped.x;
+                        player.y = snapped.y;
+                    }
                     player.direction = data.direction;
                 }
                 // Store dash trigger flag for the game loop to consume.

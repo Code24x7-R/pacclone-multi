@@ -424,6 +424,36 @@ function isValidDirection(dir) {
 }
 
 /**
+ * Snap the perpendicular axis to the nearest corridor center (half-tile).
+ *
+ * Pac-Man corridors are 1 tile wide, centered on half-tile coordinates
+ * (x.5 or y.5). Pellets are placed at tile centers (col+0.5, row+0.5).
+ * When the player turns, the axis perpendicular to the new direction must
+ * be at a half-tile so the sprite stays aligned with the pellet line.
+ *
+ * Without this snap, turning at e.g. x=1.8 while moving right leaves the
+ * player travelling up along x=1.8 — 0.3 tiles (12px) off the pellet line.
+ * After several turns the offset compounds into visible drift.
+ *
+ * @param {number} x - Current x in tile units.
+ * @param {number} y - Current y in tile units.
+ * @param {string} direction - The new direction ('up'|'down'|'left'|'right').
+ * @returns {{x: number, y: number}} Position with the perpendicular axis snapped.
+ */
+function snapPerpendicular(x, y, direction) {
+  // Nearest half-tile: round(x - 0.5) + 0.5 maps any value to n+0.5.
+  if (direction === 'up' || direction === 'down') {
+    // Vertical movement — snap X to nearest corridor center.
+    return { x: Math.round(x - 0.5) + 0.5, y: y };
+  }
+  if (direction === 'left' || direction === 'right') {
+    // Horizontal movement — snap Y to nearest corridor center.
+    return { x: x, y: Math.round(y - 0.5) + 0.5 };
+  }
+  return { x: x, y: y };
+}
+
+/**
  * Build the gameState payload sent from server to clients via WebSocket.
  *
  * This is the single source of truth for the wire format. It guarantees
@@ -482,5 +512,6 @@ module.exports = {
   updateDashState,
   dashSpeedMultiplier,
   isValidDirection,
+  snapPerpendicular,
   buildGameStatePayload,
 };

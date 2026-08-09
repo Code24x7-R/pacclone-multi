@@ -2,6 +2,22 @@
 
 <!-- Prefix each entry with [FEATURE], [BUGFIX], [REFACTOR], [INFRA], or [DOCS] -->
 
+## 2026-08-09
+
+### [BUGFIX] B-002 — player sprite drifts off pellet line after multiple turns
+- Symptom: After navigating the maze for ~4 turns, the player sprite visibly drifts off the pellet line — it appears to miss pellets or cross wall boundaries.
+- Root cause: The server let players turn at any coordinate, not just tile centers (half-tiles). When turning at e.g. x=1.8 while moving right, the perpendicular axis stayed at 1.8 instead of snapping to the corridor center (x=1.5). The player then travelled up along x=1.8 — 0.3 tiles (12px) off the pellet line. After several turns the offset compounds into visible drift.
+- Fix: Added `snapPerpendicular(x, y, direction)` to `src/gameLogic.js` — snaps the perpendicular axis to the nearest half-tile on every direction change. Vertical movement snaps X; horizontal movement snaps Y. Wired into the `server.js` input handler so it fires only when the direction actually changes.
+- Client: Added a 'P'-toggle debug overlay. Shows each player's tile position, corridor center, and drift (green <0.05, yellow <0.15, red otherwise). Draws a dashed corridor-center line and a crosshair at the actual sprite center — the gap between them makes any drift immediately visible.
+- Added 16 unit tests in `tests/server/snapPerpendicular.test.js` covering snap-up, snap-down, no-op when already centered, boundary coords, and a 4-turn drift-prevention scenario.
+- Verification: 254 tests pass, lint clean, 96.62% line / 88% branch coverage.
+
+### [BUGFIX] B-003 — player/ghost alignment, mobile overflow, player speed
+- Symptom: Player sprite misaligned with pellets; maze overflows phone screens; player speed feels slow vs the single-player reference.
+- Root cause: (1) Player radius was `TILE_SIZE/2.5` (16px) — too small to fill the corridor. (2) Canvas was fixed at 800x520 with no responsive CSS. (3) `PLAYER_SPEED` was 0.075 (4.5 tiles/s) vs the reference's 5 tiles/s.
+- Fix: (1) Changed player radius to `TILE_SIZE/2 - 2` (18px) matching the reference proportion. (2) Added responsive canvas CSS (`width: 100%`, `max-width: 800px`, `aspect-ratio: 800/520`, `touch-action: none`). (3) Bumped `PLAYER_SPEED` from 0.075 to 0.1 (6 tiles/s).
+- Verification: 238 tests pass, lint clean, coverage thresholds met.
+
 ## 2026-08-08
 
 ### [INFRA] Development environment setup & game logic extraction

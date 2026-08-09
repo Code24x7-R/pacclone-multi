@@ -374,6 +374,7 @@
         let gameOverSoundPlayed = false; // one-shot guard for game-over SFX
         let showNewHighScore = false; // overlay flag set on game-over
         let showHighScore = false; // overlay flag set on game-over
+        let showPosDebug = false; // press 'P' to toggle position-vs-pellet-line debug overlay
 
         // --- Smooth rendering loop ---
         // The server sends state at 60Hz, but rendering only on packet arrival
@@ -673,6 +674,13 @@
                     ws.send(JSON.stringify({ type: 'input', direction: lastDirection, dash: true }));
                     playDash();
                 }
+                return;
+            }
+            // Press 'P' to toggle the position debug overlay. This works even
+            // when spectating so you can inspect any player's alignment.
+            if (event.key === 'p' || event.key === 'P') {
+                showPosDebug = !showPosDebug;
+                event.preventDefault();
                 return;
             }
             if (!myPlayerId || isSpectating) { // Do not send input if spectating
@@ -1019,6 +1027,77 @@
                 } else {
                     ctx.fillStyle = '#0f0';
                     ctx.fillText('Dash ready [Shift]', 10, canvas.height - 10);
+                }
+            }
+
+            // --- Position debug overlay (toggle with 'P') ---
+            // Shows each player's tile position, the corridor center (half-tile)
+            // they should be on, and the drift (offset) between them. Helps verify
+            // that the perpendicular-axis snap on turns keeps sprites aligned with
+            // the pellet line. Green = on line (<0.05 tiles), yellow = minor drift,
+            // red = significant drift.
+            //
+            // Visual markers:
+            //   - Dashed line along the corridor center the player should be on.
+            //   - Crosshair at the player's actual sprite center.
+            //   - If the snap fix works, the crosshair sits on the line. Any gap
+            //     is drift made visible.
+            if (showPosDebug) {
+                ctx.font = '12px monospace';
+                ctx.textAlign = 'left';
+                ctx.save();
+                ctx.setLineDash([4, 4]);
+                players.forEach((p, idx) => {
+                    var isVertical = (p.direction === 'up' || p.direction === 'down');
+                    // The corridor center the player should be on for their current axis.
+                    var corridor = isVertical
+                        ? Math.round(p.x - 0.5) + 0.5  // moving vertically -> X must be half-tile
+                        : Math.round(p.y - 0.5) + 0.5; // moving horizontally -> Y must be half-tile
+                    var drift = isVertical
+                        ? Math.abs(p.x - corridor)
+                        : Math.abs(p.y - corridor);
+                    var color = drift < 0.05 ? '#0f0' : drift < 0.15 ? '#ff0' : '#f33';
+
+                    // Draw the corridor center line the player should be on.
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 1;
+                    if (isVertical) {
+                        // Vertical movement: corridor center is a vertical line at X.
+                        ctx.beginPath();
+                        ctx.moveTo(corridor * TILE_SIZE, 0);
+                        ctx.lineTo(corridor * TILE_SIZE, maze.length * TILE_SIZE);
+                        ctx.stroke();
+                    } else {
+                        // Horizontal movement: corridor center is a horizontal line at Y.
+                        ctx.beginPath();
+                        ctx.moveTo(0, corridor * TILE_SIZE);
+                        ctx.lineTo(maze[0].length * TILE_SIZE, corridor * TILE_SIZE);
+                        ctx.stroke();
+                    }
+
+                    // Draw a crosshair at the player's actual center.
+                    var px = p.x * TILE_SIZE;
+                    var py = p.y * TILE_SIZE;
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(px - 8, py);
+                    ctx.lineTo(px + 8, py);
+                    ctx.moveTo(px, py - 8);
+                    ctx.lineTo(px, py + 8);
+                    ctx.stroke();
+
+                    // Numeric readout.
+                    ctx.fillStyle = color;
+                    ctx.fillText(
+                        `${p.name || 'P' + (idx + 1)} pos=(${p.x.toFixed(2)},${p.y.toFixed(2)}) center=${corridor.toFixed(1)} drift=${drift.toFixed(3)}`,
+                        10, canvas.height - 50 - idx * 16
+                    );
+                });
+                ctx.restore();
+                if (players.length === 0) {
+                    ctx.fillStyle = '#888';
+                    ctx.fillText('(no players — press P to toggle)', 10, canvas.height - 50);
                 }
                 ctx.textAlign = 'left';
             }
