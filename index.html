@@ -54,6 +54,7 @@
         let myPlayerId = null;
         let currentPlayerName = '';
         let clientGameState = 'LOBBY'; // Client-side representation of game state
+        let isSpectating = false; // true when the player is out of lives and watching
         let lastScore = 0; // for chomp sound
         let lastPoweredUpState = false; // for power-up sound
         let lastGhostPositions = []; // for ghost eaten sound
@@ -150,8 +151,20 @@
                     console.log(`[SERVER] says: ${message.message}`);
                     myPlayerId = message.clientId; // Capture clientId from welcome message
                     break;
+                case 'playerAssigned':
+                    // Server tells us our player ID for the new game. This restores
+                    // the ID after a previous game where we may have been a spectator.
+                    myPlayerId = message.playerId;
+                    isSpectating = false;
+                    console.log(`[CLIENT] Assigned player ID: ${myPlayerId}`);
+                    break;
                 case 'lobbyState':
                     clientGameState = message.currentGameState;
+                    // Returning to lobby (e.g. after game over) clears spectating.
+                    if (clientGameState === 'LOBBY') {
+                        isSpectating = false;
+                        finalScoreRecorded = false;
+                    }
                     // Update lobby player list
                     playersList.innerHTML = '';
                     if (message.lobbyPlayers && message.lobbyPlayers.length > 0) {
@@ -275,7 +288,7 @@
                     break;
                                             case 'spectatorMode': // Handle spectatorMode message
                                                 clientGameState = 'SPECTATING';
-                                                myPlayerId = null; // Ensure client also knows it's no longer an active player
+                                                isSpectating = true; // Mark as spectating (keep myPlayerId set)
                                                 lobbyDiv.style.display = 'none';
                                                 canvas.style.display = 'block';
                                                 // Display a message to the user that they are spectating
@@ -307,12 +320,12 @@
                 shiftHeld = true;
                 event.preventDefault();
                 // Re-send current direction so the dash takes effect immediately.
-                if (myPlayerId && lastDirection) {
+                if (myPlayerId && !isSpectating && lastDirection) {
                     ws.send(JSON.stringify({ type: 'input', direction: lastDirection, dash: true }));
                 }
                 return;
             }
-            if (!myPlayerId) { // Do not send input if spectating
+            if (!myPlayerId || isSpectating) { // Do not send input if spectating
                 return;
             }
             let direction = null;
@@ -363,7 +376,7 @@
         window.addEventListener('gamepaddisconnected', (e) => gamepadHandler(e, false));
 
         function pollGamepads() {
-            if (!myPlayerId) { // Do not process gamepad input if spectating
+            if (!myPlayerId || isSpectating) { // Do not process gamepad input if spectating
                 requestAnimationFrame(pollGamepads);
                 return;
             }

@@ -128,12 +128,16 @@ function startGame() {
     }));
     lobbyPlayers = []; // Clear lobby after starting game
 
-    // Link WebSocket connections to player objects
+    // Link WebSocket connections to player objects.
+    // Tell each client its player ID so it can set myPlayerId (clients that
+    // were spectators in the previous game have myPlayerId = null and would
+    // otherwise be unable to send input).
     wss.clients.forEach(client => {
         if (client.lobbyPlayerId) {
             const player = players.find(p => p.id === client.lobbyPlayerId);
             if (player) {
                 client.playerId = player.id;
+                client.send(JSON.stringify({ type: 'playerAssigned', playerId: player.id }));
             }
         }
     });
@@ -476,6 +480,13 @@ function endMatch(winner) {
         currentMaze = MAZE;
         initializeGameState();
         currentGameState = GAME_STATES.LOBBY;
+        // Clear stale spectator references so they don't persist across matches.
+        spectators.length = 0;
+        // Reset playerId on all connections so the next game's playerAssigned
+        // message is the sole source of truth for client myPlayerId.
+        wss.clients.forEach(client => {
+            if (client.playerId) client.playerId = null;
+        });
         broadcastLobbyState();
     }, 5000);
 }
@@ -579,6 +590,16 @@ wss.on('connection', (ws) => {
 
         if (data.type === 'joinLobby') {
             if (currentGameState === GAME_STATES.LOBBY) {
+                // Dedup: if this connection already has a lobby entry, just update
+                // the name instead of creating a duplicate.
+                if (ws.lobbyPlayerId) {
+                    const existing = lobbyPlayers.find(lp => lp.id === ws.lobbyPlayerId);
+                    if (existing) {
+                        existing.name = data.name || existing.name;
+                        broadcastLobbyState();
+                        return;
+                    }
+                }
                 const newLobbyPlayer = { id: ws.id, name: data.name || `Player ${ws.id % 1000}` };
                 lobbyPlayers.push(newLobbyPlayer);
                 ws.lobbyPlayerId = newLobbyPlayer.id; // Store lobby player ID on websocket
@@ -651,7 +672,11 @@ function broadcastLobbyState() {
     });
 }
 
-const PORT = 8080;
-server.listen(PORT, () => {
+const PORT = process.env.PORT || 8080;
+if (require.main === module) {
+  server.listen(PORT, () => {
     console.log(`[SERVER] Listening on http://localhost:${PORT}`);
-});
+  });
+}
+
+module.exports = { server, app, wss };
