@@ -235,6 +235,93 @@ function randomDirection(dirs = DIRECTIONS) {
 }
 
 /**
+ * The four maze corners, derived from the active maze dimensions.
+ * These are the canonical respawn spots. Note: depending on the maze,
+ * some corners may be walls (filtered out at pick time).
+ * @param {number[][]} maze
+ * @returns {{x: number, y: number}[]}
+ */
+function getRespawnCorners(maze) {
+  const w = maze[0].length;
+  const h = maze.length;
+  return [
+    { x: 1.5, y: 1.5 }, // top-left
+    { x: w - 1.5, y: 1.5 }, // top-right
+    { x: 1.5, y: h - 1.5 }, // bottom-left
+    { x: w - 1.5, y: h - 1.5 }, // bottom-right
+  ];
+}
+
+/**
+ * Find the center of the nearest walkable tile to a target point.
+ * Searches outward in an expanding ring (up to `maxDist` tiles) so that a
+ * geometric corner landing on a wall snaps to the closest valid spawn tile.
+ * Ties are broken deterministically (smallest tileX, then smallest tileY).
+ * @param {number[][]} maze
+ * @param {number} x - Target x (tile units).
+ * @param {number} y - Target y (tile units).
+ * @param {number} [maxDist=4] - Maximum search radius in tiles.
+ * @returns {{x: number, y: number}} Center of the nearest walkable tile.
+ */
+function snapToWalkable(maze, x, y, maxDist = 4) {
+  const baseTX = Math.floor(x);
+  const baseTY = Math.floor(y);
+  for (let d = 0; d <= maxDist; d++) {
+    const candidates = [];
+    for (let dy = -d; dy <= d; dy++) {
+      for (let dx = -d; dx <= d; dx++) {
+        // Only the ring at distance d (avoid re-checking inner rings).
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== d) continue;
+        const tx = baseTX + dx;
+        const ty = baseTY + dy;
+        if (!isWall(tx + 0.5, ty + 0.5, maze)) {
+          candidates.push({ tx, ty, dist: Math.hypot(dx, dy) });
+        }
+      }
+    }
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => a.dist - b.dist || a.tx - b.tx || a.ty - b.ty);
+      return { x: candidates[0].tx + 0.5, y: candidates[0].ty + 0.5 };
+    }
+  }
+  // Fallback: return the original point (shouldn't happen in a valid maze).
+  return { x, y };
+}
+
+/**
+ * Pick a random walkable corner that no other player currently occupies.
+ *
+ * Respawning players used to always reset to (1.5, 1.5), stacking everyone
+ * on the top-left corner. This spreads them across the four corners and
+ * guarantees no two players spawn on the same tile.
+ *
+ * @param {Array<{x: number, y: number}>} occupied - Positions to avoid (other players).
+ * @param {number[][]} maze - The active maze (for dimensions + wall checks).
+ * @param {() => number} [rng=Math.random] - Injectable RNG for deterministic tests.
+ * @returns {{x: number, y: number}} The chosen respawn position.
+ */
+function pickRespawnPosition(occupied, maze, rng = Math.random) {
+  // Snap each geometric corner to the nearest walkable tile so respawn
+  // always lands on a valid spot, even if the literal corner is a wall.
+  const corners = getRespawnCorners(maze).map(c => snapToWalkable(maze, c.x, c.y));
+  // De-duplicate corners that snapped to the same tile (small/odd mazes).
+  const seen = new Set();
+  const walkable = corners.filter(c => {
+    const key = `${c.x},${c.y}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  // Exclude corners occupied by another player (within 0.5 tiles).
+  const free = walkable.filter(
+    c => !occupied.some(o => Math.hypot(o.x - c.x, o.y - c.y) < 0.5)
+  );
+  // If every corner is taken (shouldn't happen with <=4 players), fall back.
+  const pool = free.length > 0 ? free : walkable;
+  return pool[Math.floor(rng() * pool.length)];
+}
+
+/**
  * Check win/loss conditions.
  * @param {Array} players - Active players.
  * @param {Array} pellets - Remaining pellets.
@@ -387,6 +474,8 @@ module.exports = {
   createInitialState,
   createPlayersFromLobby,
   randomDirection,
+  getRespawnCorners,
+  pickRespawnPosition,
   checkGameOver,
   getLevelTransition,
   extraLivesEarned,

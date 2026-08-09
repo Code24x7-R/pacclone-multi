@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const { buildGameStatePayload, GAME_STATES, MAZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -274,9 +274,15 @@ function gameLoop() {
                             players.splice(eatenPlayerIndex, 1);
                         }
                     } else {
-                        // Respawn otherPlayer
-                        otherPlayer.x = 1.5; // Or some other safe respawn point
-                        otherPlayer.y = 1.5;
+                        // Respawn otherPlayer in a random free corner (not on top
+                        // of another player). Excludes otherPlayer from the occupied
+                        // set since they are still in the players array.
+                        const occupied = players
+                            .filter(p => p.id !== otherPlayer.id)
+                            .map(p => ({ x: p.x, y: p.y }));
+                        const pos = pickRespawnPosition(occupied, currentMaze);
+                        otherPlayer.x = pos.x;
+                        otherPlayer.y = pos.y;
                         otherPlayer.poweredUp = false; // Lose power-up on respawn
                         // Reset dash state on respawn.
                         otherPlayer.dashActiveTicks = 0;
@@ -426,8 +432,15 @@ function gameLoop() {
                         }
                         players.splice(playerIndex, 1);
                     } else {
-                        player.x = 1.5;
-                        player.y = 1.5;
+                        // Respawn player in a random free corner (not on top of
+                        // another player). Excludes player from the occupied set
+                        // since they are still in the players array.
+                        const occupied = players
+                            .filter(p => p.id !== player.id)
+                            .map(p => ({ x: p.x, y: p.y }));
+                        const pos = pickRespawnPosition(occupied, currentMaze);
+                        player.x = pos.x;
+                        player.y = pos.y;
                         // Reset dash state on respawn.
                         player.dashActiveTicks = 0;
                         player.dashing = false;
