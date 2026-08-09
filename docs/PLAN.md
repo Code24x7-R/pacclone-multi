@@ -16,6 +16,7 @@
 | 2 | Frightened state visuals (blue body, white flash, eaten eyes) | ✅ | `a81d827` |
 | 3 | Procedural maze generation + level progression | ✅ | `afd8f3c` |
 | 4 | Polish: extra lives, dash, high scores | ✅ | `42b3063` |
+| 5 | Lobby overhaul: warm rejoin, ready-up, countdown, reconnection grace | ✅ | — |
 
 ## Notes
 

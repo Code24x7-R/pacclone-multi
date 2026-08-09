@@ -159,6 +159,18 @@
             border: 1.5px solid rgba(255,60,60,0.4);
         }
         .btn-leave:hover { background: rgba(255,60,60,0.3); color: #ff9b9b; border-color: #ff6b6b; }
+        .btn-ready {
+            background: rgba(74,224,128,0.15);
+            color: #4ade80;
+            border: 1.5px solid rgba(74,224,128,0.4);
+        }
+        .btn-ready:hover { background: rgba(74,224,128,0.3); color: #7aedad; border-color: #4ade80; }
+        .btn-ready.active {
+            background: rgba(74,224,128,0.35);
+            color: #fff;
+            border-color: #4ade80;
+            box-shadow: 0 0 14px rgba(74,224,128,0.4);
+        }
         .btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
         /* --- Start button (prominent) --- */
@@ -261,6 +273,46 @@
             background: rgba(0,229,255,0.15);
             color: var(--accent2);
         }
+        .player-ready {
+            font-size: 0.68rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.06);
+            color: var(--text-dim);
+            white-space: nowrap;
+        }
+        .player-ready.is-ready {
+            background: rgba(74,224,128,0.18);
+            color: #4ade80;
+        }
+
+        /* --- Countdown overlay (feature D) --- */
+        .countdown-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 20;
+        }
+        .countdown-number {
+            font-size: 7rem;
+            font-weight: 800;
+            color: var(--accent);
+            text-shadow: 0 0 30px rgba(255,230,0,0.6), 0 0 60px rgba(255,230,0,0.3);
+            opacity: 0;
+        }
+        .countdown-pop {
+            animation: countdownPop 0.9s ease-out;
+        }
+        @keyframes countdownPop {
+            0% { opacity: 0; transform: scale(0.4); }
+            25% { opacity: 1; transform: scale(1.15); }
+            70% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0.85; transform: scale(1); }
+        }
 
         /* --- High scores --- */
         .scores-list {
@@ -325,6 +377,7 @@
         <div class="name-row">
             <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="16">
             <button id="joinLobbyButton" class="btn btn-yellow">Join</button>
+            <button id="readyButton" class="btn btn-ready" style="display: none;">Ready</button>
         </div>
 
         <div class="section-h">Players · up to 4</div>
@@ -335,6 +388,11 @@
 
         <button id="startGameButton" class="btn btn-start" disabled>Start Game</button>
         <div id="hostStatus"></div>
+
+        <!-- Countdown overlay (feature D): shown during COUNTDOWN state. -->
+        <div id="countdownOverlay" class="countdown-overlay" style="display: none;">
+            <div id="countdownNumber" class="countdown-number">3</div>
+        </div>
 
         <div class="lobby-footer">
             <button id="muteButton" class="btn btn-ghost">Mute</button>
@@ -367,8 +425,10 @@
         const LOBBY_SLOT_COLORS = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
         const LOBBY_SLOT_NAMES = ['yellow', 'lime', 'cyan', 'magenta'];
         let myPlayerId = null;
+        let myToken = null; // stable identity token echoed by server on join; persists across reconnects
         let currentPlayerName = '';
         let hasJoinedLobby = false; // true once this client has joined the lobby
+        let isReady = false; // true once this client has toggled ready (feature C)
         let clientGameState = 'LOBBY'; // Client-side representation of game state
         let isSpectating = false; // true when the player is out of lives and watching
         let lastScore = 0; // for chomp sound
@@ -407,31 +467,40 @@
             canvas.style.display = 'none';
             setLeaveButtonVisible(false);
             clientGameState = 'LOBBY';
-            // Reset per-game UI state.
+            // Reset per-game UI state. Returning to the lobby means starting
+            // fresh: not ready, no countdown showing.
             lastScore = 0;
             lastLives = 0;
             lastPoweredUpState = false;
             gameOverSoundPlayed = false;
             finalScoreRecorded = false;
+            isReady = false;
+            renderCountdown(null, 'LOBBY');
             // Re-render the lobby with the server's current player list.
             const lp = message.lobbyPlayers || [];
             const count = renderLobbyPlayers(lp);
             renderHighScores(document.getElementById('highScoresList'));
-            hasJoinedLobby = lp.some(p => p.id === myPlayerId);
+            // Match on stable token (falls back to clientId).
+            const lobbyIdentity = myToken || myPlayerId;
+            hasJoinedLobby = lp.some(p => p.id === lobbyIdentity);
             renderJoinState();
             // Reflect host/start-button state for the lobby we're returning to.
-            const isHost = lp.length > 0 && lp[0].id === myPlayerId;
-            startGameButton.disabled = !(isHost && lp.length >= 1);
+            // On a fresh lobby no one is ready yet, so Start stays disabled.
+            const isHost = lp.length > 0 && lp[0].id === lobbyIdentity;
+            const allReady = lp.length > 0 && lp.every((p) => p.ready);
+            startGameButton.disabled = !(isHost && allReady);
             if (count > 0) {
                 if (isHost) {
-                    hostStatus.textContent = 'You are the host — press Start Game when ready.';
-                    hostStatus.style.color = '#4ade80';
+                    hostStatus.textContent = allReady
+                        ? 'You are the host — press Start Game!'
+                        : 'You are the host — waiting for everyone to ready up…';
+                    hostStatus.style.color = allReady ? '#4ade80' : '#fbbf24';
                 } else {
-                    hostStatus.textContent = `Host: ${lp[0].name} — waiting for them to start the game.`;
+                    hostStatus.textContent = `Host: ${lp[0].name} — waiting for players to ready up…`;
                     hostStatus.style.color = '#fbbf24';
                 }
             } else {
-                hostStatus.textContent = 'Waiting for players to join...';
+                hostStatus.textContent = 'Waiting for players to join…';
                 hostStatus.style.color = '#aaa';
             }
         }
@@ -474,16 +543,42 @@
                         tag.textContent = 'Host';
                         li.appendChild(tag);
                     }
-                    if (p.id === myPlayerId) {
+                    // Tag our own slot by stable token (falls back to clientId).
+                    if (p.id === (myToken || myPlayerId)) {
                         const tag = document.createElement('span');
                         tag.className = 'player-tag you';
                         tag.textContent = 'You';
                         li.appendChild(tag);
                     }
+                    // Ready indicator (feature C): a checkmark when readied.
+                    const ready = document.createElement('span');
+                    ready.className = 'player-ready' + (p.ready ? ' is-ready' : '');
+                    ready.textContent = p.ready ? '✓ Ready' : 'Not ready';
+                    li.appendChild(ready);
                 }
                 playersList.appendChild(li);
             }
             return lobbyCount;
+        }
+
+        // Countdown overlay (feature D): shows a large 3 / 2 / 1 during the
+        // COUNTDOWN state, then "GO!" briefly before the match begins. The server
+        // sends the current tick in lobbyState.countdown (3/2/1); when the state
+        // leaves COUNTDOWN the overlay is hidden.
+        function renderCountdown(countdown, state) {
+            const overlay = document.getElementById('countdownOverlay');
+            const number = document.getElementById('countdownNumber');
+            if (state !== 'COUNTDOWN' || countdown === null || countdown === undefined) {
+                overlay.style.display = 'none';
+                return;
+            }
+            overlay.style.display = 'flex';
+            // countdown tick is 3, 2, or 1.
+            number.textContent = countdown > 0 ? String(countdown) : 'GO!';
+            number.classList.remove('countdown-pop');
+            // Force reflow so the pop animation restarts on each tick.
+            void number.offsetWidth;
+            number.classList.add('countdown-pop');
         }
 
         function startRenderLoop() {
@@ -514,24 +609,33 @@
             ).join('');
         }
 
-        // Reflect lobby-join state in the UI: once joined, lock the name input
-        // and swap the Join button for a "Joined" confirmation. This gives clear
-        // feedback that the join landed and prevents duplicate joins.
+        // Reflect lobby-join state in the UI: once joined, lock the name input,
+        // hide the Join button, and reveal the Ready toggle (feature C). The
+        // ready button reflects this client's current ready flag.
         function renderJoinState() {
+            const readyButton = document.getElementById('readyButton');
             if (hasJoinedLobby) {
                 playerNameInput.disabled = true;
                 playerNameInput.style.opacity = '0.6';
-                joinLobbyButton.textContent = 'Joined ✓';
-                joinLobbyButton.disabled = true;
-                joinLobbyButton.classList.remove('btn-yellow');
-                joinLobbyButton.classList.add('btn-cyan');
+                joinLobbyButton.style.display = 'none';
+                readyButton.style.display = 'inline-block';
+                // Reflect ready state on the button.
+                if (isReady) {
+                    readyButton.textContent = 'Ready ✓';
+                    readyButton.classList.add('active');
+                } else {
+                    readyButton.textContent = 'Ready';
+                    readyButton.classList.remove('active');
+                }
             } else {
                 playerNameInput.disabled = false;
                 playerNameInput.style.opacity = '';
+                joinLobbyButton.style.display = 'inline-block';
                 joinLobbyButton.textContent = 'Join';
                 joinLobbyButton.disabled = false;
                 joinLobbyButton.classList.remove('btn-cyan');
                 joinLobbyButton.classList.add('btn-yellow');
+                readyButton.style.display = 'none';
             }
         }
 
@@ -571,12 +675,21 @@
 
         ws.onopen = () => {
             console.log('[CLIENT] Connected to server.');
-            // When connected, if there's a stored player name, pre-fill it
+            // Pre-fill the stored player name.
             const storedPlayerName = localStorage.getItem('pacclonePlayerName');
             if (storedPlayerName) {
                 playerNameInput.value = storedPlayerName;
             }
-            // Do NOT automatically join lobby here. Wait for lobbyState from server.
+            // Reconnection (feature E): if we have a stored token from a previous
+            // join, re-present it to reclaim our lobby slot (or in-progress match
+            // slot, handled server-side). This restores identity transparently
+            // after a dropped connection.
+            const storedToken = localStorage.getItem('pacclonePlayerToken');
+            if (storedToken && storedPlayerName) {
+                myToken = storedToken;
+                console.log('[CLIENT] Reconnecting with stored token.');
+                ws.send(JSON.stringify({ type: 'joinLobby', name: storedPlayerName, token: storedToken }));
+            }
         };
 
         // NEW: Event Listeners for Lobby Buttons
@@ -586,10 +699,21 @@
             if (playerName) {
                 localStorage.setItem('pacclonePlayerName', playerName); // Store name
                 currentPlayerName = playerName;
-                ws.send(JSON.stringify({ type: 'joinLobby', name: playerName }));
+                // Include our token if we have one (reconnect → reclaim slot).
+                const payload = { type: 'joinLobby', name: playerName };
+                if (myToken) payload.token = myToken;
+                ws.send(JSON.stringify(payload));
             } else {
                 alert('Please enter your name to join the lobby.');
             }
+        });
+
+        // Ready toggle (feature C): after joining, the player readies up. The host
+        // can only start once everyone is ready. The button text reflects state.
+        const readyButton = document.getElementById('readyButton');
+        readyButton.addEventListener('click', () => {
+            ensureAudio();
+            ws.send(JSON.stringify({ type: 'toggleReady' }));
         });
 
         startGameButton.addEventListener('click', () => {
@@ -624,6 +748,15 @@
                     console.log(`[SERVER] says: ${message.message}`);
                     myPlayerId = message.clientId; // Capture clientId from welcome message
                     break;
+                case 'lobbyJoined':
+                    // Server echoes our stable token on a fresh join. Persist it so
+                    // a later reconnect (feature E) can reclaim our slot.
+                    if (message.token) {
+                        myToken = message.token;
+                        localStorage.setItem('pacclonePlayerToken', message.token);
+                        console.log('[CLIENT] Received token:', message.token.slice(0, 8) + '…');
+                    }
+                    break;
                 case 'playerAssigned':
                     // Server tells us our player ID for the new game. This restores
                     // the ID after a previous game where we may have been a spectator.
@@ -634,51 +767,72 @@
                 case 'lobbyState':
                     clientGameState = message.currentGameState;
                     // Returning to lobby (e.g. after game over) clears spectating.
-                    if (clientGameState === 'LOBBY') {
+                    if (clientGameState === 'LOBBY' || clientGameState === 'COUNTDOWN') {
                         isSpectating = false;
                         finalScoreRecorded = false;
                     }
                     // Update lobby player list — render all 4 slots color-coded.
-                    // Filled slots show the player's color, name, and a Host/You tag.
-                    // Empty slots show "Waiting for player..." as a dashed placeholder.
+                    // Filled slots show the player's color, name, Host/You tag, and a
+                    // ready indicator (feature C).
                     const lobbyCount = renderLobbyPlayers(message.lobbyPlayers);
                     // Refresh high score display whenever we return to lobby.
                     renderHighScores(document.getElementById('highScoresList'));
+                    // Lobby identity is the stable token, NOT the connection clientId
+                    // (which changes on every reconnect). Match on myToken so a
+                    // returning client still recognises its slot.
+                    const lobbyIdentity = myToken || myPlayerId;
                     // Track whether this client is in the lobby so the Join UI can
                     // lock into a "Joined" confirmation state.
                     hasJoinedLobby = message.lobbyPlayers
-                        ? message.lobbyPlayers.some(p => p.id === myPlayerId)
+                        ? message.lobbyPlayers.some(p => p.id === lobbyIdentity)
                         : false;
+                    // Track our own ready flag from the server's authoritative list so
+                    // the Ready button reflects reality (e.g. after a reconnect).
+                    if (message.lobbyPlayers) {
+                        const me = message.lobbyPlayers.find((p) => p.id === lobbyIdentity);
+                        isReady = me ? !!me.ready : false;
+                    }
                     renderJoinState();
                     if (lobbyCount > 0) {
-                        // Assume the first player in the lobby is the host
-                        const isHost = (message.lobbyPlayers[0].id === myPlayerId);
-                        startGameButton.disabled = !(isHost && message.lobbyPlayers.length >= 1); // Enable if host and at least 1 player
+                        // The first player in the lobby is the host.
+                        const isHost = (message.lobbyPlayers[0].id === lobbyIdentity);
+                        // Start is enabled only for the host AND only once every player
+                        // has readied up (feature C). The server also enforces this.
+                        const allReady = message.lobbyPlayers.every((p) => p.ready);
+                        startGameButton.disabled = !(isHost && allReady);
 
-                        // UI feedback: tell players who the host is and who can start
+                        // UI feedback: tell players who the host is and who can start.
                         if (isHost) {
-                            hostStatus.textContent = 'You are the host — press Start Game when ready.';
-                            hostStatus.style.color = '#4ade80'; // green
+                            hostStatus.textContent = allReady
+                                ? 'You are the host — press Start Game!'
+                                : 'You are the host — waiting for everyone to ready up…';
+                            hostStatus.style.color = allReady ? '#4ade80' : '#fbbf24';
                         } else {
                             const hostName = message.lobbyPlayers[0].name;
-                            hostStatus.textContent = `Host: ${hostName} — waiting for them to start the game.`;
-                            hostStatus.style.color = '#fbbf24'; // amber
+                            hostStatus.textContent = allReady
+                                ? `Host: ${hostName} — ready to start!`
+                                : `Host: ${hostName} — waiting for players to ready up…`;
+                            hostStatus.style.color = '#fbbf24';
                         }
                     } else {
                         startGameButton.disabled = true;
-                        hostStatus.textContent = 'Waiting for players to join...';
+                        hostStatus.textContent = 'Waiting for players to join…';
                         hostStatus.style.color = '#aaa';
                     }
-                    // NEW: Explicitly manage UI visibility based on currentGameState
-                    if (clientGameState === 'LOBBY') {
+                    // Manage UI visibility. Both LOBBY and COUNTDOWN show the lobby
+                    // (with a countdown overlay during COUNTDOWN); the game canvas is
+                    // shown only during actual play / game-over / level-complete.
+                    if (clientGameState === 'LOBBY' || clientGameState === 'COUNTDOWN') {
                          lobbyDiv.style.display = 'flex';
                          canvas.style.display = 'none';
                          setLeaveButtonVisible(false);
-                    } else { // If we receive lobbyState while not in LOBBY, e.g., during IN_PROGRESS for some reason
+                    } else {
                          lobbyDiv.style.display = 'none';
                          canvas.style.display = 'block';
                          setLeaveButtonVisible(true);
                     }
+                    // Countdown overlay (feature D): render the 3-2-1-GO during COUNTDOWN.
+                    renderCountdown(message.countdown, clientGameState);
                     break;
                 case 'gameState':
                     console.log('[CLIENT] GameState received. Current State:', clientGameState, 'My Player ID:', myPlayerId);
@@ -696,6 +850,8 @@
                         lobbyDiv.style.display = 'none';
                         canvas.style.display = 'block';
                         setLeaveButtonVisible(true);
+                        // Match has started (or is ending) — hide the countdown overlay.
+                        renderCountdown(null, clientGameState);
 
                         // Store the latest server state; the rAF render loop draws it.
                         latestServerState = message.gameState;

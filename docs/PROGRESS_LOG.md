@@ -4,6 +4,18 @@
 
 ## 2026-08-09
 
+### [FEATURE] Lobby overhaul — warm rejoin, ready-up, countdown, reconnection grace (A–E)
+- Symptom: The lobby was a cold start every match (group dissolved on game over), there was no ready-up, no start countdown, and a disconnected player lost their slot permanently.
+- Fix (server): Introduced a stable `playerToken` (uuid) as player identity — decouples identity from the ephemeral WebSocket connection id so reconnects reclaim the slot. New protocol messages: `lobbyJoined` (echoes token), `toggleReady`, and enriched `lobbyState` (carries `ready` per player + `countdown` tick). New `COUNTDOWN` game state with a 3-2-1-GO before match start. Pure helpers in `src/gameLogic.js`: `rebuildLobbyFromMatch`, `areAllReady`, `togglePlayerReady`, `getCountdownTick`, `isWithinGracePeriod`, plus `COUNTDOWN_DURATION_MS`/`RECONNECT_GRACE_MS` constants.
+  - **A. Warm rejoin**: `endMatch()` rebuilds `lobbyPlayers` from the finished match (winner first = new host) instead of resetting to an empty lobby. Tokens preserved so returning clients recognize their slot.
+  - **B. Play Again**: natural result of A+C+D — the group stays together, readies up, host starts.
+  - **C. Ready-up**: `toggleReady` toggles a player's ready flag; host's Start enables only when all ready (server-authoritative gate). `areAllReady`/`togglePlayerReady` are pure and tested.
+  - **D. Countdown**: `beginCountdown()` broadcasts ticks 3→2→1 then calls `startGame()`. `getCountdownTick` maps elapsed ms to the display number.
+  - **E. Reconnection grace**: on disconnect mid-match, the player is marked `disconnected` (not removed) and a 15s grace timer starts. Re-presenting the token within the window restores the slot (`isWithinGracePeriod`). Grace expiry removes the player. `cancelPendingLobbyReset()` prevents stale reset timers from disrupting new matches.
+- Fix (client): stores the token in localStorage and re-sends it on reconnect; added a Ready toggle button with active state; Start button gated on host + all-ready; countdown overlay (3/2/1/GO with pop animation) shown during COUNTDOWN; lobby identity matched on token (not connection id).
+- Added 25 unit tests in `tests/server/lobbyHelpers.test.js`, 6 client protocol tests in `tests/client/lobbyProtocol.test.js`, and 1 grace-period integration test in `tests/integration/rejoin.test.js`. Updated existing integration tests for the new ready-up + countdown flow.
+- Verification: 314 tests pass, lint clean.
+
 ### [FEATURE] Return to lobby — players can leave a game mid-match
 - Symptom: Once in a game, a player had no way to return to the lobby (no manual quit). A player out of lives was forced to spectate until the match ended; a player who wanted to quit had no option.
 - Fix: Added a `leaveGame` WebSocket message (client → server) and a `returnToLobby` response (server → client). Server handler `handleLeaveGame(ws)`: removes the player from `players[]` (or `spectators[]` if spectating), clears `ws.playerId`, re-adds the connection to `lobbyPlayers` (preserving their name via `ws.playerName`), and sends `returnToLobby` to the leaving client. If the game is in progress and the leave drops the player count below 2, `endMatch` fires for the last player. Client: added `handleReturnToLobby()` (resets UI/state, re-renders lobby), `leaveGame()` (sends the message), Escape key binding, and a visible "Leave Game" button (top-right overlay, shown during gameplay/spectating, hidden in lobby). New `renderLobbyPlayers()` shared helper used by both `lobbyState` and `returnToLobby` handlers.

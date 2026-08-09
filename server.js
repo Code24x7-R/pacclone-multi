@@ -3,7 +3,11 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX } = require('./src/gameLogic');
+const crypto = require('crypto');
+
+// Generate a stable, unique player token (used as the player's persistent
+// identity across reconnects). 128-bit uuid — collision risk is negligible.
+const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -58,6 +62,28 @@ let currentGameState = GAME_STATES.LOBBY;
 let lobbyPlayers = []; // Array to hold players in the lobby
 const spectators = []; // Array to hold WebSocket connections of players in spectator mode
 
+// Reconnection grace timers, keyed by player id (token). When a player
+// disconnects mid-match, a timer is set; if they reconnect before it fires,
+// the timer is cleared and their slot is restored.
+const graceTimers = new Map();
+
+// The pending endMatch → LOBBY reset timer. Tracked so it can be cancelled
+// when a new match begins or all clients disconnect — otherwise a stale reset
+// can fire mid-match or leak across test runs.
+let pendingLobbyResetTimer = null;
+
+function cancelPendingLobbyReset() {
+    if (pendingLobbyResetTimer) {
+        clearTimeout(pendingLobbyResetTimer);
+        pendingLobbyResetTimer = null;
+    }
+}
+
+// Countdown state: when set, holds the timestamps (ms) of the remaining
+// countdown ticks so they can be cancelled if a player un-readies / leaves.
+let countdownTimers = [];
+let countdownStart = 0;
+
 function initializeGameState() {
     players = [];
     pellets = [];
@@ -91,9 +117,16 @@ function initializeGameState() {
 initializeGameState();
 
 function startGame() {
-    if (currentGameState !== GAME_STATES.LOBBY) {
-        return; // Game can only start from LOBBY state
+    // A match can begin from LOBBY (direct) or from COUNTDOWN (the countdown
+    // completion timer calls this). Any other state means something is wrong.
+    if (currentGameState !== GAME_STATES.LOBBY && currentGameState !== GAME_STATES.COUNTDOWN) {
+        return;
     }
+    // If arriving from a countdown, the countdown timers are already scheduled
+    // to fire into this function; clear any stragglers defensively.
+    countdownTimers.forEach((t) => clearTimeout(t));
+    countdownTimers = [];
+    countdownStart = 0;
 
     currentGameState = GAME_STATES.IN_PROGRESS;
     initializeGameState(); // Resets pellets, power pellets, and ghosts
@@ -109,7 +142,7 @@ function startGame() {
     ];
 
     players = lobbyPlayers.map((lp, index) => ({
-        id: lp.id,
+        id: lp.id, // === the stable token, so reconnecting clients can reclaim this slot
         name: lp.name,
         x: startingPositions[index % startingPositions.length].x,
         y: startingPositions[index % startingPositions.length].y,
@@ -152,6 +185,43 @@ function startGame() {
     // The gameLoop will immediately broadcast gameState
 }
 
+// --- Countdown (feature D): a brief 3-2-1 before the match begins ---
+// The host triggers this instead of an immediate start. It broadcasts a
+// `lobbyState` with currentGameState === COUNTDOWN and a `countdown` tick so
+// clients can render the 3-2-1-GO. When the timer fires, the real match starts.
+// If a player un-readies or disconnects during the countdown, cancelCountdown
+// returns everyone to the LOBBY state.
+function beginCountdown() {
+    if (currentGameState !== GAME_STATES.LOBBY) return;
+    currentGameState = GAME_STATES.COUNTDOWN;
+    countdownStart = Date.now();
+    broadcastLobbyState(); // tick 3
+    // Schedule the 2, 1, and GO ticks.
+    countdownTimers.push(setTimeout(() => {
+        if (currentGameState === GAME_STATES.COUNTDOWN) broadcastLobbyState(); // tick 2
+    }, 1000));
+    countdownTimers.push(setTimeout(() => {
+        if (currentGameState === GAME_STATES.COUNTDOWN) broadcastLobbyState(); // tick 1
+    }, 2000));
+    countdownTimers.push(setTimeout(() => {
+        if (currentGameState === GAME_STATES.COUNTDOWN) {
+            countdownTimers = [];
+            countdownStart = 0;
+            startGame();
+        }
+    }, COUNTDOWN_DURATION_MS));
+}
+
+function cancelCountdown() {
+    countdownTimers.forEach((t) => clearTimeout(t));
+    countdownTimers = [];
+    if (currentGameState === GAME_STATES.COUNTDOWN) {
+        currentGameState = GAME_STATES.LOBBY;
+        countdownStart = 0;
+        broadcastLobbyState();
+    }
+}
+
 function isWall(x, y, maze = currentMaze) {
     const tileX = Math.floor(x);
     const tileY = Math.floor(y);
@@ -173,6 +243,11 @@ function gameLoop() {
     }
     // Player movement and pellet collision
     players.forEach(player => {
+        // Skip disconnected players (grace period, feature E). They remain in
+        // the array so their slot is reserved, but they don't move or act
+        // until they reconnect or the grace window expires.
+        if (player.disconnected) return;
+
         // Tick down power-up timer (avoids setTimeout + circular JSON)
         if (player.poweredUp && player.poweredUpTicks > 0) {
             player.poweredUpTicks--;
@@ -268,6 +343,7 @@ function gameLoop() {
         // Player collision with other players
         players.forEach(otherPlayer => {
             if (player.id === otherPlayer.id) return; // Don't check collision with self
+            if (otherPlayer.disconnected) return; // Skip players in grace period
 
             const dist = Math.hypot(player.x - otherPlayer.x, player.y - otherPlayer.y);
             if (dist < 0.5) { // Collision detected
@@ -420,6 +496,7 @@ function gameLoop() {
 
         // Player collision
         players.forEach((player, playerIndex) => {
+            if (player.disconnected) return; // Skip players in grace period
             const dist = Math.hypot(player.x - ghost.x, player.y - ghost.y);
             if (dist < 0.5) {
                 if (ghost.eaten) return; // Already eaten, skip
@@ -474,6 +551,14 @@ function gameLoop() {
     }
 
     // Broadcast state to all clients
+    broadcastGameState();
+}
+
+/**
+ * Broadcast the current game state to every connected client.
+ * Extracted so grace-period expiry and match-end can reuse it.
+ */
+function broadcastGameState() {
     const gameState = buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, currentGameState, currentLevel);
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
@@ -499,17 +584,32 @@ function endMatch(winner) {
         }
     });
     // After a delay, reset to lobby.
-    setTimeout(() => {
+    cancelPendingLobbyReset();
+    pendingLobbyResetTimer = setTimeout(() => {
+        pendingLobbyResetTimer = null;
+        // Capture the match players BEFORE initializeGameState() clears them,
+        // so the warm-rejoin lobby can be rebuilt from the finished match.
+        const matchPlayers = [...players];
+        const winnerId = winner ? winner.id : null;
         currentLevel = 1;
         currentMaze = MAZE;
         initializeGameState();
         currentGameState = GAME_STATES.LOBBY;
         // Clear stale spectator references so they don't persist across matches.
         spectators.length = 0;
-        // Reset playerId on all connections so the next game's playerAssigned
-        // message is the sole source of truth for client myPlayerId.
+        // Warm rejoin (feature A): rebuild the lobby from the just-finished
+        // match so the group stays together for a rematch. The winner is placed
+        // first (becomes the new host). Player ids ARE their stable tokens, so
+        // reconnecting clients will recognize their slot. Everyone starts
+        // not-ready so the group must ready up again.
+        lobbyPlayers = rebuildLobbyFromMatch(matchPlayers, winnerId);
+        // Re-link any still-connected client to their rebuilt lobby slot by token.
         wss.clients.forEach(client => {
             if (client.playerId) client.playerId = null;
+            if (client.playerToken) {
+                const match = lobbyPlayers.find(lp => lp.id === client.playerToken);
+                if (match) client.lobbyPlayerId = match.id;
+            }
         });
         broadcastLobbyState();
     }, 5000);
@@ -613,26 +713,74 @@ wss.on('connection', (ws) => {
         const data = JSON.parse(message);
 
         if (data.type === 'joinLobby') {
-            if (currentGameState === GAME_STATES.LOBBY) {
-                // Dedup: if this connection already has a lobby entry, just update
-                // the name instead of creating a duplicate.
-                if (ws.lobbyPlayerId) {
-                    const existing = lobbyPlayers.find(lp => lp.id === ws.lobbyPlayerId);
-                    if (existing) {
-                        existing.name = data.name || existing.name;
-                        broadcastLobbyState();
-                        return;
-                    }
+            // --- Reconnection to an in-progress match (grace period) ---
+            // If a match is running and this token matches a disconnected player
+            // still within the grace window, restore that slot instead of joining the lobby.
+            if (currentGameState === GAME_STATES.IN_PROGRESS && data.token) {
+                const player = players.find(p => p.id === data.token && p.disconnected);
+                if (player && isWithinGracePeriod(player.disconnectedAt, Date.now())) {
+                    player.disconnected = false;
+                    player.disconnectedAt = null;
+                    const timer = graceTimers.get(player.id);
+                    if (timer) { clearTimeout(timer); graceTimers.delete(player.id); }
+                    ws.playerId = player.id;
+                    ws.playerToken = player.id;
+                    console.log(`[SERVER] ${player.name} reconnected to the match.`);
+                    // Send the reconnecting client its identity + a fresh state snapshot.
+                    ws.send(JSON.stringify({ type: 'playerAssigned', playerId: player.id }));
+                    ws.send(JSON.stringify({
+                        type: 'gameState',
+                        gameState: buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, currentGameState, currentLevel),
+                    }));
+                    broadcastGameState();
+                    return;
                 }
-                const newLobbyPlayer = { id: ws.id, name: data.name || `Player ${ws.id % 1000}` };
-                lobbyPlayers.push(newLobbyPlayer);
-                ws.lobbyPlayerId = newLobbyPlayer.id; // Store lobby player ID on websocket
-                ws.playerName = newLobbyPlayer.name; // Remember name across games/spectator mode
-                console.log(`[SERVER] ${newLobbyPlayer.name} joined the lobby.`);
-                broadcastLobbyState();
-            } else {
-                ws.send(JSON.stringify({ type: 'error', message: 'Game in progress, cannot join lobby.' }));
             }
+
+            if (currentGameState !== GAME_STATES.LOBBY) {
+                ws.send(JSON.stringify({ type: 'error', message: 'Game in progress, cannot join lobby.' }));
+                return;
+            }
+
+            // --- Reconnection to the lobby (same token, new connection) ---
+            // A returning client presents its stable token; if a lobby player with
+            // that token exists, resume that slot (preserving ready state) rather
+            // than creating a duplicate. Also fall back to ws.lobbyPlayerId so a
+            // client that re-joins without an explicit token (e.g. after a game
+            // over rebuilt the lobby around its existing slot) still reclaims it.
+            const matchToken = data.token || ws.lobbyPlayerId;
+            if (matchToken) {
+                const existing = lobbyPlayers.find(lp => lp.id === matchToken);
+                if (existing) {
+                    existing.name = data.name || existing.name;
+                    ws.lobbyPlayerId = existing.id;
+                    ws.playerToken = existing.id;
+                    ws.playerName = existing.name;
+                    console.log(`[SERVER] ${existing.name} rejoined the lobby.`);
+                    broadcastLobbyState();
+                    return;
+                }
+            }
+
+            // --- Brand-new lobby join: mint a stable token that persists across reconnects ---
+            const token = crypto.randomUUID();
+            const newLobbyPlayer = { id: token, name: data.name || `Player ${token.slice(-4)}`, token, ready: false };
+            lobbyPlayers.push(newLobbyPlayer);
+            ws.lobbyPlayerId = token;
+            ws.playerToken = token;
+            ws.playerName = newLobbyPlayer.name;
+            console.log(`[SERVER] ${newLobbyPlayer.name} joined the lobby.`);
+            // Echo the token so the client can store it for future reconnects.
+            ws.send(JSON.stringify({ type: 'lobbyJoined', token }));
+            broadcastLobbyState();
+        } else if (data.type === 'toggleReady') {
+            // Toggle this player's ready flag. Identified by stable token so a
+            // reconnecting client can still toggle after a dropped connection.
+            if (currentGameState !== GAME_STATES.LOBBY || !ws.playerToken) return;
+            lobbyPlayers = togglePlayerReady(lobbyPlayers, ws.playerToken);
+            // If a player un-readies during a countdown, cancel it.
+            if (!areAllReady(lobbyPlayers)) cancelCountdown();
+            broadcastLobbyState();
         } else if (data.type === 'input' && currentGameState === GAME_STATES.IN_PROGRESS) {
             const player = players.find(p => p.id === ws.playerId);
             if (player) {
@@ -654,8 +802,19 @@ wss.on('connection', (ws) => {
                 player._dashTriggered = !!data.dash;
             }
         } else if (data.type === 'startGame' && currentGameState === GAME_STATES.LOBBY) {
-            // For now, let any client start the game. Later, this could be restricted to a host.
-            startGame(); // Implement this function next
+            // Only the host (first lobby player) may start, and only once every
+            // player has readied up. This is the authoritative gate — the client
+            // also disables the button, but the server decides.
+            const isHost = lobbyPlayers.length > 0 && lobbyPlayers[0].id === ws.lobbyPlayerId;
+            if (!isHost) {
+                ws.send(JSON.stringify({ type: 'error', message: 'Only the host can start the game.' }));
+                return;
+            }
+            if (!areAllReady(lobbyPlayers)) {
+                ws.send(JSON.stringify({ type: 'error', message: 'Not all players are ready.' }));
+                return;
+            }
+            beginCountdown();
         } else if (data.type === 'leaveGame') {
             handleLeaveGame(ws);
         }
@@ -673,7 +832,38 @@ wss.on('connection', (ws) => {
             }
         }
 
-        // Remove from game players if in game
+        // --- Active game player: grace period instead of instant removal ---
+        // During a match, a disconnected player is marked `disconnected` and
+        // given a window to reconnect. While disconnected they are skipped by
+        // the game loop (don't move / don't collide) so the match continues
+        // fairly. If the grace window expires, they are removed for real.
+        if (currentGameState === GAME_STATES.IN_PROGRESS && ws.playerId) {
+            const player = players.find(p => p.id === ws.playerId);
+            if (player && !player.disconnected) {
+                player.disconnected = true;
+                player.disconnectedAt = Date.now();
+                console.log(`[SERVER] ${player.name} disconnected — grace period started.`);
+                graceTimers.set(player.id, setTimeout(() => {
+                    graceTimers.delete(player.id);
+                    const idx = players.findIndex(p => p.id === player.id);
+                    if (idx !== -1) {
+                        console.log(`[SERVER] ${player.name} grace expired — removed from match.`);
+                        players.splice(idx, 1);
+                    }
+                    // If the match has thinned out too far, end it.
+                    if (currentGameState === GAME_STATES.IN_PROGRESS && players.length < 2) {
+                        endMatch(players[0] || null);
+                    } else {
+                        broadcastGameState();
+                    }
+                }, RECONNECT_GRACE_MS));
+                broadcastGameState();
+                return;
+            }
+        }
+
+        // Remove from game players if in game (non-grace case: spectator-mode
+        // players, or a disconnect outside IN_PROGRESS).
         const index = players.findIndex(p => p.id === ws.playerId);
         if (index !== -1) {
             players.splice(index, 1);
@@ -690,6 +880,8 @@ wss.on('connection', (ws) => {
             console.log('[SERVER] No clients left. Stopping game loop.');
             clearInterval(gameInterval);
             gameInterval = null;
+            // Cancel any pending post-match lobby reset — we're resetting now.
+            cancelPendingLobbyReset();
             initializeGameState();
             currentGameState = GAME_STATES.LOBBY;
         }
@@ -708,6 +900,9 @@ function handleLeaveGame(ws) {
     if (playerIndex !== -1) {
         leavingName = players[playerIndex].name;
         console.log(`[SERVER] ${leavingName || ws.playerId} left the game.`);
+        // Cancel any grace timer for this player (they're leaving on purpose).
+        const timer = graceTimers.get(players[playerIndex].id);
+        if (timer) { clearTimeout(timer); graceTimers.delete(players[playerIndex].id); }
         players.splice(playerIndex, 1);
     }
 
@@ -724,10 +919,12 @@ function handleLeaveGame(ws) {
     // Re-add to lobbyPlayers so they appear in the lobby UI with their name.
     // Prefer the name from the active player entry; fall back to the name
     // stored at join time (spectators are already spliced out of players[]).
-    const name = leavingName || ws.playerName || `Player ${ws.id % 1000}`;
-    if (!lobbyPlayers.find(lp => lp.id === ws.id)) {
-        lobbyPlayers.push({ id: ws.id, name: name });
-        ws.lobbyPlayerId = ws.id;
+    const name = leavingName || ws.playerName || `Player ${ws.playerToken && ws.playerToken.slice(-4)}`;
+    const token = ws.playerToken || crypto.randomUUID();
+    ws.playerToken = token;
+    if (!lobbyPlayers.find(lp => lp.id === token)) {
+        lobbyPlayers.push({ id: token, name: name, ready: false });
+        ws.lobbyPlayerId = token;
     }
 
     // Transition the leaving client back to the lobby.
@@ -744,9 +941,21 @@ function handleLeaveGame(ws) {
 }
 
 function broadcastLobbyState() {
+    // Compute the current countdown tick (3/2/1) if a countdown is running,
+    // otherwise null. The client renders the number + switches to the board
+    // when the state leaves COUNTDOWN.
+    let countdown = null;
+    if (currentGameState === GAME_STATES.COUNTDOWN && countdownStart > 0) {
+        countdown = getCountdownTick(Date.now() - countdownStart);
+    }
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'lobbyState', lobbyPlayers: lobbyPlayers, currentGameState: currentGameState }));
+            client.send(JSON.stringify({
+                type: 'lobbyState',
+                lobbyPlayers: lobbyPlayers,
+                currentGameState: currentGameState,
+                countdown: countdown,
+            }));
         }
     });
 }

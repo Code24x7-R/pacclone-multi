@@ -58,10 +58,20 @@ const DASH_COOLDOWN_TICKS = 180; // 3s cooldown before next dash
 
 const GAME_STATES = {
   LOBBY: "LOBBY",
+  COUNTDOWN: "COUNTDOWN",
   IN_PROGRESS: "IN_PROGRESS",
   LEVEL_COMPLETE: "LEVEL_COMPLETE",
   GAME_OVER: "GAME_OVER",
 };
+
+// Countdown duration before a match begins (3-2-1-GO). The server broadcasts
+// a tick each second; the client renders the corresponding number.
+const COUNTDOWN_DURATION_MS = 3000;
+
+// Grace period after a disconnect during an active match. If the same player
+// (identified by their stable token) reconnects within this window, their slot
+// is restored instead of removed.
+const RECONNECT_GRACE_MS = 15000;
 
 // Starting positions for up to 4 players (corners of the maze)
 const STARTING_POSITIONS = [
@@ -545,6 +555,90 @@ function buildGameStatePayload(maze, players, ghosts, pellets, powerPellets, cur
 }
 
 // ---------------------------------------------------------------------------
+// Lobby helpers (pure). Used by server.js to manage the lobby → game → lobby
+// lifecycle: warm rejoin, ready-up, countdown, and reconnection grace.
+// ---------------------------------------------------------------------------
+
+/**
+ * Rebuild a lobby player list from a finished match so the group can stay
+ * together for a rematch. The winner is placed first (becomes the new host);
+ * all players start with ready = false.
+ *
+ * Each match player is expected to carry a stable `token` (generated at join
+ * time) so the lobby can recognise reconnecting clients later.
+ *
+ * @param {Array} players - The match's players[] (each with id, name, token).
+ * @param {string|null} winnerId - Player id of the winner, or null.
+ * @returns {Array<{id: string, name: string, token: string, ready: boolean}>}
+ */
+function rebuildLobbyFromMatch(players, winnerId) {
+  // Stable sort: winner first, otherwise preserve existing order.
+  const ordered = [...players].sort((a, b) => {
+    if (a.id === winnerId) return -1;
+    if (b.id === winnerId) return 1;
+    return 0;
+  });
+  // Match players carry `id` (=== token) but no separate `token` field, so
+  // carry the id through as the token for the rebuilt lobby players.
+  return ordered.map((p) => ({
+    id: p.id,
+    name: p.name,
+    token: p.id,
+    ready: false,
+  }));
+}
+
+/**
+ * Check whether every player in the lobby is marked ready.
+ * Returns false for an empty lobby (nobody to start).
+ *
+ * @param {Array<{ready: boolean}>} lobbyPlayers
+ * @returns {boolean}
+ */
+function areAllReady(lobbyPlayers) {
+  return lobbyPlayers.length > 0 && lobbyPlayers.every((p) => p.ready);
+}
+
+/**
+ * Toggle the ready state of a single lobby player, returning a new array.
+ * Players are identified by their stable token.
+ *
+ * @param {Array<{token: string, ready: boolean}>} lobbyPlayers
+ * @param {string} token - The player's stable token.
+ * @returns {Array} New lobbyPlayers array with the toggle applied.
+ */
+function togglePlayerReady(lobbyPlayers, token) {
+  // Match by id, since for lobby players the id IS the stable token.
+  return lobbyPlayers.map((p) =>
+    p.id === token ? { ...p, ready: !p.ready } : p
+  );
+}
+
+/**
+ * Map elapsed countdown time to the number the client should display.
+ * 0-999ms → 3, 1000-1999ms → 2, 2000-2999ms → 1, >=3000ms → 0 (GO).
+ *
+ * @param {number} elapsedMs - Milliseconds since countdown began.
+ * @returns {number} 3, 2, 1, or 0.
+ */
+function getCountdownTick(elapsedMs) {
+  if (elapsedMs >= COUNTDOWN_DURATION_MS) return 0;
+  return 3 - Math.floor(elapsedMs / 1000);
+}
+
+/**
+ * Determine whether a disconnected player is still within the reconnection
+ * grace period.
+ *
+ * @param {number} disconnectedAt - Date.now() when the disconnect happened.
+ * @param {number} now - Current Date.now().
+ * @returns {boolean}
+ */
+function isWithinGracePeriod(disconnectedAt, now) {
+  return now - disconnectedAt < RECONNECT_GRACE_MS;
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 module.exports = {
@@ -587,4 +681,11 @@ module.exports = {
   clampSpriteToWall,
   wrapTunnelX,
   buildGameStatePayload,
+  COUNTDOWN_DURATION_MS,
+  RECONNECT_GRACE_MS,
+  rebuildLobbyFromMatch,
+  areAllReady,
+  togglePlayerReady,
+  getCountdownTick,
+  isWithinGracePeriod,
 };

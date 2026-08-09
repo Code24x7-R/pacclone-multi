@@ -3,11 +3,14 @@
  *
  * Verifies the return-to-lobby feature:
  *   1. An active player can leave a game in progress and return to the lobby.
- *   2. A spectator can leave and return to the lobby.
+ *   2. A player can leave (returning to lobby) while still active.
  *   3. When the last active player leaves, the match ends.
  *   4. The leaving player is re-added to the lobby with their name preserved.
+ *   5. A leaving player can rejoin and start a new game (warm rejoin).
  *
- * Uses a real server bound to an OS-assigned port (port 0).
+ * NOTE: These tests use a real server bound to an OS-assigned port (port 0).
+ * They exercise the actual WebSocket message flow including the 3s start
+ * countdown and the 5s game-over → lobby reset delay, so timeouts are generous.
  */
 const WebSocket = require('ws');
 
@@ -91,6 +94,37 @@ function waitForFresh(ctx, type, pred = () => true, timeout = 3000) {
   });
 }
 
+/**
+ * Wait until a lobbyState broadcast lists only ready players (and at least
+ * one). The client must wait for this before startGame or the server rejects
+ * the request with "Not all players are ready."
+ */
+function waitForAllReady(ctx, timeout = 5000) {
+  const already = ctx.buffer.find(
+    (m) =>
+      m.type === 'lobbyState' &&
+      m.lobbyPlayers.length > 0 &&
+      m.lobbyPlayers.every((p) => p.ready)
+  );
+  if (already) return Promise.resolve(already);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out waiting for all ready')), timeout);
+    const handler = (data) => {
+      const msg = JSON.parse(data.toString());
+      if (
+        msg.type === 'lobbyState' &&
+        msg.lobbyPlayers.length > 0 &&
+        msg.lobbyPlayers.every((p) => p.ready)
+      ) {
+        clearTimeout(timer);
+        ctx.ws.off('message', handler);
+        resolve(msg);
+      }
+    };
+    ctx.ws.on('message', handler);
+  });
+}
+
 beforeAll((done) => {
   server.listen(0, () => {
     url = `ws://localhost:${server.address().port}`;
@@ -126,16 +160,22 @@ describe('Player leave-game flow', () => {
     await waitFor(alice, 'welcome');
     await waitFor(bob, 'welcome');
 
+    // Join the lobby (capture Alice's stable token for identity checks).
     send(alice, { type: 'joinLobby', name: 'Alice' });
+    await waitFor(alice, 'lobbyJoined');
     send(bob, { type: 'joinLobby', name: 'Bob' });
+    await waitFor(bob, 'lobbyJoined');
     await waitFor(alice, 'lobbyState');
     await drain(alice);
     await drain(bob);
 
-    // Start the game.
+    // Both ready up, then start (3s countdown before the match begins).
+    send(alice, { type: 'toggleReady' });
+    send(bob, { type: 'toggleReady' });
+    await waitForAllReady(alice);
     send(alice, { type: 'startGame' });
-    const aliceAssigned = await waitFor(alice, 'playerAssigned');
-    await waitFor(bob, 'playerAssigned');
+    const aliceAssigned = await waitFor(alice, 'playerAssigned', 8000);
+    await waitFor(bob, 'playerAssigned', 8000);
     const aliceId = aliceAssigned.playerId;
 
     // Alice leaves the game.
@@ -149,16 +189,17 @@ describe('Player leave-game flow', () => {
     expect(aliceInLobby).toBeDefined();
     expect(aliceInLobby.name).toBe('Alice');
 
-    // Bob's game should end (last man standing) — he gets GAME_OVER then lobby.
+    // Alice's leave dropped the player count below 2 → endMatch (Bob wins).
+    // Bob gets GAME_OVER then, after the 5s delay, the LOBBY reset.
     await waitFor(bob, 'gameState', 3000);
     const resetLobby = await waitFor(bob, 'lobbyState', 8000);
     expect(resetLobby.currentGameState).toBe('LOBBY');
 
     alice.ws.close();
     bob.ws.close();
-  }, 20000);
+  }, 25000);
 
-  test('spectator can leave and return to lobby', async () => {
+  test('player can leave mid-game and return to lobby as a non-spectator', async () => {
     const alice = await connect();
     const bob = await connect();
 
@@ -166,22 +207,24 @@ describe('Player leave-game flow', () => {
     await waitFor(bob, 'welcome');
 
     send(alice, { type: 'joinLobby', name: 'Alice' });
+    await waitFor(alice, 'lobbyJoined');
     send(bob, { type: 'joinLobby', name: 'Bob' });
+    await waitFor(bob, 'lobbyJoined');
     await waitFor(alice, 'lobbyState');
     await drain(alice);
     await drain(bob);
 
-    // Start the game.
+    // Ready up and start.
+    send(alice, { type: 'toggleReady' });
+    send(bob, { type: 'toggleReady' });
+    await waitForAllReady(alice);
     send(alice, { type: 'startGame' });
-    await waitFor(alice, 'playerAssigned');
-    const bobAssigned = await waitFor(bob, 'playerAssigned');
+    await waitFor(alice, 'playerAssigned', 8000);
+    const bobAssigned = await waitFor(bob, 'playerAssigned', 8000);
     const bobId = bobAssigned.playerId;
 
-    // Bob disconnects → server makes him a spectator (loses all lives path
-    // is hard to trigger quickly, so we simulate by having Alice leave and
-    // checking the spectator path via a direct leaveGame from a spectator).
-    // Instead: have Bob send leaveGame while still an active player, which
-    // removes him from players[] and returns him to the lobby.
+    // Bob sends leaveGame while still an active player → removed from players[]
+    // and returned to the lobby with his identity preserved.
     send(bob, { type: 'leaveGame' });
 
     const returned = await waitFor(bob, 'returnToLobby');
@@ -192,9 +235,9 @@ describe('Player leave-game flow', () => {
 
     alice.ws.close();
     bob.ws.close();
-  }, 20000);
+  }, 25000);
 
-  test('leaving player can rejoin and start a new game', async () => {
+  test('leaving player can rejoin and start a new game (warm rejoin)', async () => {
     const alice = await connect();
     const bob = await connect();
 
@@ -202,22 +245,27 @@ describe('Player leave-game flow', () => {
     await waitFor(bob, 'welcome');
 
     send(alice, { type: 'joinLobby', name: 'Alice' });
+    const aliceJoined = await waitFor(alice, 'lobbyJoined');
     send(bob, { type: 'joinLobby', name: 'Bob' });
+    const bobJoined = await waitFor(bob, 'lobbyJoined');
     await waitFor(alice, 'lobbyState');
     await drain(alice);
     await drain(bob);
 
-    // Start and immediately leave.
+    // Ready up and start.
+    send(alice, { type: 'toggleReady' });
+    send(bob, { type: 'toggleReady' });
+    await waitForAllReady(alice);
     send(alice, { type: 'startGame' });
-    await waitFor(alice, 'playerAssigned');
-    await waitFor(bob, 'playerAssigned');
+    await waitFor(alice, 'playerAssigned', 8000);
+    await waitFor(bob, 'playerAssigned', 8000);
+
+    // Alice leaves → endMatch (Bob = last man standing). The game runs its 5s
+    // GAME_OVER celebration before resetting to LOBBY.
     send(alice, { type: 'leaveGame' });
     await waitFor(alice, 'returnToLobby');
 
-    // Alice's leave triggered endMatch (Bob = last man standing). The game
-    // runs its 5s GAME_OVER celebration before resetting to LOBBY. Alice must
-    // wait for that full cycle before she can start a fresh game. Use
-    // waitForFresh with a LOBBY predicate so we ignore stale buffered msgs.
+    // Wait for the full game-over → LOBBY reset cycle.
     clearBuffer(alice);
     clearBuffer(bob);
     const resetLobby = await waitForFresh(
@@ -237,13 +285,12 @@ describe('Player leave-game flow', () => {
     );
     expect(bobResetLobby.currentGameState).toBe('LOBBY');
 
-    // Both players rejoin the lobby (entries are cleared on game end) so the
-    // new game has 2 players (a 1-player game would instantly end).
+    // Both players rejoin the lobby presenting their stable tokens (warm
+    // rejoin, feature A). The rebuilt lobby preserves their identities.
     clearBuffer(alice);
-    send(alice, { type: 'joinLobby', name: 'Alice' });
-    send(bob, { type: 'joinLobby', name: 'Bob' });
-    // Wait until Alice sees a lobby with BOTH players before starting,
-    // otherwise the game launches with just her and instantly ends.
+    send(alice, { type: 'joinLobby', name: 'Alice', token: aliceJoined.token });
+    send(bob, { type: 'joinLobby', name: 'Bob', token: bobJoined.token });
+    // Wait until Alice sees a lobby with BOTH players before starting.
     const bothJoined = await waitForFresh(
       alice,
       'lobbyState',
@@ -251,9 +298,15 @@ describe('Player leave-game flow', () => {
       3000
     );
     expect(bothJoined.lobbyPlayers.map((p) => p.name).sort()).toEqual(['Alice', 'Bob']);
-    send(alice, { type: 'startGame' });
-    const reassigned = await waitFor(alice, 'playerAssigned');
-    expect(reassigned.playerId).toBeGreaterThan(0);
+
+    // Ready up. After the warm rejoin, the winner (Bob) is placed first in
+    // the rebuilt lobby and becomes the new host — so Bob must start.
+    send(alice, { type: 'toggleReady' });
+    send(bob, { type: 'toggleReady' });
+    await waitForAllReady(alice);
+    send(bob, { type: 'startGame' });
+    const reassigned = await waitFor(alice, 'playerAssigned', 8000);
+    expect(reassigned.playerId).toBeTruthy();
 
     // The new game is in progress.
     const gs = await waitFor(alice, 'gameState');
@@ -261,5 +314,5 @@ describe('Player leave-game flow', () => {
 
     alice.ws.close();
     bob.ws.close();
-  }, 20000);
+  }, 25000);
 });
