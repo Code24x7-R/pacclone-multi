@@ -959,6 +959,12 @@
             if (myPlayer && lastLives > 0 && myPlayer.lives > lastLives) {
                 playExtraLife();
             }
+            // Death-with-respawn sound: detect when our lives decrease. This fires when
+            // we lose a life but still have lives left (the final-death case is handled
+            // separately by the spectatorMode message, which removes us from players[]).
+            if (myPlayer && lastLives > 0 && myPlayer.lives < lastLives) {
+                playPlayerEaten();
+            }
             if (myPlayer) lastLives = myPlayer.lives;
 
             // Draw scores and lives
