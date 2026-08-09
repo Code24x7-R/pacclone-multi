@@ -16,13 +16,9 @@ const {
   createModeCycle,
   updateModeCycle,
   GHOST_EAT_SCORE,
-  FRIGHTENED_DURATION_MS,
   GHOST_NORMAL_SPEED,
   GHOST_FRIGHTENED_SPEED,
   GHOST_EATEN_SPEED,
-  MODE_CYCLE,
-  RELEASE_THRESHOLDS,
-  DIRECTION_NAMES,
 } = require("../../src/ghostAI");
 
 // ---------------------------------------------------------------------------
@@ -409,7 +405,7 @@ describe("chooseDirection", () => {
     const target = { tileX: 5, tileY: 5 };
     const dir = chooseDirection(ghost, target, openMaze, 10, 10);
     // Should move away from (5,5) — any direction is fine, just not toward target
-    expect(DIRECTION_NAMES).toContain(dir);
+    expect(["up", "down", "left", "right"]).toContain(dir);
   });
 
   test("avoids walls when choosing direction", () => {
@@ -523,6 +519,18 @@ describe("updateGhostHouseState", () => {
   });
 });
 
+// Mode cycle timings (ms): classic Pac-Man scatter/chase phases
+const MODE_CYCLE = [
+  { duration: 7000, mode: "scatter" },
+  { duration: 20000, mode: "chase" },
+  { duration: 7000, mode: "scatter" },
+  { duration: 20000, mode: "chase" },
+  { duration: 5000, mode: "scatter" },
+  { duration: 20000, mode: "chase" },
+  { duration: 5000, mode: "scatter" },
+  { duration: Infinity, mode: "chase" },
+];
+
 describe("createModeCycle", () => {
   test("starts in scatter mode", () => {
     const cycle = createModeCycle();
@@ -573,20 +581,9 @@ describe("constants", () => {
     expect(GHOST_EAT_SCORE).toBe(200);
   });
 
-  test("FRIGHTENED_DURATION_MS is 8000", () => {
-    expect(FRIGHTENED_DURATION_MS).toBe(8000);
-  });
-
   test("speed multipliers are correct", () => {
     expect(GHOST_NORMAL_SPEED).toBe(0.8);
     expect(GHOST_FRIGHTENED_SPEED).toBe(0.5);
     expect(GHOST_EATEN_SPEED).toBe(1.5);
-  });
-
-  test("release thresholds match classic Pac-Man", () => {
-    expect(RELEASE_THRESHOLDS.blinky).toBe(0);
-    expect(RELEASE_THRESHOLDS.pinky).toBe(15);
-    expect(RELEASE_THRESHOLDS.inky).toBe(30);
-    expect(RELEASE_THRESHOLDS.clyde).toBe(50);
   });
 });

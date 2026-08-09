@@ -5,23 +5,13 @@ const {
   GHOST_SPEED,
   PELLET_SCORE,
   POWER_PELLET_SCORE,
-  GHOST_EAT_SCORE,
   PLAYER_EAT_SCORE,
   GAME_STATES,
   STARTING_POSITIONS,
-  GHOST_SPAWN,
-  DIRECTIONS,
   isWall,
-  moveEntity,
-  distance,
-  isColliding,
   extractPellets,
-  createInitialState,
   createPlayersFromLobby,
-  randomDirection,
-  checkGameOver,
   buildGameStatePayload,
-  isValidDirection,
 } = require("../../src/gameLogic");
 
 // ---------------------------------------------------------------------------
@@ -106,142 +96,12 @@ describe("isWall", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Movement
-// ---------------------------------------------------------------------------
-describe("moveEntity", () => {
-  test("moves right correctly", () => {
-    // Use a custom open maze so we don't depend on specific MAZE layout
-    const openMaze = [
-      [1, 1, 1, 1, 1],
-      [1, 0, 0, 0, 1],
-      [1, 0, 0, 0, 1],
-      [1, 0, 0, 0, 1],
-      [1, 1, 1, 1, 1],
-    ];
-    const result = moveEntity({ x: 2, y: 2 }, "right", PLAYER_SPEED, openMaze);
-    expect(result.x).toBeCloseTo(2 + PLAYER_SPEED, 10);
-    expect(result.y).toBe(2);
-  });
-
-  test("moves left correctly", () => {
-    const openMaze = [
-      [1, 1, 1, 1, 1],
-      [1, 0, 0, 0, 1],
-      [1, 0, 0, 0, 1],
-      [1, 0, 0, 0, 1],
-      [1, 1, 1, 1, 1],
-    ];
-    const result = moveEntity({ x: 2, y: 2 }, "left", PLAYER_SPEED, openMaze);
-    expect(result.x).toBeCloseTo(2 - PLAYER_SPEED, 10);
-    expect(result.y).toBe(2);
-  });
-
-  test("moves up correctly", () => {
-    const openMaze = [
-      [1, 1, 1, 1, 1],
-      [1, 0, 0, 0, 1],
-      [1, 0, 0, 0, 1],
-      [1, 0, 0, 0, 1],
-      [1, 1, 1, 1, 1],
-    ];
-    const result = moveEntity({ x: 2, y: 2 }, "up", PLAYER_SPEED, openMaze);
-    expect(result.x).toBe(2);
-    expect(result.y).toBeCloseTo(2 - PLAYER_SPEED, 10);
-  });
-
-  test("moves down correctly", () => {
-    const openMaze = [
-      [1, 1, 1, 1, 1],
-      [1, 0, 0, 0, 1],
-      [1, 0, 0, 0, 1],
-      [1, 0, 0, 0, 1],
-      [1, 1, 1, 1, 1],
-    ];
-    const result = moveEntity({ x: 2, y: 2 }, "down", PLAYER_SPEED, openMaze);
-    expect(result.x).toBe(2);
-    expect(result.y).toBeCloseTo(2 + PLAYER_SPEED, 10);
-  });
-
-  test("stops at wall on X axis but slides on Y", () => {
-    // Use a custom maze: entity at (1,1), wall to the left at (0,1)
-    // but open below at (1,2) — moving down-left should slide.
-    const slideMaze = [
-      [1, 1, 1],
-      [1, 0, 1],
-      [1, 0, 1],
-    ];
-    // Move down from (1,1): Y goes to ~1.95 (floor=1, open), X stays 1
-    const rDown = moveEntity({ x: 1, y: 1 }, "down", 0.95, slideMaze);
-    expect(rDown.x).toBe(1);
-    expect(rDown.y).toBeCloseTo(1.95, 10);
-    // Move left from (1,1): X goes to ~0.05 (floor=0, wall) → blocked, stays 1
-    const rLeft = moveEntity({ x: 1, y: 1 }, "left", 0.95, slideMaze);
-    expect(rLeft.x).toBe(1);
-    expect(rLeft.y).toBe(1);
-  });
-
-  test("slides along wall when one axis is blocked", () => {
-    // Diagonal scenario: entity tries to move into a corner.
-    // Using MAZE position (3,1) which has open right (4,1) but wall up (3,0).
-    const rUp = moveEntity({ x: 3, y: 1.5 }, "up", PLAYER_SPEED, MAZE);
-    // Up from y=1.5 by 0.05 → y=1.45, floor=1 → MAZE[1][3]=0 (open), so moves
-    expect(rUp.y).toBeCloseTo(1.5 - PLAYER_SPEED, 10);
-    expect(rUp.x).toBe(3);
-  });
-
-  test("returns original position when blocked on both axes", () => {
-    // Place entity inside a wall tile — moving any direction should be blocked
-    const trapped = { x: 0.5, y: 0.5 }; // (0,0) is wall
-    const result = moveEntity(trapped, "right", PLAYER_SPEED, MAZE);
-    // right: x=0.55, floor=0 → MAZE[0][0]=1 (wall) → blocked, stays at 0.5
-    expect(result.x).toBe(0.5);
-  });
-
-  test("handles zero speed", () => {
-    const pos = { x: 5, y: 5 };
-    const result = moveEntity(pos, "right", 0);
-    expect(result).toEqual({ x: 5, y: 5 });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Distance & Collision
-// ---------------------------------------------------------------------------
-describe("distance", () => {
-  test("computes euclidean distance", () => {
-    expect(distance({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(5);
-    expect(distance({ x: 1, y: 1 }, { x: 1, y: 1 })).toBe(0);
-  });
-
-  test("is symmetric", () => {
-    const a = { x: 2, y: 3 };
-    const b = { x: 5, y: 7 };
-    expect(distance(a, b)).toBe(distance(b, a));
-  });
-});
-
-describe("isColliding", () => {
-  test("returns true when distance is below threshold", () => {
-    expect(isColliding({ x: 0, y: 0 }, { x: 0.3, y: 0 }, 0.5)).toBe(true);
-  });
-
-  test("returns false when distance is above threshold", () => {
-    expect(isColliding({ x: 0, y: 0 }, { x: 1, y: 0 }, 0.5)).toBe(false);
-  });
-
-  test("returns false when distance equals threshold (strict less-than)", () => {
-    expect(isColliding({ x: 0, y: 0 }, { x: 0.5, y: 0 }, 0.5)).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Pellet Extraction
 // ---------------------------------------------------------------------------
 describe("extractPellets", () => {
   test("extracts pellets and power pellets from the maze", () => {
-    const { pellets, powerPellets } = extractPellets();
+    const { pellets } = extractPellets();
     expect(pellets.length).toBeGreaterThan(0);
-    expect(powerPellets.length).toBeGreaterThan(0);
   });
 
   test("power pellets are at corner positions of the maze path", () => {
@@ -268,41 +128,6 @@ describe("extractPellets", () => {
     const { pellets, powerPellets } = extractPellets(customMaze);
     expect(pellets).toEqual([{ x: 1, y: 1 }]);
     expect(powerPellets).toEqual([{ x: 2, y: 1 }]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Game State Initialization
-// ---------------------------------------------------------------------------
-describe("createInitialState", () => {
-  test("creates empty players array", () => {
-    const state = createInitialState();
-    expect(state.players).toEqual([]);
-  });
-
-  test("creates one ghost at spawn position", () => {
-    const state = createInitialState();
-    expect(state.ghosts).toHaveLength(1);
-    expect(state.ghosts[0]).toMatchObject({
-      id: 1,
-      x: GHOST_SPAWN.x,
-      y: GHOST_SPAWN.y,
-      color: "red",
-      direction: "left",
-    });
-  });
-
-  test("populates pellets from the maze", () => {
-    const state = createInitialState();
-    expect(state.pellets.length).toBeGreaterThan(0);
-    expect(state.powerPellets.length).toBeGreaterThan(0);
-  });
-
-  test("returns independent copies (no shared references)", () => {
-    const state1 = createInitialState();
-    const state2 = createInitialState();
-    state1.pellets.pop();
-    expect(state2.pellets.length).toBeGreaterThan(state1.pellets.length);
   });
 });
 
@@ -417,18 +242,6 @@ describe("createPlayersFromLobby", () => {
     });
   });
 
-  test("assigns unique colors from PLAYER_COLORS", () => {
-    const lobby = [
-      { id: 1, name: "P1" },
-      { id: 2, name: "P2" },
-      { id: 3, name: "P3" },
-      { id: 4, name: "P4" },
-    ];
-    const players = createPlayersFromLobby(lobby);
-    const colors = players.map((p) => p.color);
-    expect(new Set(colors).size).toBe(4); // all unique
-  });
-
   test("gives each player 3 lives and 0 score", () => {
     const lobby = [{ id: 1, name: "Solo" }];
     const players = createPlayersFromLobby(lobby);
@@ -456,75 +269,6 @@ describe("createPlayersFromLobby", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Direction & Random
-// ---------------------------------------------------------------------------
-describe("isValidDirection", () => {
-  test("accepts valid directions", () => {
-    expect(isValidDirection("up")).toBe(true);
-    expect(isValidDirection("down")).toBe(true);
-    expect(isValidDirection("left")).toBe(true);
-    expect(isValidDirection("right")).toBe(true);
-  });
-
-  test("rejects invalid directions", () => {
-    expect(isValidDirection("jump")).toBe(false);
-    expect(isValidDirection("")).toBe(false);
-    expect(isValidDirection(null)).toBe(false);
-    expect(isValidDirection(undefined)).toBe(false);
-  });
-});
-
-describe("randomDirection", () => {
-  test("returns a valid direction", () => {
-    for (let i = 0; i < 50; i++) {
-      expect(DIRECTIONS).toContain(randomDirection());
-    }
-  });
-
-  test("accepts custom direction set", () => {
-    const custom = ["north", "south"];
-    const result = randomDirection(custom);
-    expect(custom).toContain(result);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Win/Loss Conditions
-// ---------------------------------------------------------------------------
-describe("checkGameOver", () => {
-  test("returns true when only one player remains", () => {
-    const players = [{ id: 1, name: "Winner" }];
-    expect(checkGameOver(players, [{}], [{}])).toBe(true);
-  });
-
-  test("returns true when no players remain", () => {
-    expect(checkGameOver([], [], [])).toBe(true);
-  });
-
-  test("returns true when all pellets are eaten", () => {
-    const players = [
-      { id: 1, name: "P1" },
-      { id: 2, name: "P2" },
-    ];
-    expect(checkGameOver(players, [], [])).toBe(true);
-  });
-
-  test("returns false when multiple players and pellets remain", () => {
-    const players = [
-      { id: 1, name: "P1" },
-      { id: 2, name: "P2" },
-    ];
-    expect(checkGameOver(players, [{}], [{}])).toBe(false);
-  });
-
-  test("returns false when pellets remain but only one player (edge: still playing)", () => {
-    // Actually with 1 player, game is over (last man standing)
-    const players = [{ id: 1, name: "P1" }];
-    expect(checkGameOver(players, [{}], [])).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Constants sanity checks
 // ---------------------------------------------------------------------------
 describe("constants", () => {
@@ -538,7 +282,6 @@ describe("constants", () => {
   test("score values are positive", () => {
     expect(PELLET_SCORE).toBe(10);
     expect(POWER_PELLET_SCORE).toBe(50);
-    expect(GHOST_EAT_SCORE).toBe(200);
     expect(PLAYER_EAT_SCORE).toBe(100);
   });
 

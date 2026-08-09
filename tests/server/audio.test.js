@@ -84,7 +84,6 @@ describe('AudioFX', () => {
     expect(typeof AudioFX.getMuted).toBe('function');
     expect(typeof AudioFX.setMuted).toBe('function');
     expect(typeof AudioFX.playChomp).toBe('function');
-    expect(typeof AudioFX.playMove).toBe('function');
     expect(typeof AudioFX.playPowerup).toBe('function');
     expect(typeof AudioFX.playEatGhost).toBe('function');
     expect(typeof AudioFX.playDeath).toBe('function');
@@ -168,15 +167,6 @@ describe('AudioFX', () => {
   });
 
   // --- Verify every sound function runs without throwing and schedules audio ---
-
-  test('playMove schedules a short subdued blip', () => {
-    AudioFX.setMuted(false);
-    AudioFX.init();
-    mockCtx._nodeCount();
-    expect(() => AudioFX.playMove()).not.toThrow();
-    expect(mockCtx.createOscillator).toHaveBeenCalledTimes(1);
-    expect(mockCtx.createGain).toHaveBeenCalledTimes(1);
-  });
 
   test('playEatGhost schedules an upward frequency sweep', () => {
     AudioFX.setMuted(false);

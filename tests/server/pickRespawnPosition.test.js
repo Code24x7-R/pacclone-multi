@@ -1,4 +1,4 @@
-const { getRespawnCorners, pickRespawnPosition, MAZE } = require("../../src/gameLogic");
+const { pickRespawnPosition, MAZE } = require("../../src/gameLogic");
 
 // A tiny maze where only the top corners are walkable; bottom corners are walls.
 // Layout (3x3):
@@ -45,29 +45,6 @@ const BOTTOM_WALL_MAZE = [
   [1, 1, 1, 1, 1],
 ];
 
-describe("getRespawnCorners", () => {
-  test("returns 4 corners derived from maze dimensions", () => {
-    const corners = getRespawnCorners(FOUR_CORNERS_MAZE);
-    expect(corners).toHaveLength(4);
-    // 5x5 maze -> corners at 1.5 and 3.5 on each axis.
-    expect(corners).toEqual([
-      { x: 1.5, y: 1.5 },
-      { x: 3.5, y: 1.5 },
-      { x: 1.5, y: 3.5 },
-      { x: 3.5, y: 3.5 },
-    ]);
-  });
-
-  test("adapts to non-square mazes", () => {
-    const corners = getRespawnCorners(MAZE); // 20x13
-    expect(corners[0]).toEqual({ x: 1.5, y: 1.5 });
-    expect(corners[1].x).toBeCloseTo(18.5);
-    expect(corners[2].y).toBeCloseTo(11.5);
-    expect(corners[3].x).toBeCloseTo(18.5);
-    expect(corners[3].y).toBeCloseTo(11.5);
-  });
-});
-
 describe("pickRespawnPosition", () => {
   test("picks a walkable corner", () => {
     // TINY_MAZE: only top corners are walkable (1.5,1.5) and (1.5... wait
@@ -79,10 +56,10 @@ describe("pickRespawnPosition", () => {
   });
 
   test("respects the RNG to choose different corners", () => {
-    const corners = getRespawnCorners(FOUR_CORNERS_MAZE);
     // rng returning 0.99 should pick the last corner.
     const pos = pickRespawnPosition([], FOUR_CORNERS_MAZE, () => 0.99);
-    expect(pos).toEqual(corners[corners.length - 1]);
+    // 5x5 maze -> last corner at (3.5, 3.5).
+    expect(pos).toEqual({ x: 3.5, y: 3.5 });
   });
 
   test("excludes a corner occupied by another player", () => {

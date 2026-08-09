@@ -5,8 +5,13 @@
 | # | Task | Status | Priority | Target File(s) |
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | Add integration tests for WebSocket message handling | ⏳ Pending | Medium | `tests/integration/` |
-| 2 | Extract remaining game logic from server.js into testable modules | ⏳ Pending | Low | `src/gameLogic.js`, `server.js` |
-| 3 | Refactor server.js to use gameLogic.js functions | ⏳ Pending | Low | `server.js` |
+
+## Completed (Refactoring)
+
+| # | Task | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| 2 | Extract remaining game logic from server.js into testable modules | ✅ Done | `extractPellets`, `isWall`, `PELLET_SCORE`, etc. now imported from `gameLogic.js` |
+| 3 | Refactor server.js to use gameLogic.js functions | ✅ Done | Removed duplicate `isWall`, pellet loop, starting-positions arrays, hardcoded scores |
 
 ## Completed
 
@@ -23,7 +28,9 @@
 - Server remains authoritative — all game state mutations happen server-side only.
 - Keep pure functions in `src/` (no I/O, no side effects).
 - Coverage target: ≥ 80% lines, ≥ 70% branches on `src/`.
-- 349 total tests pass, lint clean.
+- 317 total tests pass, lint clean.
+- Duplication removed: `isWall` (server.js → gameLogic.js), `GHOST_EAT_SCORE` (single source in ghostAI.js), `extractPellets` (replaced inline loop), `getStartingPositions()` (replaced 2 hardcoded arrays), score constants (PELLET_SCORE/POWER_PELLET_SCORE/PLAYER_EAT_SCORE).
+- Dead code removed: `checkGameOver`, `createInitialState`, `randomDirection`, `moveEntity`, `distance`, `isColliding`, `isValidDirection`, `playMove`, plus 15 orphan exports from gameLogic.js and ghostAI.js.
 
 ## Features Implemented (outside plan, from direct requests)
 

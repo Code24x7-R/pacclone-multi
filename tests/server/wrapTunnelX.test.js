@@ -7,7 +7,26 @@
  * it wraps to just inside the right edge, and vice versa.
  */
 
-const { wrapTunnelX, moveEntity, isWall, MAZE } = require('../../src/gameLogic');
+const { wrapTunnelX, isWall, MAZE } = require('../../src/gameLogic');
+
+// Local moveEntity helper — replicates the pure movement + wall check logic
+// for tunnel-traversal tests. Kept local because the canonical version was
+// removed from gameLogic (unused in production).
+function moveEntity(pos, direction, speed, maze) {
+  let { x, y } = pos;
+  switch (direction) {
+    case 'up':    y -= speed; break;
+    case 'down':  y += speed; break;
+    case 'left':  x -= speed; break;
+    case 'right': x += speed; break;
+  }
+  x = wrapTunnelX(x, pos.y, maze);
+  let newX = x;
+  let newY = y;
+  if (isWall(x, pos.y, maze)) newX = pos.x;
+  if (isWall(pos.x, y, maze)) newY = pos.y;
+  return { x: newX, y: newY };
+}
 
 describe('wrapTunnelX', () => {
   // Identify tunnel rows in the default maze (rows where col 0 is type 4).

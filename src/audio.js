@@ -90,33 +90,6 @@
   }
 
   /**
-   * Continuous movement — very low, subdued hum. Call sparingly (e.g. on tile
-   * change) so it does not become annoying.
-   */
-  function playMove() {
-    if (isMuted) return;
-    var ctx = getContext();
-    if (!ctx) return;
-    var now = ctx.currentTime;
-    var duration = 0.15;
-
-    var osc = ctx.createOscillator();
-    var gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(30 + (Math.random() * 20 - 10), now);
-
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.09, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.005, now + duration);
-
-    osc.start(now);
-    osc.stop(now + duration);
-  }
-
-  /**
    * Power-up collected — triangle wave with an LFO wobble for a rising,
    * energetic feel.
    */
@@ -377,7 +350,6 @@
     toggleMute: toggleMute,
     getMuted: getMuted,
     playChomp: playChomp,
-    playMove: playMove,
     playPowerup: playPowerup,
     playEatGhost: playEatGhost,
     playDeath: playDeath,

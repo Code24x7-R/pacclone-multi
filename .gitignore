@@ -18,6 +18,7 @@ coverage/
 
 # Local agent memory (session-scoped, not committed)
 .pi/
+AGENTS.md
 
 # Environment
 .env

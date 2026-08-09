@@ -2,6 +2,23 @@
 
 <!-- Prefix each entry with [FEATURE], [BUGFIX], [REFACTOR], [INFRA], or [DOCS] -->
 
+## 2026-08-10
+
+### [REFACTOR] Remove unnecessary duplication, redundant & orphan code
+- Symptom: The codebase had accumulated duplicate functions/constants across modules, orphan exports never used outside tests, and dead code superseded by newer implementations.
+- Root cause: Incremental feature additions without consolidation; test-only exports left in place after their production callers were removed.
+- Fix:
+  - **Duplicate `isWall`**: Removed the local definition in `server.js` (identical to `src/gameLogic.js`); now imports the canonical version.
+  - **Duplicate `GHOST_EAT_SCORE`**: Defined in both `gameLogic.js` and `ghostAI.js`. Removed from `gameLogic.js`; `ghostAI.js` is the canonical source (already imported by `server.js`).
+  - **Duplicate pellet extraction**: Replaced the inline maze-scan loop in `server.js#initializeGameState()` with a call to the existing pure `extractPellets(currentMaze)` from `gameLogic.js`.
+  - **Duplicate `startingPositions` arrays**: Extracted a `getStartingPositions()` helper in `server.js` and replaced two identical 4-element hardcoded arrays (in `startGame` and `startNextLevel`).
+  - **Hardcoded score values**: Replaced magic numbers (`10`, `50`, `100`) in `server.js` with the canonical `PELLET_SCORE`, `POWER_PELLET_SCORE`, `PLAYER_EAT_SCORE` constants from `gameLogic.js`.
+  - **Dead code removed**: `checkGameOver` (superseded by `getLevelTransition`), `createInitialState` (unused state builder), `randomDirection` (no production caller), `moveEntity` (no production caller), `distance`/`isColliding` (only used by removed code), `isValidDirection` (no caller), `playMove` (audio function never called), `GHOST_SPAWN`/`POWER_UP_DURATION_MS`/`DIRECTIONS` constants (unused after cleanup).
+  - **Orphan exports removed**: From `gameLogic.js` — `GHOST_EAT_SCORE`, `GHOST_SPAWN`, `POWER_UP_DURATION_MS`, `DIRECTIONS`, `getRespawnCorners`, `moveEntity`, `distance`, `isColliding`, `isValidDirection`, `createInitialState`, `checkGameOver`, `randomDirection`. From `ghostAI.js` — `GHOST_PERSONALITIES`, `GHOST_NAMES`, `SCATTER_CORNERS`, `MODE_CYCLE`, `RELEASE_THRESHOLDS`, `FRIGHTENED_DURATION_MS`, `GHOST_RETURN_DELAY_MS`, `DIRECTION_NAMES`. From `audio.js` — `playMove`.
+  - Updated test files to remove tests for deleted functions and define any still-needed constants locally (e.g. `MODE_CYCLE` in `ghostAI.test.js`).
+- Verification: 317 tests pass, lint clean (0 errors, 0 warnings), coverage thresholds met (≥80% lines, ≥70% branches).
+- Test count change: 349 → 317 (32 tests removed along with their deleted functions).
+
 ## 2026-08-09
 
 ### [BUGFIX] B-007 — power pellet doesn't scare all ghosts

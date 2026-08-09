@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 // Generate a stable, unique player token (used as the player's persistent
 // identity across reconnects). 128-bit uuid — collision risk is negligible.
-const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod, isWall, extractPellets, PELLET_SCORE, POWER_PELLET_SCORE, PLAYER_EAT_SCORE } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -48,6 +48,22 @@ let ghosts = [];
 let pellets = [];
 let powerPellets = [];
 const PLAYER_SPEED = 0.1; // tiles per tick (6 tiles/s at 60 FPS)
+
+/**
+ * Get starting positions for the current maze, with x coordinates computed
+ * from the maze width. The right-edge positions use maze width - 1.5.
+ * @returns {{x: number, y: number}[]}
+ */
+function getStartingPositions() {
+    const w = currentMaze[0].length;
+    return [
+        { x: 1.5, y: 1.5 },
+        { x: w - 1.5, y: 1.5 },
+        { x: 1.5, y: 4.5 },
+        { x: w - 1.5, y: 4.5 },
+    ];
+}
+
 let ghostBaseSpeed = 0.08; // base tiles per tick (personalities apply multiplier); scales with level
 let frightenedDurationMs = frightenedDurationForLevel(1); // scales with level
 
@@ -97,24 +113,15 @@ let countdownStart = 0;
 
 function initializeGameState() {
     players = [];
-    pellets = [];
-    powerPellets = [];
 
     // Reset difficulty scaling to level-1 defaults.
     ghostBaseSpeed = ghostSpeedForLevel(1);
     frightenedDurationMs = frightenedDurationForLevel(1);
 
     // Extract pellets and power pellets from the current maze
-    for (let y = 0; y < currentMaze.length; y++) {
-        for (let x = 0; x < currentMaze[y].length; x++) {
-            const tile = currentMaze[y][x];
-            if (tile === 0) {
-                pellets.push({ x: x, y: y });
-            } else if (tile === 2 || tile === 3) {
-                powerPellets.push({ x: x, y: y });
-            }
-        }
-    }
+    const extracted = extractPellets(currentMaze);
+    pellets = extracted.pellets;
+    powerPellets = extracted.powerPellets;
     totalPelletsInLevel = pellets.length + powerPellets.length;
 
     // Initialize ghost house config and create 4 AI-driven ghosts
@@ -143,14 +150,7 @@ function startGame() {
     initializeGameState(); // Resets pellets, power pellets, and ghosts
 
     // Assign players from lobby to game, and give them starting positions
-    // Starting positions spread across the maze on walkable tiles
-    // (avoiding the ghost house area in the center)
-    const startingPositions = [
-        { x: 1.5, y: 1.5 }, // top-left
-        { x: currentMaze[0].length - 1.5, y: 1.5 }, // top-right
-        { x: 1.5, y: 4.5 }, // mid-left
-        { x: currentMaze[0].length - 1.5, y: 4.5 }, // mid-right
-    ];
+    const startingPositions = getStartingPositions();
 
     players = lobbyPlayers.map((lp, index) => ({
         id: lp.id, // === the stable token, so reconnecting clients can reclaim this slot
@@ -300,17 +300,6 @@ function cancelCountdown() {
     }
 }
 
-function isWall(x, y, maze = currentMaze) {
-    const tileX = Math.floor(x);
-    const tileY = Math.floor(y);
-    if (tileY < 0 || tileY >= maze.length || tileX < 0 || tileX >= maze[0].length) {
-        return true;
-    }
-    const tile = maze[tileY][tileX];
-    // 1 = wall, 6 = ghost gate (impassable for players)
-    return tile === 1 || tile === 6;
-}
-
 // Game Loop
 const GAME_LOOP_INTERVAL = 1000 / 60; // 60 FPS
 let gameInterval = null;
@@ -388,7 +377,7 @@ function gameLoop() {
             const dist = Math.hypot(player.x - (p.x + 0.5), player.y - (p.y + 0.5));
             if (dist < 0.4) {
                 pellets.splice(i, 1);
-                player.score += 10;
+                player.score += PELLET_SCORE;
             }
         }
 
@@ -398,7 +387,7 @@ function gameLoop() {
             const dist = Math.hypot(player.x - (pp.x + 0.5), player.y - (pp.y + 0.5));
             if (dist < 0.5) {
                 powerPellets.splice(i, 1);
-                player.score += 50;
+                player.score += POWER_PELLET_SCORE;
                 player.poweredUp = true;
                 // Tick-based power-up countdown (avoids storing non-serializable
                 // Timeout objects on the player and prevents timer drift).
@@ -422,7 +411,7 @@ function gameLoop() {
                 if (player.poweredUp && !otherPlayer.poweredUp) {
                     // Current player (player) is powered up and eats otherPlayer
                     otherPlayer.lives--;
-                    player.score += 100; // Score for eating another player
+                    player.score += PLAYER_EAT_SCORE;
 
                     if (otherPlayer.lives <= 0) {
                         // Move to spectator mode
@@ -756,12 +745,7 @@ function startNextLevel() {
     applyDifficultyScaling();
 
     // Move players back to starting positions (keep scores/lives).
-    const startingPositions = [
-        { x: 1.5, y: 1.5 },
-        { x: currentMaze[0].length - 1.5, y: 1.5 },
-        { x: 1.5, y: 4.5 },
-        { x: currentMaze[0].length - 1.5, y: 4.5 },
-    ];
+    const startingPositions = getStartingPositions();
     players.forEach((player, index) => {
         player.x = startingPositions[index % startingPositions.length].x;
         player.y = startingPositions[index % startingPositions.length].y;

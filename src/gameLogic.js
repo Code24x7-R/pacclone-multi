@@ -36,14 +36,11 @@ const TILE_SIZE = 40;
 const PLAYER_SPEED = 0.05;
 const GHOST_SPEED = 0.04;
 const PLAYER_START_LIVES = 3;
-const POWER_UP_DURATION_MS = 10000;
 const PELLET_SCORE = 10;
 const POWER_PELLET_SCORE = 50;
-const GHOST_EAT_SCORE = 200;
 const PLAYER_EAT_SCORE = 100;
 
 const PLAYER_COLORS = ["yellow", "lime", "cyan", "magenta"];
-const DIRECTIONS = ["up", "down", "left", "right"];
 
 // --- Extra lives ---
 // Classic arcade style: earn an extra life every N points.
@@ -81,9 +78,6 @@ const STARTING_POSITIONS = [
   { x: MAZE[0].length - 1.5, y: MAZE.length - 1.5 },
 ];
 
-// Ghost spawn point
-const GHOST_SPAWN = { x: 9.5, y: 5.5 };
-
 // ---------------------------------------------------------------------------
 // Pure functions
 // ---------------------------------------------------------------------------
@@ -118,39 +112,6 @@ function isWall(x, y, maze = MAZE) {
  * @param {number[][]} [maze=MAZE] - Optional maze override.
  * @returns {{x: number, y: number}} The new position after movement.
  */
-function moveEntity(pos, direction, speed, maze = MAZE) {
-  let { x, y } = pos;
-
-  switch (direction) {
-    case "up":
-      y -= speed;
-      break;
-    case "down":
-      y += speed;
-      break;
-    case "left":
-      x -= speed;
-      break;
-    case "right":
-      x += speed;
-      break;
-  }
-
-  // Tunnel wrapping: on tunnel rows (type 4 at the horizontal edges),
-  // walking off one side teleports the entity to the other side. This must
-  // happen BEFORE the wall check — otherwise isWall() sees the out-of-bounds
-  // coordinate and treats it as a wall, blocking the tunnel entrance.
-  x = wrapTunnelX(x, pos.y, maze);
-
-  // Apply wall collision per-axis so entities slide along walls
-  let newX = x;
-  let newY = y;
-  if (isWall(x, pos.y, maze)) newX = pos.x;
-  if (isWall(pos.x, y, maze)) newY = pos.y;
-
-  return { x: newX, y: newY };
-}
-
 /**
  * Wrap an entity's X coordinate around the maze on tunnel rows.
  *
@@ -177,27 +138,6 @@ function wrapTunnelX(x, y, maze) {
 }
 
 /**
- * Compute Euclidean distance between two points.
- * @param {{x: number, y: number}} a
- * @param {{x: number, y: number}} b
- * @returns {number}
- */
-function distance(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-/**
- * Check if two entities are colliding based on a distance threshold.
- * @param {{x: number, y: number}} a
- * @param {{x: number, y: number}} b
- * @param {number} threshold - Collision radius.
- * @returns {boolean}
- */
-function isColliding(a, b, threshold) {
-  return distance(a, b) < threshold;
-}
-
-/**
  * Scan the maze and extract pellet and power-pellet positions.
  * Tile types: 0=pellet, 1=wall, 2=power, 3=power(corner), 4=empty, 6=gate.
  * @param {number[][]} [maze=MAZE] - Optional maze override.
@@ -218,28 +158,6 @@ function extractPellets(maze = MAZE) {
     }
   }
   return { pellets, powerPellets };
-}
-
-/**
- * Create the initial game state (used when starting or resetting a match).
- * @returns {{ players: Array, ghosts: Array, pellets: Array, powerPellets: Array }}
- */
-function createInitialState() {
-  const { pellets, powerPellets } = extractPellets();
-  return {
-    players: [],
-    ghosts: [
-      {
-        id: 1,
-        x: GHOST_SPAWN.x,
-        y: GHOST_SPAWN.y,
-        color: "red",
-        direction: "left",
-      },
-    ],
-    pellets,
-    powerPellets,
-  };
 }
 
 /**
@@ -264,15 +182,6 @@ function createPlayersFromLobby(lobbyPlayers) {
     dashCooldownTicks: 0,
     dashing: false,
   }));
-}
-
-/**
- * Pick a random direction for ghost movement.
- * @param {string[]} [dirs=DIRECTIONS]
- * @returns {string}
- */
-function randomDirection(dirs = DIRECTIONS) {
-  return dirs[Math.floor(Math.random() * dirs.length)];
 }
 
 /**
@@ -360,19 +269,6 @@ function pickRespawnPosition(occupied, maze, rng = Math.random) {
   // If every corner is taken (shouldn't happen with <=4 players), fall back.
   const pool = free.length > 0 ? free : walkable;
   return pool[Math.floor(rng() * pool.length)];
-}
-
-/**
- * Check win/loss conditions.
- * @param {Array} players - Active players.
- * @param {Array} pellets - Remaining pellets.
- * @param {Array} powerPellets - Remaining power pellets.
- * @returns {boolean} True if the game should end.
- */
-function checkGameOver(players, pellets, powerPellets) {
-  if (players.length <= 1) return true;
-  if (pellets.length === 0 && powerPellets.length === 0) return true;
-  return false;
 }
 
 /**
@@ -464,15 +360,6 @@ function updateDashState(player, triggerDash = false) {
  */
 function dashSpeedMultiplier(player) {
   return player.dashing ? DASH_SPEED_MULTIPLIER : 1.0;
-}
-
-/**
- * Validate a direction string.
- * @param {string} dir
- * @returns {boolean}
- */
-function isValidDirection(dir) {
-  return DIRECTIONS.includes(dir);
 }
 
 /**
@@ -723,36 +610,23 @@ module.exports = {
   PLAYER_SPEED,
   GHOST_SPEED,
   PLAYER_START_LIVES,
-  POWER_UP_DURATION_MS,
   PELLET_SCORE,
   POWER_PELLET_SCORE,
-  GHOST_EAT_SCORE,
   PLAYER_EAT_SCORE,
-  PLAYER_COLORS,
-  DIRECTIONS,
   GAME_STATES,
   STARTING_POSITIONS,
-  GHOST_SPAWN,
   EXTRA_LIFE_THRESHOLD,
   DASH_SPEED_MULTIPLIER,
   DASH_DURATION_TICKS,
   DASH_COOLDOWN_TICKS,
   isWall,
-  moveEntity,
-  distance,
-  isColliding,
   extractPellets,
-  createInitialState,
   createPlayersFromLobby,
-  randomDirection,
-  getRespawnCorners,
   pickRespawnPosition,
-  checkGameOver,
   getLevelTransition,
   extraLivesEarned,
   updateDashState,
   dashSpeedMultiplier,
-  isValidDirection,
   snapPerpendicular,
   clampSpriteToWall,
   wrapTunnelX,
