@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 // Generate a stable, unique player token (used as the player's persistent
 // identity across reconnects). 128-bit uuid — collision risk is negligible.
-const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod, isWall, extractPellets, PELLET_SCORE, POWER_PELLET_SCORE, PLAYER_EAT_SCORE } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, executePhaseDash, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod, isWall, extractPellets, PELLET_SCORE, POWER_PELLET_SCORE, PLAYER_EAT_SCORE } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -35,6 +35,46 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 app.use(express.static(path.join(__dirname, '.')));
+
+/**
+ * Check and handle pellet collision for a player. Extracted as a shared
+ * helper so it can be called both after normal movement and after a
+ * phase-dash teleport.
+ * @param {Object} player - Player object { x, y, score, poweredUp, ... }.
+ * @param {Array} pellets - Array of pellet positions (mutated).
+ * @param {Array} powerPellets - Array of power-pellet positions (mutated).
+ */
+function checkPlayerPellets(player, pellets, powerPellets) {
+    // Pellet collision
+    for (let i = pellets.length - 1; i >= 0; i--) {
+        const p = pellets[i];
+        const dist = Math.hypot(player.x - (p.x + 0.5), player.y - (p.y + 0.5));
+        if (dist < 0.4) {
+            pellets.splice(i, 1);
+            player.score += PELLET_SCORE;
+        }
+    }
+
+    // Power pellet collision
+    for (let i = powerPellets.length - 1; i >= 0; i--) {
+        const pp = powerPellets[i];
+        const dist = Math.hypot(player.x - (pp.x + 0.5), player.y - (pp.y + 0.5));
+        if (dist < 0.5) {
+            powerPellets.splice(i, 1);
+            player.score += POWER_PELLET_SCORE;
+            player.poweredUp = true;
+            // Tick-based power-up countdown (avoids storing non-serializable
+            // Timeout objects on the player and prevents timer drift).
+            player.poweredUpTicks = Math.ceil(frightenedDurationMs / GAME_LOOP_INTERVAL);
+            // Frighten all non-eaten ghosts. Patrolling ghosts switch to
+            // the 'frightened' state; house ghosts keep their state so the
+            // house logic can finish (they still render blue). Eaten ghosts
+            // (eyes returning to the house) are skipped — classic behavior.
+            ghostFrightenedTimer = frightenedDurationMs;
+            frightenGhosts(ghosts, GHOST_FRIGHTENED_SPEED, OPPOSITE);
+        }
+    }
+}
 
 // Game State
 // currentMaze holds the active maze (swapped each level). It starts as the
@@ -161,14 +201,15 @@ function startGame() {
         lives: 3,
         score: 0,
         direction: null,
+        lastDirection: null, // last non-null direction (for dash when stopped)
         poweredUp: false,
         poweredUpTicks: 0,
         // Extra-lives tracking: how many extra lives have been awarded so far.
         extraLivesAwarded: 0,
-        // Dash state.
-        dashActiveTicks: 0,
-        dashCooldownTicks: 0,
-        dashing: false,
+        // Phase-dash state: teleport forward DASH_TILES, once per life.
+        dashAvailable: true, // resets on respawn
+        dashing: false, // true during the brief visual effect
+        dashActiveTicks: 0, // visual-effect countdown
     }));
     lobbyPlayers = []; // Clear lobby after starting game
 
@@ -240,12 +281,13 @@ function startSinglePlayer(ws) {
         lives: 3,
         score: 0,
         direction: null,
+        lastDirection: null,
         poweredUp: false,
         poweredUpTicks: 0,
         extraLivesAwarded: 0,
-        dashActiveTicks: 0,
-        dashCooldownTicks: 0,
+        dashAvailable: true,
         dashing: false,
+        dashActiveTicks: 0,
     }];
 
     // Link the requesting client to their player slot and tell them their ID.
@@ -324,13 +366,27 @@ function gameLoop() {
             }
         }
 
-        // --- Dash: update state from input flag, apply speed multiplier ---
-        const dashResult = updateDashState(player, player._dashTriggered || false);
-        player.dashActiveTicks = dashResult.dashActiveTicks;
-        player.dashCooldownTicks = dashResult.dashCooldownTicks;
+        // --- Phase dash: tick down visual effect, execute teleport on trigger ---
+        const dashResult = updateDashState(player);
         player.dashing = dashResult.dashing;
+        player.dashActiveTicks = dashResult.dashActiveTicks;
+
+        // Execute phase dash if triggered (teleport forward DASH_TILES).
+        if (player._dashTriggered && !player.dashing) {
+            const dash = executePhaseDash(player, currentMaze, currentMaze[0].length, currentMaze.length);
+            if (dash.moved) {
+                player.x = dash.x;
+                player.y = dash.y;
+                player.dashAvailable = dash.dashAvailable;
+                player.dashing = dash.dashing;
+                player.dashActiveTicks = dash.dashActiveTicks;
+                // Stop movement to prevent running into a wall after teleport.
+                player.direction = null;
+                // Check for pellets at the new position (reference behavior: eat on arrival).
+                checkPlayerPellets(player, pellets, powerPellets);
+            }
+        }
         player._dashTriggered = false; // consume the flag
-        const speedMul = dashSpeedMultiplier(player);
 
         // --- Extra lives: award at score thresholds ---
         const earned = extraLivesEarned(player.score);
@@ -341,63 +397,45 @@ function gameLoop() {
             console.log(`[SERVER] ${player.name || player.id} earned extra life! (${player.lives} total)`);
         }
 
-        let nextX = player.x;
-        let nextY = player.y;
+        // Skip normal movement while dashing (visual effect period).
+        if (!player.dashing) {
+            let nextX = player.x;
+            let nextY = player.y;
 
-        const moveSpeed = PLAYER_SPEED * speedMul;
-        switch (player.direction) {
-            case 'up': nextY -= moveSpeed; break;
-            case 'down': nextY += moveSpeed; break;
-            case 'left': nextX -= moveSpeed; break;
-            case 'right': nextX += moveSpeed; break;
-        }
-
-        // Tunnel wrapping: on tunnel rows, walking off one horizontal edge
-        // teleports to the other side. Apply the wrap to the *candidate*
-        // position BEFORE the wall check so the out-of-bounds guard in isWall()
-        // does not block the tunnel entrance.
-        nextX = wrapTunnelX(nextX, player.y, currentMaze);
-
-        if (!isWall(nextX, player.y)) player.x = nextX;
-        if (!isWall(player.x, nextY)) player.y = nextY;
-
-        // Clamp the player sprite so it never overlaps a wall. The wall
-        // check above only gates the sprite *center*, but the player radius
-        // (TILE_SIZE/2 - 2 ≈ 0.45 tiles) means the body can stick into the
-        // wall at the end of a corridor — half the sprite visually inside
-        // the wall tile. Pushing the center back keeps the sprite flush.
-        // Player radius in tile units: (TILE_SIZE / 2 - 2) / TILE_SIZE.
-        var clamped = clampSpriteToWall(player.x, player.y, (TILE_SIZE / 2 - 2) / TILE_SIZE, currentMaze);
-        player.x = clamped.x;
-        player.y = clamped.y;
-
-        // Pellet collision
-        for (let i = pellets.length - 1; i >= 0; i--) {
-            const p = pellets[i];
-            const dist = Math.hypot(player.x - (p.x + 0.5), player.y - (p.y + 0.5));
-            if (dist < 0.4) {
-                pellets.splice(i, 1);
-                player.score += PELLET_SCORE;
+            const moveSpeed = PLAYER_SPEED;
+            if (player.direction) {
+                switch (player.direction) {
+                    case 'up': nextY -= moveSpeed; break;
+                    case 'down': nextY += moveSpeed; break;
+                    case 'left': nextX -= moveSpeed; break;
+                    case 'right': nextX += moveSpeed; break;
+                }
+                // Track last non-null direction for dash when stopped.
+                player.lastDirection = player.direction;
             }
-        }
 
-        // Power pellet collision
-        for (let i = powerPellets.length - 1; i >= 0; i--) {
-            const pp = powerPellets[i];
-            const dist = Math.hypot(player.x - (pp.x + 0.5), player.y - (pp.y + 0.5));
-            if (dist < 0.5) {
-                powerPellets.splice(i, 1);
-                player.score += POWER_PELLET_SCORE;
-                player.poweredUp = true;
-                // Tick-based power-up countdown (avoids storing non-serializable
-                // Timeout objects on the player and prevents timer drift).
-                player.poweredUpTicks = Math.ceil(frightenedDurationMs / GAME_LOOP_INTERVAL);
-                // Frighten all non-eaten ghosts. Patrolling ghosts switch to
-                // the 'frightened' state; house ghosts keep their state so the
-                // house logic can finish (they still render blue). Eaten ghosts
-                // (eyes returning to the house) are skipped — classic behavior.
-                ghostFrightenedTimer = frightenedDurationMs;
-                frightenGhosts(ghosts, GHOST_FRIGHTENED_SPEED, OPPOSITE);
+            // Tunnel wrapping: on tunnel rows, walking off one horizontal edge
+            // teleports to the other side. Apply the wrap to the *candidate*
+            // position BEFORE the wall check so the out-of-bounds guard in isWall()
+            // does not block the tunnel entrance.
+            nextX = wrapTunnelX(nextX, player.y, currentMaze);
+
+            if (!isWall(nextX, player.y)) player.x = nextX;
+            if (!isWall(player.x, nextY)) player.y = nextY;
+
+            // Clamp the player sprite so it never overlaps a wall. The wall
+            // check above only gates the sprite *center*, but the player radius
+            // (TILE_SIZE/2 - 2 ≈ 0.45 tiles) means the body can stick into the
+            // wall at the end of a corridor — half the sprite visually inside
+            // the wall tile. Pushing the center back keeps the sprite flush.
+            // Player radius in tile units: (TILE_SIZE / 2 - 2) / TILE_SIZE.
+            var clamped = clampSpriteToWall(player.x, player.y, (TILE_SIZE / 2 - 2) / TILE_SIZE, currentMaze);
+            player.x = clamped.x;
+            player.y = clamped.y;
+
+            // Pellet collision (only when not dashing — reference behavior).
+            if (!player.dashing) {
+                checkPlayerPellets(player, pellets, powerPellets);
             }
         }
 
@@ -405,6 +443,7 @@ function gameLoop() {
         players.forEach(otherPlayer => {
             if (player.id === otherPlayer.id) return; // Don't check collision with self
             if (otherPlayer.disconnected) return; // Skip players in grace period
+            if (player.dashing || otherPlayer.dashing) return; // Invulnerable during phase-dash
 
             const dist = Math.hypot(player.x - otherPlayer.x, player.y - otherPlayer.y);
             if (dist < 0.5) { // Collision detected
@@ -437,9 +476,10 @@ function gameLoop() {
                         otherPlayer.x = pos.x;
                         otherPlayer.y = pos.y;
                         otherPlayer.poweredUp = false; // Lose power-up on respawn
-                        // Reset dash state on respawn.
-                        otherPlayer.dashActiveTicks = 0;
+                        // Reset phase-dash availability on respawn (once per life).
+                        otherPlayer.dashAvailable = true;
                         otherPlayer.dashing = false;
+                        otherPlayer.dashActiveTicks = 0;
                     }
                 } else if (!player.poweredUp && otherPlayer.poweredUp) {
                     // Other player is powered up and eats current player (handled by otherPlayer's loop iteration)
@@ -538,12 +578,13 @@ function gameLoop() {
 
             // Check wall collision (use ghost-aware walkability for gates)
             if (!isGhostWalkable(currentMaze, Math.floor(nextX), Math.floor(nextY), ghost.state, currentMaze[0].length, currentMaze.length)) {
-                // Hit a wall — stop and let next tick pick a new direction
-                // Snap to tile edge to prevent overshoot
-                if (vec.dx > 0) ghost.x = Math.floor(ghost.x) + 0.99;
-                else if (vec.dx < 0) ghost.x = Math.floor(ghost.x) + 0.01;
-                if (vec.dy > 0) ghost.y = Math.floor(ghost.y) + 0.99;
-                else if (vec.dy < 0) ghost.y = Math.floor(ghost.y) + 0.01;
+                // Hit a wall — snap to tile center so the ghost can pick a new
+                // direction on the next tick. Snapping to the tile edge would
+                // leave the ghost stuck at a non-center position where isAtTileCenter
+                // returns false forever, freezing the ghost in place.
+                const snapped = snapToTileCenter(ghost);
+                ghost.x = snapped.x;
+                ghost.y = snapped.y;
             } else {
                 ghost.x = nextX;
                 ghost.y = nextY;
@@ -557,6 +598,7 @@ function gameLoop() {
         // Player collision
         players.forEach((player, playerIndex) => {
             if (player.disconnected) return; // Skip players in grace period
+            if (player.dashing) return; // Invulnerable during phase-dash effect
             const dist = Math.hypot(player.x - ghost.x, player.y - ghost.y);
             if (dist < 0.5) {
                 if (ghost.eaten) return; // Already eaten, skip
@@ -598,9 +640,10 @@ function gameLoop() {
                         const pos = pickRespawnPosition(occupied, currentMaze);
                         player.x = pos.x;
                         player.y = pos.y;
-                        // Reset dash state on respawn.
-                        player.dashActiveTicks = 0;
+                        // Reset phase-dash availability on respawn (once per life).
+                        player.dashAvailable = true;
                         player.dashing = false;
+                        player.dashActiveTicks = 0;
                     }
                 }
             }

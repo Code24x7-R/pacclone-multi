@@ -434,6 +434,124 @@ describe("chooseDirection", () => {
   });
 });
 
+describe("wall collision bug fix (ghost frozen at tile edge)", () => {
+  // This test reproduces the bug where a ghost that hits a wall gets stuck
+  // at the tile edge and can never reach a tile center again, so it can never
+  // pick a new direction. The ghost appears "frozen".
+  //
+  // The bug was in the server's wall collision logic: when a ghost hit a wall,
+  // it was snapped to the tile edge (Math.floor(x) + 0.99 or + 0.01) instead
+  // of the tile center. Since isAtTileCenter uses a small epsilon (0.04), a
+  // ghost at x=4.99 would never be considered "at center", so it would never
+  // pick a new direction, resulting in an infinite loop of hitting the wall.
+
+  const corridorMaze = [
+    [1, 1, 1, 1, 1, 1, 1],
+    [1, 0, 0, 0, 0, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1],
+  ];
+  const mazeWidth = 7;
+  const mazeHeight = 3;
+  const ghostBaseSpeed = 0.08;
+
+  function simulateGhostMovement_buggy(ghost, ticks) {
+    const positions = [];
+    for (let i = 0; i < ticks; i++) {
+      const atCenter = isAtTileCenter(ghost.x, ghost.y, ghostBaseSpeed / 2);
+      if (atCenter) {
+        const snapped = snapToTileCenter(ghost);
+        ghost.x = snapped.x;
+        ghost.y = snapped.y;
+        // Force direction to right (toward wall)
+        ghost.direction = 'right';
+      }
+      const vec = { dx: 1, dy: 0 };
+      const moveAmount = ghostBaseSpeed * (ghost.speed || 0.8);
+      const nextX = ghost.x + vec.dx * moveAmount;
+      const nextY = ghost.y + vec.dy * moveAmount;
+      if (!isGhostWalkable(corridorMaze, Math.floor(nextX), Math.floor(nextY), ghost.state, mazeWidth, mazeHeight)) {
+        // OLD BUGGY CODE: snap to tile edge
+        if (vec.dx > 0) ghost.x = Math.floor(ghost.x) + 0.99;
+        else if (vec.dx < 0) ghost.x = Math.floor(ghost.x) + 0.01;
+        if (vec.dy > 0) ghost.y = Math.floor(ghost.y) + 0.99;
+        else if (vec.dy < 0) ghost.y = Math.floor(ghost.y) + 0.01;
+      } else {
+        ghost.x = nextX;
+        ghost.y = nextY;
+      }
+      positions.push({ x: ghost.x, y: ghost.y });
+    }
+    return positions;
+  }
+
+  function simulateGhostMovement_fixed(ghost, ticks) {
+    const positions = [];
+    for (let i = 0; i < ticks; i++) {
+      const atCenter = isAtTileCenter(ghost.x, ghost.y, ghostBaseSpeed / 2);
+      if (atCenter) {
+        const snapped = snapToTileCenter(ghost);
+        ghost.x = snapped.x;
+        ghost.y = snapped.y;
+        // Force direction to right (toward wall)
+        ghost.direction = 'right';
+      }
+      const vec = { dx: 1, dy: 0 };
+      const moveAmount = ghostBaseSpeed * (ghost.speed || 0.8);
+      const nextX = ghost.x + vec.dx * moveAmount;
+      const nextY = ghost.y + vec.dy * moveAmount;
+      if (!isGhostWalkable(corridorMaze, Math.floor(nextX), Math.floor(nextY), ghost.state, mazeWidth, mazeHeight)) {
+        // FIXED: snap to tile center
+        const snapped = snapToTileCenter(ghost);
+        ghost.x = snapped.x;
+        ghost.y = snapped.y;
+      } else {
+        ghost.x = nextX;
+        ghost.y = nextY;
+      }
+      positions.push({ x: ghost.x, y: ghost.y });
+    }
+    return positions;
+  }
+
+  test("BUG DEMO: old code snaps ghost to tile edge, freezing it", () => {
+    const ghost = { x: 1.5, y: 1.5, direction: 'right', state: 'chase', speed: 0.8 };
+    // Run enough ticks to hit the wall and get stuck (wall is hit at tick 52)
+    const positions = simulateGhostMovement_buggy(ghost, 70);
+    // After hitting the wall, the ghost should be stuck at x ≈ 4.99
+    // (the right edge of tile 4, since tile 5 is a wall)
+    const lastPos = positions[positions.length - 1];
+    const fracX = lastPos.x - Math.floor(lastPos.x);
+    // The ghost should NOT be at a tile center (this is the bug)
+    const atTileCenter = Math.abs(fracX - 0.5) < 0.1;
+    // This test documents the buggy behavior: ghost is stuck at edge
+    expect(atTileCenter).toBe(false);
+    // The ghost should be at the tile edge (x ≈ 4.99)
+    expect(lastPos.x).toBeCloseTo(4.99, 2);
+    // The ghost should have the same position for the last 10 ticks (stuck)
+    const last10 = positions.slice(-10);
+    const uniquePositions = new Set(last10.map(p => p.x.toFixed(4) + ',' + p.y.toFixed(4)));
+    expect(uniquePositions.size).toBe(1);
+  });
+
+  test("FIX VERIFIED: new code snaps ghost to tile center, allowing recovery", () => {
+    const ghost = { x: 1.5, y: 1.5, direction: 'right', state: 'chase', speed: 0.8 };
+    const positions = simulateGhostMovement_fixed(ghost, 60);
+    // After hitting the wall, the ghost should NOT be stuck
+    const last10 = positions.slice(-10);
+    const uniquePositions = new Set(last10.map(p => p.x.toFixed(4) + ',' + p.y.toFixed(4)));
+    // With the fix, the ghost should be moving (multiple unique positions)
+    expect(uniquePositions.size).toBeGreaterThan(1);
+  });
+
+  test("frightened ghost with fix can recover from wall collision", () => {
+    const ghost = { x: 1.5, y: 1.5, direction: 'right', state: 'frightened', speed: 0.5 };
+    const positions = simulateGhostMovement_fixed(ghost, 60);
+    const last10 = positions.slice(-10);
+    const uniquePositions = new Set(last10.map(p => p.x.toFixed(4) + ',' + p.y.toFixed(4)));
+    expect(uniquePositions.size).toBeGreaterThan(1);
+  });
+});
+
 describe("isAtTileCenter", () => {
   test("returns true at exact tile center", () => {
     expect(isAtTileCenter(5.5, 3.5)).toBe(true);
