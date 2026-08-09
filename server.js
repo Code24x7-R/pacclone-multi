@@ -43,7 +43,7 @@ let players = [];
 let ghosts = [];
 let pellets = [];
 let powerPellets = [];
-const PLAYER_SPEED = 0.075; // tiles per tick (4.5 tiles/s at 60 FPS)
+const PLAYER_SPEED = 0.1; // tiles per tick (6 tiles/s at 60 FPS)
 let ghostBaseSpeed = 0.08; // base tiles per tick (personalities apply multiplier); scales with level
 let frightenedDurationMs = frightenedDurationForLevel(1); // scales with level
 

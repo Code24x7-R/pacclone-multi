@@ -34,6 +34,19 @@
         }
         canvas { background-color: #000; display: none; }
 
+        /* Responsive canvas: scale down to fit small screens while preserving
+         * the 800x520 (20:13) aspect ratio. Without this, the maze overflows
+         * the viewport on phones and the player can move off-screen.
+         * touch-action: none prevents the browser from scrolling/zooming
+         * when the player touches the canvas to use the joystick. */
+        #gameCanvas {
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+            aspect-ratio: 800 / 520;
+            touch-action: none;
+        }
+
         /* --- Animated background dots (maze vibe) --- */
         body::before {
             content: '';
@@ -912,7 +925,7 @@
                     ctx.strokeStyle = '#0ff';
                     ctx.lineWidth = 3;
                     ctx.beginPath();
-                    ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2.5 + 3, 0, Math.PI * 2);
+                    ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2 - 2 + 3, 0, Math.PI * 2);
                     ctx.stroke();
                     ctx.lineWidth = 1;
                 }
@@ -925,7 +938,11 @@
 
                 ctx.fillStyle = p.poweredUp ? 'orange' : p.color;
                 ctx.beginPath();
-                ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2.5,
+                // Reference proportion: TILE_SIZE / 2 - 2. This makes Pac-Man fill the
+                // corridor (radius ≈ half a tile) so it sits centered on the pellet
+                // line. A smaller radius (the old TILE_SIZE/2.5) left the character
+                // floating and visually misaligned with pellets.
+                ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2 - 2,
                     dirAngle + mouthAngle, dirAngle + Math.PI * 2 - mouthAngle);
                 ctx.lineTo(p.x * TILE_SIZE, p.y * TILE_SIZE);
                 ctx.fill();
