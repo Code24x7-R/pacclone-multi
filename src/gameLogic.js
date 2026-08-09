@@ -580,6 +580,57 @@ function buildGameStatePayload(maze, players, ghosts, pellets, powerPellets, cur
 }
 
 // ---------------------------------------------------------------------------
+// Frightened-state helpers (pure). Used by server.js when a power pellet is
+// eaten (frighten) and when the frightened timer expires (revert).
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply the power-pellet effect to all non-eaten ghosts. Every ghost that is
+ * not already eaten turns frightened. Patrolling ghosts (chase/scatter) switch
+ * to the 'frightened' state and reverse direction (classic behavior). Ghosts
+ * still in the house or exiting keep their state so the house logic can finish
+ * — they render blue (frightened) but don't change behavior until they've fully
+ * exited.
+ *
+ * @param {Array<Object>} ghosts - Ghost objects (mutated in place).
+ * @param {number} frightenedSpeed - Speed multiplier for frightened ghosts.
+ * @param {Object} opposite - Map of direction → opposite direction.
+ */
+function frightenGhosts(ghosts, frightenedSpeed, opposite) {
+  ghosts.forEach(ghost => {
+    if (ghost.state === 'eaten') return;
+    ghost.frightened = true;
+    ghost.speed = frightenedSpeed;
+    if (ghost.state === 'chase' || ghost.state === 'scatter') {
+      ghost.state = 'frightened';
+      ghost.direction = opposite[ghost.direction] || ghost.direction;
+    }
+  });
+}
+
+/**
+ * Revert all frightened ghosts when the power-pellet timer expires. Clears the
+ * frightened flag, flashing, and restores normal speed. Only ghosts that were
+ * patrolling (state === 'frightened') return to the mode cycle; house ghosts
+ * (inHouse / exitingHouse) keep their state so house logic can finish.
+ *
+ * @param {Array<Object>} ghosts - Ghost objects (mutated in place).
+ * @param {number} normalSpeed - Speed multiplier for normal ghosts.
+ * @param {string} modeCycleMode - The current scatter/chase mode to restore.
+ */
+function revertFrightenedGhosts(ghosts, normalSpeed, modeCycleMode) {
+  ghosts.forEach(ghost => {
+    if (!ghost.frightened) return;
+    ghost.frightened = false;
+    ghost.flashing = false;
+    ghost.speed = normalSpeed;
+    if (ghost.state === 'frightened') {
+      ghost.state = modeCycleMode;
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Lobby helpers (pure). Used by server.js to manage the lobby → game → lobby
 // lifecycle: warm rejoin, ready-up, countdown, and reconnection grace.
 // ---------------------------------------------------------------------------
@@ -706,6 +757,8 @@ module.exports = {
   clampSpriteToWall,
   wrapTunnelX,
   buildGameStatePayload,
+  frightenGhosts,
+  revertFrightenedGhosts,
   COUNTDOWN_DURATION_MS,
   RECONNECT_GRACE_MS,
   rebuildLobbyFromMatch,

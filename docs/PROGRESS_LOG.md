@@ -4,6 +4,13 @@
 
 ## 2026-08-09
 
+### [BUGFIX] B-007 — power pellet doesn't scare all ghosts
+- Symptom: Eating a power pellet turns most ghosts blue, but ghosts still in the house (and those mid-exit) never show the scared state. A secondary issue: exitingHouse ghosts that did get frightened were never reverted when the timer expired.
+- Root cause: The power-pellet code in server.js skipped `inHouse` ghosts (`if (ghost.state !== 'eaten' && ghost.state !== 'inHouse')`). The timer reversion only checked `ghost.state === 'frightened'`, so `exitingHouse` ghosts with `frightened=true` were never cleaned up.
+- Fix: Extracted two pure helpers in `src/gameLogic.js` — `frightenGhosts` (frightens ALL non-eaten ghosts; house ghosts keep their state but turn blue) and `revertFrightenedGhosts` (reverts based on the `frightened` flag, preserving house-ghost state). Wired both into server.js, replacing the inline logic.
+- Added 12 unit tests in `tests/server/frightenGhosts.test.js` covering active, inHouse, exitingHouse, eaten, mixed groups, and round-trip.
+- Verification: 349 tests pass, lint clean.
+
 ### [BUGFIX] B-006 — tunnel teleport blocked for players (works for ghosts)
 - Symptom: The horizontal tunnel teleport doesn't work for players — they get blocked at the tunnel edge and can't wrap around the maze. Ghosts traverse the tunnel fine. Reported while testing single-player but affects multiplayer too (shared player movement code).
 - Root cause: `clampSpriteToWall` in `src/gameLogic.js` treats out-of-bounds tiles as walls. On a tunnel row, when the player's left edge goes below x=0, the clamp pins the player at x≈0.45 (clamp formula: `leftTile + 1 + radius` where leftTile=-1), preventing them from ever reaching x=0 to trigger `wrapTunnelX`. Ghosts don't use the clamp, so their tunnel works.

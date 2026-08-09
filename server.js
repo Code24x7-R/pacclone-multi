@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 // Generate a stable, unique player token (used as the player's persistent
 // identity across reconnects). 128-bit uuid — collision risk is negligible.
-const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -403,18 +403,12 @@ function gameLoop() {
                 // Tick-based power-up countdown (avoids storing non-serializable
                 // Timeout objects on the player and prevents timer drift).
                 player.poweredUpTicks = Math.ceil(frightenedDurationMs / GAME_LOOP_INTERVAL);
-                // Frighten all active ghosts
+                // Frighten all non-eaten ghosts. Patrolling ghosts switch to
+                // the 'frightened' state; house ghosts keep their state so the
+                // house logic can finish (they still render blue). Eaten ghosts
+                // (eyes returning to the house) are skipped — classic behavior.
                 ghostFrightenedTimer = frightenedDurationMs;
-                ghosts.forEach(ghost => {
-                    if (ghost.state !== 'eaten' && ghost.state !== 'inHouse') {
-                        ghost.frightened = true;
-                        ghost.speed = GHOST_FRIGHTENED_SPEED;
-                        if (ghost.state === 'chase' || ghost.state === 'scatter') {
-                            ghost.state = 'frightened';
-                            ghost.direction = OPPOSITE[ghost.direction] || ghost.direction;
-                        }
-                    }
-                });
+                frightenGhosts(ghosts, GHOST_FRIGHTENED_SPEED, OPPOSITE);
             }
         }
 
@@ -496,15 +490,14 @@ function gameLoop() {
         ghostFrightenedTimer -= GAME_LOOP_INTERVAL;
         if (ghostFrightenedTimer <= 0) {
             ghostFrightenedTimer = 0;
-            // Revert frightened ghosts back to their mode
-            ghosts.forEach(ghost => {
-                if (ghost.state === 'frightened') {
-                    ghost.frightened = false;
-                    ghost.flashing = false;
-                    ghost.speed = GHOST_NORMAL_SPEED;
-                    ghost.state = modeCycle ? modeCycle.mode : 'scatter';
-                }
-            });
+            // Revert ALL frightened ghosts. Patrolling ghosts return to the
+            // mode cycle; house ghosts (inHouse/exitingHouse) keep their state
+            // so the house logic can finish.
+            revertFrightenedGhosts(
+                ghosts,
+                GHOST_NORMAL_SPEED,
+                modeCycle ? modeCycle.mode : 'scatter',
+            );
         }
     }
 
