@@ -15,6 +15,8 @@ module.exports = [
         __dirname: "readonly",
         process: "readonly",
         console: "readonly",
+        global: "readonly",
+        globalThis: "readonly",
         setInterval: "readonly",
         clearInterval: "readonly",
         setTimeout: "readonly",

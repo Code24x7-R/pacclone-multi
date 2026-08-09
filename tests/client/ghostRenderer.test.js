@@ -145,10 +145,12 @@ describe('drawGhost', () => {
       frightened: false, eaten: false, flashing: false,
     }, TILE);
     // Center should be at (3*40, 7*40) = (120, 280)
-    // Dome arc is the first arc call: arc(cx, cy - r/2, r, ...)
+    // Ghost radius is TILE/3 (reference proportion); dome arc is the first arc
+    // call: arc(cx, cy - r/2, r, ...).
+    const r = TILE / 3;
     const domeArc = ctx.__calls.find((c) => c.method === 'arc');
     expect(domeArc.args[0]).toBe(120); // cx
-    expect(domeArc.args[1]).toBeCloseTo(280 - 16 / 2); // cy - r/2
+    expect(domeArc.args[1]).toBeCloseTo(280 - r / 2); // cy - r/2
   });
 
   test('all four ghost colors render correctly', () => {

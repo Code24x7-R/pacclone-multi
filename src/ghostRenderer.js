@@ -19,7 +19,10 @@
    * @param {number} tileSize - Tile size in pixels.
    */
   function drawGhost(ctx, g, tileSize) {
-    const r = tileSize / 2.5; // ghost radius (matches player size)
+    // Reference proportion: TILE_SIZE / 3. This keeps the ghost small enough
+    // to sit centered within a tile corridor (a larger radius overflows the
+    // tile and looks off-center due to the dome offset).
+    const r = tileSize / 3;
     const cx = g.x * tileSize;
     const cy = g.y * tileSize;
 

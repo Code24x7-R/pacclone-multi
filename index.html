@@ -28,6 +28,9 @@
             <h2 style="color: #ffd700;">High Scores</h2>
             <ol id="highScoresList" style="padding-left: 20px; margin: 5px 0;"></ol>
         </div>
+        <div style="margin-bottom: 10px;">
+            <button id="muteButton" style="padding: 6px 14px; font-size: 14px; background-color: #333; color: #fff; border: 1px solid #666; cursor: pointer;">Mute</button>
+        </div>
         <button id="startGameButton" style="padding: 10px 20px; font-size: 18px; background-color: green; color: white; border: none; cursor: pointer;" disabled>Start Game</button>
         <div id="hostStatus" style="margin-top: 15px; font-size: 14px; color: #aaa; min-height: 20px;"></div>
     </div>
@@ -40,6 +43,7 @@
 
     <script src="src/ghostRenderer.js"></script>
     <script src="src/highScores.js"></script>
+    <script src="src/audio.js"></script>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -56,10 +60,12 @@
         let clientGameState = 'LOBBY'; // Client-side representation of game state
         let isSpectating = false; // true when the player is out of lives and watching
         let lastScore = 0; // for chomp sound
+        let lastLives = 0; // for extra-life sound
         let lastPoweredUpState = false; // for power-up sound
         let lastGhostPositions = []; // for ghost eaten sound
         let highScores = HighScores.loadHighScores();
         let finalScoreRecorded = false;
+        let gameOverSoundPlayed = false; // one-shot guard for game-over SFX
 
         // Render the high score list into an element using the HighScores module.
         function renderHighScores(el) {
@@ -73,40 +79,30 @@
             ).join('');
         }
 
-        // NEW: Audio elements
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        let chompSound, powerupSound, ghostEatenSound, playerEatenSound, gameOverSound;
-
-        // Function to load sounds (simplified, would typically load from files)
-        async function loadSounds() {
-            // Placeholder for loading actual audio files
-            // For now, we'll create simple oscillator sounds for demonstration
-            chompSound = createOscillatorSound(261.63, 0.05); // C4
-            powerupSound = createOscillatorSound(392.00, 0.1, 'triangle'); // G4
-            ghostEatenSound = createOscillatorSound(523.25, 0.15); // C5
-            playerEatenSound = createOscillatorSound(110.00, 0.2, 'sawtooth'); // A2
-            gameOverSound = createOscillatorSound(78.00, 0.5, 'square'); // D2
+        // --- Audio (src/audio.js — chiptune SFX) ---
+        // AudioContext must be created/resumed on a user gesture. We init on the
+        // first lobby interaction; until then sounds are no-ops.
+        var audioInitialized = false;
+        function ensureAudio() {
+            if (!audioInitialized) {
+                AudioFX.init();
+                audioInitialized = true;
+            }
         }
 
-        function createOscillatorSound(frequency, duration, type = 'sine') {
-            return function() {
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-
-                oscillator.type = type;
-                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-                gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); // Volume
-
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-
-                oscillator.start();
-                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioContext.currentTime + duration); // Fade out
-                oscillator.stop(audioContext.currentTime + duration);
-            };
-        }
-
-        loadSounds(); // Load sounds on startup
+        // Map the old sound variables to AudioFX calls so existing trigger
+        // points keep working. New sounds (dash, celebrate, extra-life, etc.)
+        // are added where the gameplay events occur.
+        function playChomp() { ensureAudio(); AudioFX.playChomp(); }
+        function playPowerup() { ensureAudio(); AudioFX.playPowerup(); }
+        function playGhostEaten() { ensureAudio(); AudioFX.playEatGhost(); }
+        function playPlayerEaten() { ensureAudio(); AudioFX.playDeath(); }
+        function playGameOver() { ensureAudio(); AudioFX.playGameOver(); }
+        function playDash() { ensureAudio(); AudioFX.playDash(); }
+        function playCelebrate() { ensureAudio(); AudioFX.playCelebrate(); }
+        function playExtraLife() { ensureAudio(); AudioFX.playExtraLife(); }
+        function playHighScore() { ensureAudio(); AudioFX.playHighScore(); }
+        function playStart() { ensureAudio(); AudioFX.playStart(); }
 
         // High score functions are provided by src/highScores.js (HighScores global).
 
@@ -129,6 +125,7 @@
 
         // NEW: Event Listeners for Lobby Buttons
         joinLobbyButton.addEventListener('click', () => {
+            ensureAudio(); // Unlock AudioContext on first user gesture.
             const playerName = playerNameInput.value.trim();
             if (playerName) {
                 localStorage.setItem('pacclonePlayerName', playerName); // Store name
@@ -140,7 +137,15 @@
         });
 
         startGameButton.addEventListener('click', () => {
+            ensureAudio();
             ws.send(JSON.stringify({ type: 'startGame' }));
+        });
+
+        const muteButton = document.getElementById('muteButton');
+        muteButton.addEventListener('click', () => {
+            ensureAudio();
+            const muted = AudioFX.toggleMute();
+            muteButton.textContent = muted ? 'Unmute' : 'Mute';
         });
 
         ws.onmessage = (event) => {
@@ -211,6 +216,8 @@
                     // Reset high score recording flag when a new game/level starts.
                     if (clientGameState === 'IN_PROGRESS' && prevState !== 'IN_PROGRESS') {
                         finalScoreRecorded = false;
+                        gameOverSoundPlayed = false;
+                        playStart();
                     }
                     if (clientGameState === 'IN_PROGRESS' || clientGameState === 'GAME_OVER' || clientGameState === 'LEVEL_COMPLETE') {
                         lobbyDiv.style.display = 'none';
@@ -240,6 +247,7 @@
                             // Record high score once per game over.
                             if (!finalScoreRecorded) {
                                 finalScoreRecorded = true;
+                                gameOverSoundPlayed = false; // will be set true below after playing
                                 // At GAME_OVER, dead players are removed from the players array
                                 // (they became spectators). Use the client-tracked score as the
                                 // authoritative final score; fall back to the server's player
@@ -254,6 +262,7 @@
                                     ctx.fillStyle = '#ffd700';
                                     ctx.font = '36px Arial';
                                     ctx.fillText('New High Score!', canvas.width / 2, canvas.height / 2 + 80);
+                                    playHighScore();
                                 } else if (isHighScore) {
                                     ctx.fillStyle = '#ffd700';
                                     ctx.font = '28px Arial';
@@ -270,6 +279,7 @@
 
                         // Level complete overlay (brief transition between levels)
                         if (clientGameState === 'LEVEL_COMPLETE') {
+                            playCelebrate();
                             ctx.fillStyle = 'lime';
                             ctx.font = '60px Arial';
                             ctx.textAlign = 'center';
@@ -282,8 +292,9 @@
                          lobbyDiv.style.display = 'flex';
                          canvas.style.display = 'none';
                     }
-                    if (clientGameState === 'GAME_OVER') {
-                        if (gameOverSound) gameOverSound(); // Play game over sound
+                    if (clientGameState === 'GAME_OVER' && !gameOverSoundPlayed) {
+                        gameOverSoundPlayed = true;
+                        playGameOver();
                     }
                     break;
                                             case 'spectatorMode': // Handle spectatorMode message
@@ -298,7 +309,7 @@
                                                 ctx.textAlign = 'center';
                                                 ctx.fillText(message.message, canvas.width / 2, canvas.height / 2 - 50);
                                                 ctx.fillText('Spectating...', canvas.width / 2, canvas.height / 2 + 50);
-                                                if (playerEatenSound) playerEatenSound(); // Play player eaten sound
+                                                playPlayerEaten(); // Play player eaten sound
                                                 break;
                 case 'error':
                     console.error('[SERVER ERROR]:', message.message);
@@ -322,6 +333,7 @@
                 // Re-send current direction so the dash takes effect immediately.
                 if (myPlayerId && !isSpectating && lastDirection) {
                     ws.send(JSON.stringify({ type: 'input', direction: lastDirection, dash: true }));
+                    playDash();
                 }
                 return;
             }
@@ -525,13 +537,13 @@
             if (myPlayer) {
                 // Chomp sound
                 if (myPlayer.score > lastScore) {
-                    if (chompSound) chompSound();
+                    playChomp();
                 }
                 lastScore = myPlayer.score;
 
                 // Power-up sound
                 if (myPlayer.poweredUp && !lastPoweredUpState) {
-                    if (powerupSound) powerupSound();
+                    playPowerup();
                 }
                 lastPoweredUpState = myPlayer.poweredUp;
             }
@@ -587,7 +599,7 @@
             // Ghost eaten sound: detect when a ghost transitions to eaten state near us.
             // Eaten ghosts stay in the list (they return to the house), so we track the
             // previous eaten flag per ghost rather than looking for vanished ghosts.
-            if (myPlayer && myPlayer.poweredUp && ghostEatenSound) {
+            if (myPlayer && myPlayer.poweredUp) {
                 const newlyEaten = ghosts.filter(g => {
                     if (!g.eaten) return false;
                     const prev = lastGhostPositions.find(lg => lg.id === g.id);
@@ -598,10 +610,16 @@
                     return dist < 1.0;
                 });
                 if (eatenByMe) {
-                    ghostEatenSound();
+                    playGhostEaten();
                 }
             }
             lastGhostPositions = ghosts.map(g => ({ id: g.id, x: g.x, y: g.y, eaten: g.eaten }));
+
+            // Extra-life sound: detect when our lives increase (server awards at score thresholds).
+            if (myPlayer && lastLives > 0 && myPlayer.lives > lastLives) {
+                playExtraLife();
+            }
+            if (myPlayer) lastLives = myPlayer.lives;
 
             // Draw scores and lives
             ctx.fillStyle = 'white';
