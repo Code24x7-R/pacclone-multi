@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const { buildGameStatePayload, GAME_STATES, MAZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular, wrapTunnelX } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -210,6 +210,12 @@ function gameLoop() {
             case 'right': nextX += moveSpeed; break;
         }
 
+        // Tunnel wrapping: on tunnel rows, walking off one horizontal edge
+        // teleports to the other side. Apply the wrap to the *candidate*
+        // position BEFORE the wall check so the out-of-bounds guard in isWall()
+        // does not block the tunnel entrance.
+        nextX = wrapTunnelX(nextX, player.y, currentMaze);
+
         if (!isWall(nextX, player.y)) player.x = nextX;
         if (!isWall(player.x, nextY)) player.y = nextY;
 
@@ -397,14 +403,9 @@ function gameLoop() {
                 ghost.y = nextY;
             }
 
-            // Tunnel wrapping: only tunnel rows (type 4 at the horizontal edges) wrap.
-            // Type 0 at edges is a regular pellet path and does NOT wrap.
-            const tileY = Math.floor(ghost.y);
-            const isTunnelRow = tileY >= 0 && tileY < currentMaze.length && currentMaze[tileY][0] === 4;
-            if (isTunnelRow && (ghost.x < 0 || ghost.x >= currentMaze[0].length)) {
-                if (ghost.x < 0) ghost.x = currentMaze[0].length + ghost.x;
-                else if (ghost.x >= currentMaze[0].length) ghost.x = ghost.x - currentMaze[0].length;
-            }
+            // Tunnel wrapping: on tunnel rows, walking off one horizontal
+            // edge teleports the ghost to the other side (classic Pac-Man tunnel).
+            ghost.x = wrapTunnelX(ghost.x, ghost.y, currentMaze);
         }
 
         // Player collision

@@ -208,33 +208,66 @@
   }
 
   /**
-   * Game over — descending five-note arpeggio.
+   * Play a sequence of notes, one oscillator + gain per note.
+   *
+   * This is the shared backbone for all multi-note sounds (game over,
+   * celebration, extra life, high score, game start). Factoring it out
+   * removes ~120 lines of near-identical note-scheduling loops.
+   *
+   * @param {Array<number|{freq: number, dur: number}>} notes - Frequencies
+   *   (Hz) or {freq, dur} note objects. A freq of 0 is a rest (skipped).
+   * @param {Object} [options] - Timing and voice options.
+   * @param {number} [options.noteDur] - Default duration for plain-number
+   *   notes (seconds). Ignored for {freq, dur} notes.
+   * @param {string} [options.type='triangle'] - Oscillator waveform.
+   * @param {number} [options.volume=0.35] - Peak gain (0..1).
+   * @param {number} [options.attack=0.01] - Time to reach peak gain (seconds).
+   * @param {number} [options.gap=0] - Extra silence after each note (seconds).
+   * @param {number} [options.startOffset=0] - Delay before the first note.
+   * @param {boolean} [options.cumulative=false] - If true, advance the cursor
+   *   by each note's own duration (for {freq, dur} melodies with rests).
+   *   If false, advance by noteDur + gap (for fixed-tempo arpeggios).
    */
-  function playGameOver() {
+  function playNoteSequence(notes, options) {
     if (isMuted) return;
     var ctx = getContext();
     if (!ctx) return;
     var now = ctx.currentTime;
-    var noteDur = 0.25;
-    var notes = [330, 220, 165, 110, 55];
+    var o = options || {};
+    var noteDur = o.noteDur;
+    var type = o.type || 'triangle';
+    var volume = o.volume != null ? o.volume : 0.35;
+    var attack = o.attack != null ? o.attack : 0.01;
+    var gap = o.gap || 0;
+    var startOffset = o.startOffset || 0;
+    var cumulative = o.cumulative || false;
 
-    notes.forEach(function (freq, i) {
-      var start = now + i * noteDur;
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, start);
-
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.4, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + noteDur);
-
-      osc.start(start);
-      osc.stop(start + noteDur);
+    var cursor = now + startOffset;
+    notes.forEach(function (n) {
+      var freq = typeof n === 'object' ? n.freq : n;
+      var dur = typeof n === 'object' ? n.dur : noteDur;
+      if (freq > 0) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, cursor);
+        gain.gain.setValueAtTime(0, cursor);
+        gain.gain.linearRampToValueAtTime(volume, cursor + attack);
+        gain.gain.exponentialRampToValueAtTime(0.001, cursor + dur);
+        osc.start(cursor);
+        osc.stop(cursor + dur);
+      }
+      cursor += cumulative ? dur + gap : noteDur + gap;
     });
+  }
+
+  /**
+   * Game over — descending five-note arpeggio.
+   */
+  function playGameOver() {
+    playNoteSequence([330, 220, 165, 110, 55], { noteDur: 0.25, type: 'triangle', volume: 0.4, attack: 0.02 });
   }
 
   /**
@@ -289,146 +322,52 @@
    * Level complete celebration — ascending C major arpeggio (C-E-G-C).
    */
   function playCelebrate() {
-    if (isMuted) return;
-    var ctx = getContext();
-    if (!ctx) return;
-    var now = ctx.currentTime;
-    var noteDur = 0.1;
-    var notes = [261.63, 329.63, 392.0, 523.25];
-
-    notes.forEach(function (freq, i) {
-      var start = now + i * noteDur;
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, start);
-
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.35, start + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + noteDur);
-
-      osc.start(start);
-      osc.stop(start + noteDur);
-    });
+    playNoteSequence([261.63, 329.63, 392.0, 523.25], { noteDur: 0.1, type: 'triangle', volume: 0.35, attack: 0.01 });
   }
 
   /**
    * Extra life earned — quick ascending 1-UP figure.
    */
   function playExtraLife() {
-    if (isMuted) return;
-    var ctx = getContext();
-    if (!ctx) return;
-    var now = ctx.currentTime;
-    var noteDur = 0.09;
-    var notes = [523.25, 659.25, 783.99, 1046.5];
-
-    notes.forEach(function (freq, i) {
-      var start = now + i * noteDur;
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, start);
-
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.4, start + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + noteDur);
-
-      osc.start(start);
-      osc.stop(start + noteDur);
-    });
+    playNoteSequence([523.25, 659.25, 783.99, 1046.5], { noteDur: 0.09, type: 'triangle', volume: 0.4, attack: 0.01 });
   }
 
   /**
    * High score achieved — Pac-Man style jingle.
    */
   function playHighScore() {
-    if (isMuted) return;
-    var ctx = getContext();
-    if (!ctx) return;
-    var now = ctx.currentTime;
-    var noteDur = 0.08;
-    var gap = 0.02;
-    var start = now + 0.1;
-    var notes = [523.25, 659.25, 783.99, 1046.5, 783.99, 659.25, 523.25];
-
-    notes.forEach(function (freq, i) {
-      var noteStart = start + i * (noteDur + gap);
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(freq, noteStart);
-
-      gain.gain.setValueAtTime(0, noteStart);
-      gain.gain.linearRampToValueAtTime(0.35, noteStart + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, noteStart + noteDur);
-
-      osc.start(noteStart);
-      osc.stop(noteStart + noteDur);
-    });
+    playNoteSequence(
+      [523.25, 659.25, 783.99, 1046.5, 783.99, 659.25, 523.25],
+      { noteDur: 0.08, gap: 0.02, type: 'square', volume: 0.35, attack: 0.01, startOffset: 0.1 }
+    );
   }
 
   /**
    * Game start — bright arcade jingle.
    */
   function playStart() {
-    if (isMuted) return;
-    var ctx = getContext();
-    if (!ctx) return;
-    var now = ctx.currentTime;
-    var tempo = 180;
-    var eighth = 60 / tempo / 2;
-    var start = now + 0.1;
-
-    var notes = [
-      { freq: 932.33, dur: eighth },
-      { freq: 0, dur: eighth / 2 },
-      { freq: 932.33, dur: eighth },
-      { freq: 783.99, dur: eighth },
-      { freq: 698.46, dur: eighth },
-      { freq: 622.25, dur: eighth },
-      { freq: 0, dur: eighth / 2 },
-      { freq: 698.46, dur: eighth },
-      { freq: 622.25, dur: eighth },
-      { freq: 523.25, dur: eighth },
-      { freq: 466.16, dur: eighth },
-      { freq: 0, dur: eighth / 2 },
-      { freq: 523.25, dur: eighth },
-      { freq: 466.16, dur: eighth },
-      { freq: 392.0, dur: eighth },
-      { freq: 523.25, dur: eighth * 8 }
-    ];
-
-    var cumulative = start;
-    notes.forEach(function (n) {
-      if (n.freq > 0) {
-        var noteStart = cumulative;
-        var osc = ctx.createOscillator();
-        var gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(n.freq, noteStart);
-
-        gain.gain.setValueAtTime(0, noteStart);
-        gain.gain.linearRampToValueAtTime(0.35, noteStart + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, noteStart + n.dur);
-
-        osc.start(noteStart);
-        osc.stop(noteStart + n.dur);
-      }
-      cumulative += n.dur;
-    });
+    var eighth = 60 / 180 / 2;
+    playNoteSequence(
+      [
+        { freq: 932.33, dur: eighth },
+        { freq: 0, dur: eighth / 2 },
+        { freq: 932.33, dur: eighth },
+        { freq: 783.99, dur: eighth },
+        { freq: 698.46, dur: eighth },
+        { freq: 622.25, dur: eighth },
+        { freq: 0, dur: eighth / 2 },
+        { freq: 698.46, dur: eighth },
+        { freq: 622.25, dur: eighth },
+        { freq: 523.25, dur: eighth },
+        { freq: 466.16, dur: eighth },
+        { freq: 0, dur: eighth / 2 },
+        { freq: 523.25, dur: eighth },
+        { freq: 466.16, dur: eighth },
+        { freq: 392.0, dur: eighth },
+        { freq: 523.25, dur: eighth * 8 }
+      ],
+      { type: 'square', volume: 0.35, attack: 0.02, startOffset: 0.1, cumulative: true }
+    );
   }
 
   return {

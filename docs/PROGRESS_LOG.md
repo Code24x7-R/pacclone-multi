@@ -4,6 +4,18 @@
 
 ## 2026-08-09
 
+### [BUGFIX] B-004 — no tunnel teleport (player/ghosts can't traverse horizontally)
+- Symptom: The maze tunnel doesn't work — neither players nor ghosts can traverse horizontally to the other side.
+- Root cause: (1) The tunnel entrance was walled off: row 8/12 col 4 and col 15 were walls (type 1), blocking access from the interior corridor (col 5) into the tunnel (cols 0-3). (2) Players had no tunnel wrapping code — only ghosts did (inline in server.js).
+- Fix: (1) Opened tunnel entrances by changing col 4/col 15 on tunnel rows to type 4 (walkable tunnel). (2) Added pure `wrapTunnelX(x, y, maze)` to `src/gameLogic.js` — wraps x to the opposite edge on tunnel rows (identified by leftmost tile being type 4). Wired into `moveEntity` (wrap BEFORE wall check so the out-of-bounds guard doesn't block the entrance) and server.js player movement. Replaced the ghost's inline wrap with the shared function. (3) Client: added `tunnelOffsets()` helper that draws a faded (globalAlpha 0.4) ghost copy of players/ghosts on the opposite edge when within 0.5 tiles of a tunnel edge, so sprites slide through smoothly instead of popping.
+- Added 14 unit tests in `tests/server/wrapTunnelX.test.js`: wrap math (left/right, in-bounds, boundary), tunnel reachability in the default maze, and full left-to-right and right-to-left traversal via `moveEntity`.
+- Verification: 268 tests pass, lint clean.
+
+### [REFACTOR] Audio module — shared note-sequence helper
+- The 5 multi-note sounds (playGameOver, playCelebrate, playExtraLife, playHighScore, playStart) each had a near-identical ~30-line note-scheduling loop (~150 lines of duplication). Extracted a shared `playNoteSequence(notes, options)` helper that handles both simple frequency arrays and `{freq, dur}` melodies with rests (freq 0 = skip). The 5 functions are now one-liners.
+- Confirmed mute toggle already covers ALL sounds: every play* function starts with `if (isMuted) return;` and every client sound call routes through AudioFX. No mute gaps.
+- All 15 audio tests still pass — exact oscillator counts preserved (game-over: 5, celebrate: 4, extraLife: 4, highScore: 7, start: 13 with 3 rests).
+
 ### [BUGFIX] B-002 — player sprite drifts off pellet line after multiple turns
 - Symptom: After navigating the maze for ~4 turns, the player sprite visibly drifts off the pellet line — it appears to miss pellets or cross wall boundaries.
 - Root cause: The server let players turn at any coordinate, not just tile centers (half-tiles). When turning at e.g. x=1.8 while moving right, the perpendicular axis stayed at 1.8 instead of snapping to the corridor center (x=1.5). The player then travelled up along x=1.8 — 0.3 tiles (12px) off the pellet line. After several turns the offset compounds into visible drift.

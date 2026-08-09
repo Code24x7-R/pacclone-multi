@@ -25,11 +25,11 @@ const MAZE = [
   [1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1],
   [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
   [1, 1, 1, 1, 1, 0, 1, 1, 1, 6, 6, 1, 1, 1, 0, 1, 1, 1, 1, 1],
-  [4, 4, 4, 4, 1, 0, 1, 4, 4, 4, 4, 4, 4, 1, 0, 1, 4, 4, 4, 4],
+  [4, 4, 4, 4, 4, 0, 1, 4, 4, 4, 4, 4, 4, 1, 0, 4, 4, 4, 4, 4],
   [1, 1, 1, 1, 1, 0, 1, 4, 4, 4, 4, 4, 4, 1, 0, 1, 1, 1, 1, 1],
   [1, 0, 0, 0, 0, 0, 0, 4, 1, 4, 4, 1, 4, 0, 0, 0, 0, 0, 0, 1],
   [1, 1, 1, 1, 1, 0, 1, 4, 1, 1, 1, 1, 4, 1, 0, 1, 1, 1, 1, 1],
-  [4, 4, 4, 4, 1, 0, 1, 4, 4, 4, 4, 4, 4, 1, 0, 1, 4, 4, 4, 4],
+  [4, 4, 4, 4, 4, 0, 1, 4, 4, 4, 4, 4, 4, 1, 0, 4, 4, 4, 4, 4],
 ];
 
 const TILE_SIZE = 40;
@@ -126,6 +126,12 @@ function moveEntity(pos, direction, speed, maze = MAZE) {
       break;
   }
 
+  // Tunnel wrapping: on tunnel rows (type 4 at the horizontal edges),
+  // walking off one side teleports the entity to the other side. This must
+  // happen BEFORE the wall check — otherwise isWall() sees the out-of-bounds
+  // coordinate and treats it as a wall, blocking the tunnel entrance.
+  x = wrapTunnelX(x, pos.y, maze);
+
   // Apply wall collision per-axis so entities slide along walls
   let newX = x;
   let newY = y;
@@ -133,6 +139,31 @@ function moveEntity(pos, direction, speed, maze = MAZE) {
   if (isWall(pos.x, y, maze)) newY = pos.y;
 
   return { x: newX, y: newY };
+}
+
+/**
+ * Wrap an entity's X coordinate around the maze on tunnel rows.
+ *
+ * Classic Pac-Man tunnels let the player and ghosts walk off one horizontal
+ * edge and reappear on the other. A tunnel row is identified by its leftmost
+ * tile being type 4 (empty walkable tunnel). On those rows, when an entity's
+ * x goes below 0 it wraps to just inside the right edge, and when it reaches
+ * or exceeds the maze width it wraps to just inside the left edge.
+ *
+ * @param {number} x - The x coordinate to wrap (tile units, may be out of bounds).
+ * @param {number} y - The y coordinate (determines whether we are on a tunnel row).
+ * @param {number[][]} maze - The active maze.
+ * @returns {number} The wrapped x coordinate (unchanged if not on a tunnel row).
+ */
+function wrapTunnelX(x, y, maze) {
+  const tileY = Math.floor(y);
+  if (tileY < 0 || tileY >= maze.length) return x;
+  // Tunnel row: leftmost tile is type 4 (empty walkable tunnel).
+  if (maze[tileY][0] !== 4) return x;
+  const width = maze[0].length;
+  if (x < 0) return x + width;
+  if (x >= width) return x - width;
+  return x;
 }
 
 /**
@@ -513,5 +544,6 @@ module.exports = {
   dashSpeedMultiplier,
   isValidDirection,
   snapPerpendicular,
+  wrapTunnelX,
   buildGameStatePayload,
 };
