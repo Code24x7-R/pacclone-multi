@@ -4,6 +4,37 @@
 
 ## 2026-08-10
 
+### [BUGFIX] Ghosts freeze when hitting a wall (B-008)
+- Symptom: When a power-up is active, some active ghosts are frozen (not moving). They should be avoiding (frightened/scared). Also affects non-frightened ghosts that hit walls.
+- Root cause: Server's wall collision logic snapped ghosts to the tile **edge** (`Math.floor(x) + 0.99` / `+ 0.01`) instead of the tile **center**. A ghost at `x ≈ 4.99` is not within `isAtTileCenter`'s epsilon (0.04) of any center, so it never picks a new direction — infinite loop of hitting the wall every tick. Frightened ghosts are more likely to trigger this because they run toward walls while fleeing the player.
+- Fix: Snap to tile center (`snapToTileCenter`) on wall collision instead of tile edge. This allows the ghost to pick a new direction on the next tick.
+- Added 3 simulation tests in `tests/server/ghostAI.test.js`:
+  - `BUG DEMO: old code snaps ghost to tile edge, freezing it` — documents the buggy behavior (ghost stuck at `x ≈ 4.99` for 10+ ticks)
+  - `FIX VERIFIED: new code snaps ghost to tile center, allowing recovery` — verifies the fix (ghost continues moving)
+  - `frightened ghost with fix can recover from wall collision` — verifies frightened ghosts recover
+- Verification: 326 tests pass, lint clean (0 errors/warnings), coverage thresholds met.
+
+### [BUGFIX] Dash mechanic — changed from speed boost to phase dash (teleport)
+- Symptom: The dash function was not working as expected. The reference implementation (`pacclone/index.html`) uses a **phase dash** (teleport forward 3 tiles, once per life), but our implementation used a **speed boost** (1.8x speed on cooldown). These are fundamentally different mechanics.
+- Root cause: The original implementation was based on a different game design than the reference. The reference uses:
+  - `DASH_TILES = 3` — teleport distance
+  - `DASH_DURATION = 200ms` — visual effect duration (invulnerability window)
+  - `phaseDashAvailable` — boolean, once per life (reset on respawn)
+  - Instant teleport, not gradual speed increase
+  - Invulnerable during the effect (can't eat pellets or be caught by ghosts)
+- Fix:
+  - Replaced `DASH_SPEED_MULTIPLIER`, `DASH_DURATION_TICKS`, `DASH_COOLDOWN_TICKS` constants with `DASH_TILES = 3` and `DASH_DURATION_TICKS = 12` (~200ms at 60 FPS).
+  - Rewrote `updateDashState()` to only tick down the visual-effect timer (no more speed/cooldown cycle).
+  - Added `executePhaseDash(player, maze, mazeWidth, mazeHeight)` — pure function that validates and executes the teleport.
+  - Added `checkPlayerPellets()` helper — shared pellet-collision logic for both normal movement and post-dash arrival.
+  - Updated player creation to use `dashAvailable: true` and `lastDirection: null` instead of `dashActiveTicks`/`dashCooldownTicks`.
+  - Updated respawn logic to reset `dashAvailable = true` (once per life).
+  - Added invulnerability during dash: ghost and player collisions skip dashing players.
+  - Client: updated dash UI to show "Dash: Ready" / "Dash: Used" / "PHASE DASH!" instead of cooldown timer.
+  - Client: added semi-transparent (globalAlpha 0.5) + cyan glow effect during dash visual effect.
+  - Rewrote `tests/server/dash.test.js` with 13 new tests covering teleport distances, direction handling, wall blocking, tunnel wrapping, and state transitions.
+- Verification: 323 tests pass, lint clean (0 errors/warnings), coverage thresholds met.
+
 ### [REFACTOR] Remove unnecessary duplication, redundant & orphan code
 - Symptom: The codebase had accumulated duplicate functions/constants across modules, orphan exports never used outside tests, and dead code superseded by newer implementations.
 - Root cause: Incremental feature additions without consolidation; test-only exports left in place after their production callers were removed.

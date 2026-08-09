@@ -46,12 +46,13 @@ const PLAYER_COLORS = ["yellow", "lime", "cyan", "magenta"];
 // Classic arcade style: earn an extra life every N points.
 const EXTRA_LIFE_THRESHOLD = 10000;
 
-// --- Dash ---
-// A short burst of speed triggered by the player (Shift / gamepad button /
-// touch double-tap). Governed by a cooldown so it can't be spammed.
-const DASH_SPEED_MULTIPLIER = 1.8; // 80% faster while dashing
-const DASH_DURATION_TICKS = 15; // ~0.25s at 60 FPS
-const DASH_COOLDOWN_TICKS = 180; // 3s cooldown before next dash
+// --- Dash (phase dash) ---
+// A teleport-style dash that flings the player forward by DASH_TILES tiles
+// in their current direction. Available once per life. During the brief
+// DASH_DURATION_TICKS visual effect the player is invulnerable and cannot
+// eat pellets (matches classic pacclone behavior).
+const DASH_TILES = 3; // How many tiles to teleport forward
+const DASH_DURATION_TICKS = 12; // ~200ms visual effect at 60 FPS
 
 const GAME_STATES = {
   LOBBY: "LOBBY",
@@ -316,50 +317,80 @@ function extraLivesEarned(score, threshold = EXTRA_LIFE_THRESHOLD) {
 }
 
 /**
- * Update a player's dash state for one tick.
- *
- * The dash cycle is:
- *   idle → (trigger) → active → (duration expires) → cooldown → idle
+ * Tick down the phase-dash visual-effect timer. During the effect the player
+ * is invulnerable and cannot eat pellets.
  *
  * @param {Object} player - Player object with dash fields.
- * @param {boolean} [triggerDash=false] - Whether the player triggered a dash this tick.
- * @returns {Object} A new player-like object with updated dash fields:
- *   dashActiveTicks, dashCooldownTicks, dashing.
+ * @returns {Object} Updated { dashing, dashActiveTicks }.
  */
-function updateDashState(player, triggerDash = false) {
+function updateDashState(player) {
   let active = player.dashActiveTicks || 0;
-  let cooldown = player.dashCooldownTicks || 0;
-
-  // Start a dash if triggered and fully idle (not active, not cooling down).
-  if (triggerDash && active <= 0 && cooldown <= 0) {
-    active = DASH_DURATION_TICKS;
-  }
-
-  // Tick down active duration.
   if (active > 0) {
     active--;
-    // When active expires, begin cooldown.
-    if (active === 0) {
-      cooldown = DASH_COOLDOWN_TICKS;
-    }
-  } else if (cooldown > 0) {
-    cooldown--;
   }
-
   return {
-    dashActiveTicks: active,
-    dashCooldownTicks: cooldown,
     dashing: active > 0,
+    dashActiveTicks: active,
   };
 }
 
 /**
- * Get the effective speed multiplier for a player given their dash state.
- * @param {Object} player - Player object with dash fields.
- * @returns {number} 1.0 when idle, DASH_SPEED_MULTIPLIER when dashing.
+ * Execute a phase dash: teleport the player forward by DASH_TILES tiles in
+ * their current direction. Available once per life (tracked by
+ * `dashAvailable`). During the brief visual effect the player is invulnerable.
+ *
+ * Matches the classic pacclone reference: instant teleport, cannot eat pellets
+ * or be caught by ghosts during the effect.
+ *
+ * @param {Object} player - Player object with { x, y, direction, lastDirection, dashAvailable }.
+ * @param {number[][]} maze - The active maze.
+ * @param {number} mazeWidth - Maze width in tiles.
+ * @param {number} mazeHeight - Maze height in tiles.
+ * @returns {{ x: number, y: number, dashAvailable: boolean, dashing: boolean, dashActiveTicks: number, moved: boolean }}
+ *   New position + dash state. `moved` is false if the dash was blocked.
  */
-function dashSpeedMultiplier(player) {
-  return player.dashing ? DASH_SPEED_MULTIPLIER : 1.0;
+function executePhaseDash(player, maze, mazeWidth, mazeHeight) {
+  // Can only dash once per life and not while already dashing.
+  if (!player.dashAvailable || player.dashing) {
+    return { x: player.x, y: player.y, dashAvailable: player.dashAvailable, dashing: player.dashing, dashActiveTicks: player.dashActiveTicks || 0, moved: false };
+  }
+
+  // Determine dash direction: current direction, or last direction if stopped.
+  const dir = player.direction || player.lastDirection;
+  if (!dir) {
+    return { x: player.x, y: player.y, dashAvailable: player.dashAvailable, dashing: player.dashing, dashActiveTicks: player.dashActiveTicks || 0, moved: false };
+  }
+
+  // Direction vectors.
+  const vec = { up: { dx: 0, dy: -1 }, down: { dx: 0, dy: 1 }, left: { dx: -1, dy: 0 }, right: { dx: 1, dy: 0 } }[dir] || { dx: 0, dy: 0 };
+  if (vec.dx === 0 && vec.dy === 0) {
+    return { x: player.x, y: player.y, dashAvailable: player.dashAvailable, dashing: player.dashing, dashActiveTicks: player.dashActiveTicks || 0, moved: false };
+  }
+
+  // Calculate target tile.
+  const currentTileX = Math.floor(player.x);
+  const currentTileY = Math.floor(player.y);
+  let targetTileX = currentTileX + vec.dx * DASH_TILES;
+  const targetTileY = currentTileY + vec.dy * DASH_TILES;
+
+  // Handle tunnel wrapping.
+  if (targetTileX < 0) targetTileX = mazeWidth + targetTileX;
+  else if (targetTileX >= mazeWidth) targetTileX = targetTileX - mazeWidth;
+
+  // Validate target: not a wall, within vertical bounds.
+  if (targetTileY < 0 || targetTileY >= mazeHeight || isWall(targetTileX + 0.5, targetTileY + 0.5, maze)) {
+    return { x: player.x, y: player.y, dashAvailable: player.dashAvailable, dashing: player.dashing, dashActiveTicks: player.dashActiveTicks || 0, moved: false };
+  }
+
+  // Dash is valid: teleport to target tile center.
+  return {
+    x: targetTileX + 0.5,
+    y: targetTileY + 0.5,
+    dashAvailable: false,
+    dashing: true,
+    dashActiveTicks: DASH_DURATION_TICKS,
+    moved: true,
+  };
 }
 
 /**
@@ -616,9 +647,8 @@ module.exports = {
   GAME_STATES,
   STARTING_POSITIONS,
   EXTRA_LIFE_THRESHOLD,
-  DASH_SPEED_MULTIPLIER,
+  DASH_TILES,
   DASH_DURATION_TICKS,
-  DASH_COOLDOWN_TICKS,
   isWall,
   extractPellets,
   createPlayersFromLobby,
@@ -626,7 +656,7 @@ module.exports = {
   getLevelTransition,
   extraLivesEarned,
   updateDashState,
-  dashSpeedMultiplier,
+  executePhaseDash,
   snapPerpendicular,
   clampSpriteToWall,
   wrapTunnelX,

@@ -1635,8 +1635,9 @@
                     var px = (p.x + off) * TILE_SIZE;
                     var py = p.y * TILE_SIZE;
 
-                    // Dash glow effect: cyan outline when dashing.
+                    // Phase-dash visual effect: semi-transparent + cyan glow.
                     if (p.dashing) {
+                        ctx.globalAlpha = (off === 0 ? 0.5 : 0.2);
                         ctx.strokeStyle = '#0ff';
                         ctx.lineWidth = 3;
                         ctx.beginPath();
@@ -1721,25 +1722,20 @@
                 ctx.textAlign = 'left';
             }
 
-            // Draw dash cooldown indicator (bottom-left) for the current player.
+            // Draw phase-dash status (bottom-left) for the current player.
+            // Phase dash: teleport forward 3 tiles, once per life.
             if (clientGameState === 'IN_PROGRESS' && myPlayer) {
-                const cooldown = myPlayer.dashCooldownTicks || 0;
-                const active = myPlayer.dashActiveTicks || 0;
-                const TICKS_PER_SECOND = 60;
-                const cooldownSec = (cooldown / TICKS_PER_SECOND).toFixed(1);
-                const DASH_COOLDOWN_TICKS = 180;
-                const DASH_DURATION_TICKS = 15;
                 ctx.font = '16px Arial';
                 ctx.textAlign = 'left';
-                if (active > 0) {
+                if (myPlayer.dashing) {
                     ctx.fillStyle = '#0ff';
-                    ctx.fillText(`DASHING! ${active}/${DASH_DURATION_TICKS}`, 10, canvas.height - 10);
-                } else if (cooldown > 0) {
-                    ctx.fillStyle = '#888';
-                    ctx.fillText(`Dash: ${cooldownSec}s`, 10, canvas.height - 10);
-                } else {
+                    ctx.fillText('PHASE DASH!', 10, canvas.height - 10);
+                } else if (myPlayer.dashAvailable) {
                     ctx.fillStyle = '#0f0';
                     ctx.fillText('Dash ready [Shift]', 10, canvas.height - 10);
+                } else {
+                    ctx.fillStyle = '#888';
+                    ctx.fillText('Dash used', 10, canvas.height - 10);
                 }
             }
 
