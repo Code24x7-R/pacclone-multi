@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const { buildGameStatePayload, GAME_STATES, MAZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular, wrapTunnelX } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, dashSpeedMultiplier, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -218,6 +218,16 @@ function gameLoop() {
 
         if (!isWall(nextX, player.y)) player.x = nextX;
         if (!isWall(player.x, nextY)) player.y = nextY;
+
+        // Clamp the player sprite so it never overlaps a wall. The wall
+        // check above only gates the sprite *center*, but the player radius
+        // (TILE_SIZE/2 - 2 ≈ 0.45 tiles) means the body can stick into the
+        // wall at the end of a corridor — half the sprite visually inside
+        // the wall tile. Pushing the center back keeps the sprite flush.
+        // Player radius in tile units: (TILE_SIZE / 2 - 2) / TILE_SIZE.
+        var clamped = clampSpriteToWall(player.x, player.y, (TILE_SIZE / 2 - 2) / TILE_SIZE, currentMaze);
+        player.x = clamped.x;
+        player.y = clamped.y;
 
         // Pellet collision
         for (let i = pellets.length - 1; i >= 0; i--) {
@@ -617,6 +627,7 @@ wss.on('connection', (ws) => {
                 const newLobbyPlayer = { id: ws.id, name: data.name || `Player ${ws.id % 1000}` };
                 lobbyPlayers.push(newLobbyPlayer);
                 ws.lobbyPlayerId = newLobbyPlayer.id; // Store lobby player ID on websocket
+                ws.playerName = newLobbyPlayer.name; // Remember name across games/spectator mode
                 console.log(`[SERVER] ${newLobbyPlayer.name} joined the lobby.`);
                 broadcastLobbyState();
             } else {
@@ -645,6 +656,8 @@ wss.on('connection', (ws) => {
         } else if (data.type === 'startGame' && currentGameState === GAME_STATES.LOBBY) {
             // For now, let any client start the game. Later, this could be restricted to a host.
             startGame(); // Implement this function next
+        } else if (data.type === 'leaveGame') {
+            handleLeaveGame(ws);
         }
     });
 
@@ -686,6 +699,49 @@ wss.on('connection', (ws) => {
         }
     });
 });
+
+function handleLeaveGame(ws) {
+    // Remove from players[] if active, capturing the name first so we can
+    // show it in the lobby after they leave.
+    let leavingName = null;
+    const playerIndex = players.findIndex(p => p.id === ws.playerId);
+    if (playerIndex !== -1) {
+        leavingName = players[playerIndex].name;
+        console.log(`[SERVER] ${leavingName || ws.playerId} left the game.`);
+        players.splice(playerIndex, 1);
+    }
+
+    // Remove from spectators[] if spectating.
+    const specIndex = spectators.findIndex(s => s.id === ws.id);
+    if (specIndex !== -1) {
+        spectators.splice(specIndex, 1);
+    }
+
+    // Clear the player ID on this connection so input is ignored and the
+    // client is no longer treated as an active participant.
+    ws.playerId = null;
+
+    // Re-add to lobbyPlayers so they appear in the lobby UI with their name.
+    // Prefer the name from the active player entry; fall back to the name
+    // stored at join time (spectators are already spliced out of players[]).
+    const name = leavingName || ws.playerName || `Player ${ws.id % 1000}`;
+    if (!lobbyPlayers.find(lp => lp.id === ws.id)) {
+        lobbyPlayers.push({ id: ws.id, name: name });
+        ws.lobbyPlayerId = ws.id;
+    }
+
+    // Transition the leaving client back to the lobby.
+    ws.send(JSON.stringify({
+        type: 'returnToLobby',
+        lobbyPlayers: lobbyPlayers,
+        currentGameState: currentGameState
+    }));
+
+    // If the game is still in progress but now has < 2 players, end the match.
+    if (currentGameState === GAME_STATES.IN_PROGRESS && players.length < 2) {
+        endMatch(players[0] || null);
+    }
+}
 
 function broadcastLobbyState() {
     wss.clients.forEach(client => {

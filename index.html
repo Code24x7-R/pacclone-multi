@@ -153,6 +153,12 @@
             border: 1.5px solid var(--panel-border);
         }
         .btn-ghost:hover { color: var(--text); border-color: var(--accent2); }
+        .btn-leave {
+            background: rgba(255,60,60,0.15);
+            color: #ff6b6b;
+            border: 1.5px solid rgba(255,60,60,0.4);
+        }
+        .btn-leave:hover { background: rgba(255,60,60,0.3); color: #ff9b9b; border-color: #ff6b6b; }
         .btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
         /* --- Start button (prominent) --- */
@@ -335,6 +341,7 @@
         </div>
     </div>
     <canvas id="gameCanvas" width="800" height="520" style="display: none;"></canvas>
+    <button id="leaveButton" class="btn btn-leave" style="display: none; position: absolute; top: 12px; right: 12px; z-index: 10; padding: 6px 14px; font-size: 13px;">Leave Game</button>
 
     <!-- Virtual Joystick for Touch Controls (NEW) -->
     <div id="joystick" style="display: none; position: fixed; bottom: 50px; left: 50px; width: 100px; height: 100px; background-color: rgba(255, 255, 255, 0.3); border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.5);">
@@ -385,6 +392,100 @@
         // is the most responsive, matching the reference's local game loop.
         var latestServerState = null; // raw state from server
         var renderLoopStarted = false;
+
+        // Handle a return-to-lobby message from the server (player quit mid-game
+        // or finished spectating and chose to leave). Transitions the UI back to
+        // the lobby, clears game/spectator state, and re-renders the lobby.
+        function handleReturnToLobby(message) {
+            // Stop drawing the game board.
+            renderLoopStarted = false;
+            // Clear game-side identity flags. myPlayerId is our stable connection
+            // ID — keep it so the server can still identify us.
+            isSpectating = false;
+            // Show lobby, hide canvas.
+            lobbyDiv.style.display = 'flex';
+            canvas.style.display = 'none';
+            setLeaveButtonVisible(false);
+            clientGameState = 'LOBBY';
+            // Reset per-game UI state.
+            lastScore = 0;
+            lastLives = 0;
+            lastPoweredUpState = false;
+            gameOverSoundPlayed = false;
+            finalScoreRecorded = false;
+            // Re-render the lobby with the server's current player list.
+            const lp = message.lobbyPlayers || [];
+            const count = renderLobbyPlayers(lp);
+            renderHighScores(document.getElementById('highScoresList'));
+            hasJoinedLobby = lp.some(p => p.id === myPlayerId);
+            renderJoinState();
+            // Reflect host/start-button state for the lobby we're returning to.
+            const isHost = lp.length > 0 && lp[0].id === myPlayerId;
+            startGameButton.disabled = !(isHost && lp.length >= 1);
+            if (count > 0) {
+                if (isHost) {
+                    hostStatus.textContent = 'You are the host — press Start Game when ready.';
+                    hostStatus.style.color = '#4ade80';
+                } else {
+                    hostStatus.textContent = `Host: ${lp[0].name} — waiting for them to start the game.`;
+                    hostStatus.style.color = '#fbbf24';
+                }
+            } else {
+                hostStatus.textContent = 'Waiting for players to join...';
+                hostStatus.style.color = '#aaa';
+            }
+        }
+
+        // Send a leave-game request to the server. Works whether we are an
+        // active player or a spectator.
+        function leaveGame() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'leaveGame' }));
+            }
+        }
+        // Render the lobby player list from a lobbyPlayers array. Shared by
+        // the lobbyState handler and handleReturnToLobby so both produce
+        // identical markup. Shows all 4 slots color-coded to match each
+        // player's in-game color (LOBBY_SLOT_COLORS); filled slots get a
+        // colored dot + name + Host/You tags; empty slots show a dashed
+        // "Waiting for player..." placeholder.
+        function renderLobbyPlayers(lobbyPlayersArray) {
+            playersList.innerHTML = '';
+            const lobbyCount = lobbyPlayersArray ? lobbyPlayersArray.length : 0;
+            for (let i = 0; i < 4; i++) {
+                const p = lobbyPlayersArray ? lobbyPlayersArray[i] : null;
+                const li = document.createElement('li');
+                li.className = 'player-slot ' + (p ? 'filled' : 'empty');
+                li.style.setProperty('--slot-color', LOBBY_SLOT_COLORS[i]);
+
+                const dot = document.createElement('span');
+                dot.className = 'player-dot' + (p ? '' : ' empty-dot');
+                li.appendChild(dot);
+
+                const name = document.createElement('span');
+                name.className = 'player-name';
+                name.textContent = p ? p.name : 'Waiting for player...';
+                li.appendChild(name);
+
+                if (p) {
+                    if (i === 0) {
+                        const tag = document.createElement('span');
+                        tag.className = 'player-tag';
+                        tag.textContent = 'Host';
+                        li.appendChild(tag);
+                    }
+                    if (p.id === myPlayerId) {
+                        const tag = document.createElement('span');
+                        tag.className = 'player-tag you';
+                        tag.textContent = 'You';
+                        li.appendChild(tag);
+                    }
+                }
+                playersList.appendChild(li);
+            }
+            return lobbyCount;
+        }
+
         function startRenderLoop() {
             if (renderLoopStarted) return;
             renderLoopStarted = true;
@@ -503,6 +604,18 @@
             muteButton.textContent = muted ? 'Unmute' : 'Mute';
         });
 
+        const leaveButton = document.getElementById('leaveButton');
+        leaveButton.addEventListener('click', () => {
+            ensureAudio();
+            leaveGame();
+        });
+
+        // Show/hide the leave button based on whether a game is active.
+        // Visible during gameplay or spectating; hidden in the lobby.
+        function setLeaveButtonVisible(visible) {
+            leaveButton.style.display = visible ? 'block' : 'none';
+        }
+
         ws.onmessage = (event) => {
             const message = JSON.parse(event.data);
             console.log('[CLIENT] Message received:', message.type);
@@ -528,39 +641,7 @@
                     // Update lobby player list — render all 4 slots color-coded.
                     // Filled slots show the player's color, name, and a Host/You tag.
                     // Empty slots show "Waiting for player..." as a dashed placeholder.
-                    playersList.innerHTML = '';
-                    const lobbyCount = message.lobbyPlayers ? message.lobbyPlayers.length : 0;
-                    for (let i = 0; i < 4; i++) {
-                        const p = message.lobbyPlayers ? message.lobbyPlayers[i] : null;
-                        const li = document.createElement('li');
-                        li.className = 'player-slot ' + (p ? 'filled' : 'empty');
-                        li.style.setProperty('--slot-color', LOBBY_SLOT_COLORS[i]);
-
-                        const dot = document.createElement('span');
-                        dot.className = 'player-dot' + (p ? '' : ' empty-dot');
-                        li.appendChild(dot);
-
-                        const name = document.createElement('span');
-                        name.className = 'player-name';
-                        name.textContent = p ? p.name : 'Waiting for player...';
-                        li.appendChild(name);
-
-                        if (p) {
-                            if (i === 0) {
-                                const tag = document.createElement('span');
-                                tag.className = 'player-tag';
-                                tag.textContent = 'Host';
-                                li.appendChild(tag);
-                            }
-                            if (p.id === myPlayerId) {
-                                const tag = document.createElement('span');
-                                tag.className = 'player-tag you';
-                                tag.textContent = 'You';
-                                li.appendChild(tag);
-                            }
-                        }
-                        playersList.appendChild(li);
-                    }
+                    const lobbyCount = renderLobbyPlayers(message.lobbyPlayers);
                     // Refresh high score display whenever we return to lobby.
                     renderHighScores(document.getElementById('highScoresList'));
                     // Track whether this client is in the lobby so the Join UI can
@@ -592,9 +673,11 @@
                     if (clientGameState === 'LOBBY') {
                          lobbyDiv.style.display = 'flex';
                          canvas.style.display = 'none';
+                         setLeaveButtonVisible(false);
                     } else { // If we receive lobbyState while not in LOBBY, e.g., during IN_PROGRESS for some reason
                          lobbyDiv.style.display = 'none';
                          canvas.style.display = 'block';
+                         setLeaveButtonVisible(true);
                     }
                     break;
                 case 'gameState':
@@ -612,6 +695,7 @@
                     if (clientGameState === 'IN_PROGRESS' || clientGameState === 'GAME_OVER' || clientGameState === 'LEVEL_COMPLETE') {
                         lobbyDiv.style.display = 'none';
                         canvas.style.display = 'block';
+                        setLeaveButtonVisible(true);
 
                         // Store the latest server state; the rAF render loop draws it.
                         latestServerState = message.gameState;
@@ -637,6 +721,7 @@
                     } else if (clientGameState === 'LOBBY') { // Back to lobby state
                          lobbyDiv.style.display = 'flex';
                          canvas.style.display = 'none';
+                         setLeaveButtonVisible(false);
                     }
                     if (clientGameState === 'GAME_OVER' && !gameOverSoundPlayed) {
                         gameOverSoundPlayed = true;
@@ -648,7 +733,12 @@
                                                 isSpectating = true; // Mark as spectating (keep myPlayerId set)
                                                 lobbyDiv.style.display = 'none';
                                                 canvas.style.display = 'block';
+                                                setLeaveButtonVisible(true);
                                                 playPlayerEaten(); // Play player eaten sound
+                                                break;
+                                            case 'returnToLobby':
+                                                // Server has removed us from the game; return to lobby UI.
+                                                handleReturnToLobby(message);
                                                 break;
                 case 'error':
                     console.error('[SERVER ERROR]:', message.message);
@@ -681,6 +771,13 @@
             if (event.key === 'p' || event.key === 'P') {
                 showPosDebug = !showPosDebug;
                 event.preventDefault();
+                return;
+            }
+            // Press Escape to leave the current game (active player or spectator).
+            // Returns to the lobby so the player can quit or start a fresh match.
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                leaveGame();
                 return;
             }
             if (!myPlayerId || isSpectating) { // Do not send input if spectating

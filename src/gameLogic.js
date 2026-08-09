@@ -485,6 +485,46 @@ function snapPerpendicular(x, y, direction) {
 }
 
 /**
+ * Clamp an entity's center position so its circular body (given radius
+ * in tile units) does not overlap any wall tile.
+ *
+ * The raw movement wall-check only gates the *center* coordinate, which
+ * lets a large sprite (player radius ≈ 0.45 tiles) penetrate the wall
+ * at the end of a corridor. This function pushes the center back until
+ * the sprite edge sits flush against the wall boundary.
+ *
+ * @param {number} x - Center x in tile units.
+ * @param {number} y - Center y in tile units.
+ * @param {number} radius - Sprite radius in tile units.
+ * @param {number[][]} maze - The maze grid.
+ * @returns {{x: number, y: number}} Clamped position.
+ */
+function clampSpriteToWall(x, y, radius, maze) {
+  // For each axis, check the tile under the sprite's leading edge.
+  // If it's a wall, pull the center back so the edge sits on the
+  // wall boundary.
+  var tileY = Math.floor(y);
+  var rightTile = Math.floor(x + radius);
+  if (isWall(rightTile, tileY, maze)) {
+    x = rightTile - radius;
+  }
+  var leftTile = Math.floor(x - radius);
+  if (isWall(leftTile, tileY, maze)) {
+    x = leftTile + 1 + radius;
+  }
+  var tileX = Math.floor(x);
+  var bottomTile = Math.floor(y + radius);
+  if (isWall(tileX, bottomTile, maze)) {
+    y = bottomTile - radius;
+  }
+  var topTile = Math.floor(y - radius);
+  if (isWall(tileX, topTile, maze)) {
+    y = topTile + 1 + radius;
+  }
+  return { x: x, y: y };
+}
+
+/**
  * Build the gameState payload sent from server to clients via WebSocket.
  *
  * This is the single source of truth for the wire format. It guarantees
@@ -544,6 +584,7 @@ module.exports = {
   dashSpeedMultiplier,
   isValidDirection,
   snapPerpendicular,
+  clampSpriteToWall,
   wrapTunnelX,
   buildGameStatePayload,
 };

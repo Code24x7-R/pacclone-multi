@@ -22,4 +22,11 @@
 - Server remains authoritative — all game state mutations happen server-side only.
 - Keep pure functions in `src/` (no I/O, no side effects).
 - Coverage target: ≥ 80% lines, ≥ 70% branches on `src/`.
-- 208 total tests pass, lint clean.
+- 282 total tests pass, lint clean.
+
+## Features Implemented (outside plan, from direct requests)
+
+| Feature | Commit |
+| :--- | :--- |
+| Return-to-lobby (leaveGame / returnToLobby messages, Escape key, leave button) | — |
+| Sprite-to-wall clamping (B-005 fix — player no longer clips into walls) | — |

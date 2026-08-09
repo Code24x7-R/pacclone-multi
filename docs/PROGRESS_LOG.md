@@ -4,6 +4,19 @@
 
 ## 2026-08-09
 
+### [FEATURE] Return to lobby — players can leave a game mid-match
+- Symptom: Once in a game, a player had no way to return to the lobby (no manual quit). A player out of lives was forced to spectate until the match ended; a player who wanted to quit had no option.
+- Fix: Added a `leaveGame` WebSocket message (client → server) and a `returnToLobby` response (server → client). Server handler `handleLeaveGame(ws)`: removes the player from `players[]` (or `spectators[]` if spectating), clears `ws.playerId`, re-adds the connection to `lobbyPlayers` (preserving their name via `ws.playerName`), and sends `returnToLobby` to the leaving client. If the game is in progress and the leave drops the player count below 2, `endMatch` fires for the last player. Client: added `handleReturnToLobby()` (resets UI/state, re-renders lobby), `leaveGame()` (sends the message), Escape key binding, and a visible "Leave Game" button (top-right overlay, shown during gameplay/spectating, hidden in lobby). New `renderLobbyPlayers()` shared helper used by both `lobbyState` and `returnToLobby` handlers.
+- Added 3 integration tests in `tests/integration/leaveGame.test.js`: active player leaves mid-game, spectator/player leaves, leaving player waits for game-over cycle then rejoins and starts a fresh match.
+- Verification: 282 tests pass, lint clean.
+
+### [BUGFIX] B-005 — player sprite half-inside wall at corridor ends; ghosts can't collide there
+- Symptom: When a player reaches the end of a corridor and stops, the sprite is drawn half inside the wall tile. Ghosts approaching down the corridor can't collide with a player in this position.
+- Root cause: The movement wall-check only gates the sprite *center* (`isWall(nextX, player.y)`), but the player radius (`TILE_SIZE/2 - 2` ≈ 0.45 tiles) means the body extends ~0.4 tiles past the center into the wall. The raw center could sit at e.g. x=18.95 with the wall at column 19, so the sprite's right edge reached x=19.40 — deep inside the wall. A ghost at x=18.0 was 0.95 tiles from the player center, well above the 0.5 collision threshold, so the ghost could never reach the pinned player.
+- Fix: Added pure `clampSpriteToWall(x, y, radius, maze)` to `src/gameLogic.js` — checks the tile under each sprite edge and pushes the center back until the edge sits flush against the wall boundary. Wired into `server.js` player movement (runs after the axis-separated wall check). Keeping the sprite fully inside the corridor also guarantees a ghost approaching down the hall can get within the 0.5 collision distance.
+- Added 11 unit tests in `tests/server/clampSpriteToWall.test.js`: open-space no-op, horizontal/vertical clamping, collision-reachability before/after, idempotency, smaller-radius (ghost) clamping.
+- Verification: 282 tests pass, lint clean.
+
 ### [BUGFIX] B-004 — no tunnel teleport (player/ghosts can't traverse horizontally)
 - Symptom: The maze tunnel doesn't work — neither players nor ghosts can traverse horizontally to the other side.
 - Root cause: (1) The tunnel entrance was walled off: row 8/12 col 4 and col 15 were walls (type 1), blocking access from the interior corridor (col 5) into the tunnel (cols 0-3). (2) Players had no tunnel wrapping code — only ghosts did (inline in server.js).
