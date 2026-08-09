@@ -68,3 +68,56 @@ describe('getLevelTransition', () => {
     expect(getLevelTransition(players, pellets, powerPellets)).toBeNull();
   });
 });
+
+describe('getLevelTransition — single-player mode', () => {
+  test('returns null when the single player is alive with pellets remaining', () => {
+    // One player remaining is NOT a win in single-player — the game continues.
+    const players = [{ id: 1 }];
+    const pellets = [{ x: 1, y: 1 }];
+    const powerPellets = [];
+    expect(getLevelTransition(players, pellets, powerPellets, true)).toBeNull();
+  });
+
+  test('returns null when the single player is alive with only power pellets remaining', () => {
+    const players = [{ id: 1 }];
+    const pellets = [];
+    const powerPellets = [{ x: 1, y: 1 }];
+    expect(getLevelTransition(players, pellets, powerPellets, true)).toBeNull();
+  });
+
+  test('returns LEVEL_COMPLETE when the single player clears all pellets', () => {
+    const players = [{ id: 1 }];
+    const pellets = [];
+    const powerPellets = [];
+    expect(getLevelTransition(players, pellets, powerPellets, true)).toBe(
+      'LEVEL_COMPLETE',
+    );
+  });
+
+  test('returns GAME_OVER only when the single player has lost all lives (0 players)', () => {
+    // The player was removed from players[] after losing their last life.
+    const players = [];
+    const pellets = [{ x: 1, y: 1 }];
+    const powerPellets = [];
+    expect(getLevelTransition(players, pellets, powerPellets, true)).toBe(
+      'GAME_OVER',
+    );
+  });
+
+  test('single-player GAME_OVER takes priority over all-pellets-eaten with 0 players', () => {
+    const players = [];
+    const pellets = [];
+    const powerPellets = [];
+    expect(getLevelTransition(players, pellets, powerPellets, true)).toBe(
+      'GAME_OVER',
+    );
+  });
+
+  test('multiplayer behavior is unchanged when isSinglePlayer is not passed', () => {
+    // Without the flag, one player remaining is still last-man-standing.
+    const players = [{ id: 1 }];
+    const pellets = [{ x: 1, y: 1 }];
+    const powerPellets = [];
+    expect(getLevelTransition(players, pellets, powerPellets)).toBe('GAME_OVER');
+  });
+});

@@ -4,6 +4,26 @@
 
 ## 2026-08-09
 
+### [BUGFIX] B-006 — tunnel teleport blocked for players (works for ghosts)
+- Symptom: The horizontal tunnel teleport doesn't work for players — they get blocked at the tunnel edge and can't wrap around the maze. Ghosts traverse the tunnel fine. Reported while testing single-player but affects multiplayer too (shared player movement code).
+- Root cause: `clampSpriteToWall` in `src/gameLogic.js` treats out-of-bounds tiles as walls. On a tunnel row, when the player's left edge goes below x=0, the clamp pins the player at x≈0.45 (clamp formula: `leftTile + 1 + radius` where leftTile=-1), preventing them from ever reaching x=0 to trigger `wrapTunnelX`. Ghosts don't use the clamp, so their tunnel works.
+- Fix: Added tunnel-row detection in `clampSpriteToWall` — on tunnel rows (leftmost tile is type 4), skip the horizontal clamp when the edge tile is out of bounds. The player can now reach x=0 and wrap to the other side.
+- Added 4 unit tests in `tests/server/clampSpriteToWall.test.js` covering left edge, right edge, wall-clamping still works on tunnel rows, and the x=0 trigger point.
+- Verification: 337 tests pass, lint clean.
+
+### [FEATURE] Single-player mode
+- Symptom: The game was multiplayer-only. A lone player could not play alone — the win condition (last man standing) ended the match immediately with 1 player remaining, and the lobby required ready-up + host start.
+- Fix (server): Added `isSinglePlayerMatch` flag and `singlePlayerInfo` (token + name captured at start). New `startSinglePlayer(ws)` function bypasses ready-up and countdown: removes the requesting player from the lobby, starts a fresh match with just them, links their socket, and broadcasts the updated lobby. Extended the pure `getLevelTransition(players, pellets, powerPellets, isSinglePlayer=false)` function — in single-player the match ends only when the player loses all lives (`players.length === 0`), not when one remains; clearing all pellets still advances the level. Player death in single-player skips spectator mode (nothing to spectate) and just clears `playerId`. `endMatch` rebuilds the lobby from `singlePlayerInfo` so the solo player returns to the lobby after the match. Wired a `startSinglePlayer` message handler.
+- Fix (client): Added a "Single Player" button (cyan, full-width) between high scores and Start Game that sets `isSinglePlayer = true` and sends `startSinglePlayer`. Added an `amInGame` flag (set on `playerAssigned`, cleared on return-to-lobby) so that non-participating lobby players stay in the lobby UI while someone else plays single-player — visibility now gates on `amInGame || isSpectating` instead of the global game state. The game-over screen shows "Game Over!" + final score for solo play (no "Winner:"). The `gameState` handler ignores state for non-participants.
+- Added 6 unit tests in `tests/server/getLevelTransition.test.js`, 3 integration tests in `tests/integration/singlePlayer.test.js`, and 2 client tests in `tests/client/singlePlayer.test.js`.
+- Verification: 333 tests pass, lint clean.
+
+### [FEATURE] About modal for Pacclone Multi
+- Symptom: No way for players to see what the app is, how to play, or what tech it uses without reading the source.
+- Fix: Added an About modal to `index.html` adapted to vanilla JS (no React/Vite) matching the existing dark/neon arcade aesthetic. Header with app name, version badge, and close button; scrollable body rendering sections (description, features, controls table, tech stack table, license); footer with build info + close button. Opens from a new "About" button in the lobby footer. Closes via X button, footer Close, backdrop click, or Escape key. All event listeners null-guarded so the test environment (minimal DOM) doesn't crash.
+- Added 8 client tests in `tests/client/aboutModal.test.js`.
+- Verification: 322 tests pass, lint clean.
+
 ### [FEATURE] Lobby overhaul — warm rejoin, ready-up, countdown, reconnection grace (A–E)
 - Symptom: The lobby was a cold start every match (group dissolved on game over), there was no ready-up, no start countdown, and a disconnected player lost their slot permanently.
 - Fix (server): Introduced a stable `playerToken` (uuid) as player identity — decouples identity from the ephemeral WebSocket connection id so reconnects reclaim the slot. New protocol messages: `lobbyJoined` (echoes token), `toggleReady`, and enriched `lobbyState` (carries `ready` per player + `countdown` tick). New `COUNTDOWN` game state with a 3-2-1-GO before match start. Pure helpers in `src/gameLogic.js`: `rebuildLobbyFromMatch`, `areAllReady`, `togglePlayerReady`, `getCountdownTick`, `isWithinGracePeriod`, plus `COUNTDOWN_DURATION_MS`/`RECONNECT_GRACE_MS` constants.

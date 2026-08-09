@@ -381,13 +381,24 @@ function checkGameOver(players, pellets, powerPellets) {
  * @param {Array} players - Active players.
  * @param {Array} pellets - Remaining pellets.
  * @param {Array} powerPellets - Remaining power pellets.
+ * @param {boolean} [isSinglePlayer=false] - True for a single-player match.
+ *   In single-player the match does NOT end with one player remaining; it
+ *   only ends when the player has lost all lives (players.length === 0 after
+ *   the spectator-mode splice). Clearing all pellets advances the level.
  * @returns {null | 'GAME_OVER' | 'LEVEL_COMPLETE'} The transition to
  *   apply, or null if the level should continue.
  */
-function getLevelTransition(players, pellets, powerPellets) {
-  // Last man standing — the match is over.
-  if (players.length <= 1) return "GAME_OVER";
-  // All pellets cleared with multiple players alive — advance level.
+function getLevelTransition(players, pellets, powerPellets, isSinglePlayer = false) {
+  if (isSinglePlayer) {
+    // Single-player: the match ends only when the player has lost all lives
+    // (removed from players[] and moved to spectators). One player remaining
+    // means the game is still in progress.
+    if (players.length === 0) return "GAME_OVER";
+  } else {
+    // Multiplayer: last man standing — the match is over.
+    if (players.length <= 1) return "GAME_OVER";
+  }
+  // All pellets cleared — advance level (both modes).
   if (pellets.length === 0 && powerPellets.length === 0) return "LEVEL_COMPLETE";
   // Otherwise the level continues.
   return null;
@@ -514,13 +525,27 @@ function clampSpriteToWall(x, y, radius, maze) {
   // If it's a wall, pull the center back so the edge sits on the
   // wall boundary.
   var tileY = Math.floor(y);
+  var width = maze[0].length;
+  // Tunnel rows wrap horizontally: the left edge at x=0 connects to
+  // the right edge at x=width. On those rows we must NOT clamp an
+  // out-of-bounds edge tile as a wall, or the player gets pinned
+  // ~0.45 tiles short of the edge and can never teleport across.
+  var isTunnelRow = tileY >= 0 && tileY < maze.length && maze[tileY][0] === 4;
   var rightTile = Math.floor(x + radius);
   if (isWall(rightTile, tileY, maze)) {
-    x = rightTile - radius;
+    // On a tunnel row, an out-of-bounds right edge wraps to the left
+    // side — skip the clamp so the player can reach the edge.
+    if (!(isTunnelRow && rightTile >= width)) {
+      x = rightTile - radius;
+    }
   }
   var leftTile = Math.floor(x - radius);
   if (isWall(leftTile, tileY, maze)) {
-    x = leftTile + 1 + radius;
+    // On a tunnel row, an out-of-bounds left edge wraps to the right
+    // side — skip the clamp so the player can reach the edge.
+    if (!(isTunnelRow && leftTile < 0)) {
+      x = leftTile + 1 + radius;
+    }
   }
   var tileX = Math.floor(x);
   var bottomTile = Math.floor(y + radius);

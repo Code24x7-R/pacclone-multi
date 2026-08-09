@@ -31,3 +31,5 @@
 | :--- | :--- |
 | Return-to-lobby (leaveGame / returnToLobby messages, Escape key, leave button) | — |
 | Sprite-to-wall clamping (B-005 fix — player no longer clips into walls) | — |
+| Single-player mode (solo play, no last-man-standing win, score-based game over) | — |
+| About modal (help/about dialog with features, controls, tech stack) | — |

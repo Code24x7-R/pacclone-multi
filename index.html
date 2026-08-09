@@ -173,6 +173,23 @@
         }
         .btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
+        /* --- Single-player button --- */
+        .btn-single {
+            width: 100%;
+            padding: 13px;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #00b8d4, #00e5ff);
+            color: #000;
+            border-radius: 12px;
+            margin-bottom: 8px;
+        }
+        .btn-single:hover {
+            box-shadow: 0 0 22px rgba(0,229,255,0.55);
+        }
+
         /* --- Start button (prominent) --- */
         .btn-start {
             width: 100%;
@@ -360,12 +377,222 @@
             width: 100%;
         }
 
-        /* --- Footer row (mute) --- */
+        /* --- Footer row (mute + about) --- */
         .lobby-footer {
             margin-top: 16px;
             width: 100%;
             display: flex;
             justify-content: center;
+            gap: 8px;
+        }
+
+        /* --- About modal --- */
+        .about-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        .about-backdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .about-modal {
+            width: min(640px, 92vw);
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(160deg, var(--panel) 0%, #0c0c20 100%);
+            border: 2px solid var(--panel-border);
+            border-radius: 18px;
+            box-shadow:
+                0 0 60px rgba(0,229,255,0.15),
+                0 0 120px rgba(255,230,0,0.08),
+                0 20px 50px rgba(0,0,0,0.7);
+            overflow: hidden;
+            transform: scale(0.92);
+            transition: transform 0.2s ease;
+        }
+        .about-backdrop.open .about-modal {
+            transform: scale(1);
+        }
+        .about-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 24px 14px;
+            border-bottom: 1.5px solid var(--panel-border);
+        }
+        .about-title {
+            font-size: 1.3rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, var(--p1), #fff6a8 50%, var(--p1));
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .about-version {
+            font-size: 0.72rem;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            color: var(--text-dim);
+            background: rgba(255,255,255,0.05);
+            padding: 3px 10px;
+            border-radius: 6px;
+            margin-left: 10px;
+        }
+        .about-close {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 1.4rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 8px;
+            transition: color 0.2s, background 0.2s;
+            line-height: 1;
+        }
+        .about-close:hover {
+            color: var(--text);
+            background: rgba(255,255,255,0.08);
+        }
+        .about-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+        }
+        .about-body h1 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin: 0 0 2px;
+            background: linear-gradient(90deg, var(--p1), #fff6a8 50%, var(--p1));
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .about-tagline {
+            color: var(--accent2);
+            font-size: 0.88rem;
+            margin: 0 0 18px;
+            letter-spacing: 0.5px;
+        }
+        .about-body h2 {
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin: 20px 0 10px;
+        }
+        .about-body p {
+            font-size: 0.88rem;
+            line-height: 1.6;
+            color: var(--text);
+            margin: 0 0 10px;
+        }
+        .about-body ul {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 12px;
+        }
+        .about-body ul li {
+            font-size: 0.88rem;
+            line-height: 1.7;
+            color: var(--text);
+            padding-left: 16px;
+            position: relative;
+        }
+        .about-body ul li::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: var(--accent2);
+        }
+        .about-body ul li strong {
+            color: #fff;
+            font-weight: 700;
+        }
+        .about-body table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            margin-bottom: 14px;
+        }
+        .about-body th {
+            text-align: left;
+            padding: 7px 12px;
+            background: rgba(255,230,0,0.08);
+            border: 1px solid var(--panel-border);
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 0.72rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .about-body td {
+            padding: 7px 12px;
+            border: 1px solid var(--panel-border);
+            color: var(--text);
+        }
+        .about-body code {
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 0.82em;
+            background: rgba(255,255,255,0.06);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--accent2);
+        }
+        .about-body a {
+            color: var(--accent2);
+            text-decoration: none;
+        }
+        .about-body a:hover {
+            text-decoration: underline;
+        }
+        .about-body hr {
+            border: none;
+            border-top: 1px solid var(--panel-border);
+            margin: 18px 0;
+        }
+        .about-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 24px;
+            border-top: 1.5px solid var(--panel-border);
+            background: rgba(0,0,0,0.2);
+        }
+        .about-build {
+            font-size: 0.7rem;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            color: var(--text-dim);
+        }
+        .about-footer .btn {
+            padding: 8px 18px;
+            font-size: 0.85rem;
+        }
+
+        /* --- Scrollbar styling for about modal --- */
+        .about-body::-webkit-scrollbar {
+            width: 8px;
+        }
+        .about-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .about-body::-webkit-scrollbar-thumb {
+            background: var(--panel-border);
+            border-radius: 4px;
+        }
+        .about-body::-webkit-scrollbar-thumb:hover {
+            background: var(--accent2);
         }
     </style>
 </head>
@@ -386,6 +613,7 @@
         <div class="section-h">High Scores</div>
         <ol id="highScoresList" class="scores-list"></ol>
 
+        <button id="singlePlayerButton" class="btn btn-single">Single Player</button>
         <button id="startGameButton" class="btn btn-start" disabled>Start Game</button>
         <div id="hostStatus"></div>
 
@@ -396,8 +624,30 @@
 
         <div class="lobby-footer">
             <button id="muteButton" class="btn btn-ghost">Mute</button>
+            <button id="aboutButton" class="btn btn-ghost">About</button>
         </div>
     </div>
+
+    <!-- About modal -->
+    <div id="aboutBackdrop" class="about-backdrop">
+        <div class="about-modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+            <div class="about-header">
+                <div style="display: flex; align-items: center;">
+                    <span id="aboutTitle" class="about-title">About Pacclone Multi</span>
+                    <span id="aboutVersion" class="about-version">v0.0.1</span>
+                </div>
+                <button id="aboutCloseBtn" class="about-close" aria-label="Close">✕</button>
+            </div>
+            <div class="about-body" id="aboutBody">
+                <!-- Content rendered by renderAboutContent() -->
+            </div>
+            <div class="about-footer">
+                <span id="aboutBuild" class="about-build"></span>
+                <button id="aboutCloseBtn2" class="btn btn-cyan">Close</button>
+            </div>
+        </div>
+    </div>
+
     <canvas id="gameCanvas" width="800" height="520" style="display: none;"></canvas>
     <button id="leaveButton" class="btn btn-leave" style="display: none; position: absolute; top: 12px; right: 12px; z-index: 10; padding: 6px 14px; font-size: 13px;">Leave Game</button>
 
@@ -431,6 +681,8 @@
         let isReady = false; // true once this client has toggled ready (feature C)
         let clientGameState = 'LOBBY'; // Client-side representation of game state
         let isSpectating = false; // true when the player is out of lives and watching
+        let isSinglePlayer = false; // true when this client is playing a solo match
+        let amInGame = false; // true when this client is a participant in the current game (playerAssigned)
         let lastScore = 0; // for chomp sound
         let lastLives = 0; // for extra-life sound
         let lastPoweredUpState = false; // for power-up sound
@@ -462,6 +714,7 @@
             // Clear game-side identity flags. myPlayerId is our stable connection
             // ID — keep it so the server can still identify us.
             isSpectating = false;
+            amInGame = false; // no longer a participant in the running match
             // Show lobby, hide canvas.
             lobbyDiv.style.display = 'flex';
             canvas.style.display = 'none';
@@ -475,6 +728,7 @@
             gameOverSoundPlayed = false;
             finalScoreRecorded = false;
             isReady = false;
+            isSinglePlayer = false;
             renderCountdown(null, 'LOBBY');
             // Re-render the lobby with the server's current player list.
             const lp = message.lobbyPlayers || [];
@@ -639,6 +893,104 @@
             }
         }
 
+        // --- About modal ---
+        const ABOUT_CONTENT = {
+            appName: 'Pacclone Multi',
+            tagline: 'Last player standing wins',
+            sections: [
+                {
+                    heading: 'What is Pacclone Multi?',
+                    html: '<p>A browser-based multiplayer Pac-Man clone for <strong>1–4 players</strong>. Join the lobby, ready up, and compete to be the last player standing — or eat all the pellets to win!</p>'
+                },
+                {
+                    heading: 'Features',
+                    html: '<ul>' +
+                        '<li><strong>Multiplayer</strong> — up to 4 players in a single match</li>' +
+                        '<li><strong>Power Pellets</strong> — turn the tables and eat ghosts (or other players!)</li>' +
+                        '<li><strong>Dash</strong> — hold <code>Shift</code> to burst forward with a cooldown</li>' +
+                        '<li><strong>Levels</strong> — clear all pellets to advance to the next level</li>' +
+                        '<li><strong>High Scores</strong> — your best scores are saved locally</li>' +
+                        '<li><strong>Multiple Input Methods</strong> — keyboard, gamepad, or touch</li>' +
+                        '<li><strong>Warm Reconnect</strong> — drop and rejoin without losing your slot</li>' +
+                        '</ul>'
+                },
+                {
+                    heading: 'Controls',
+                    html: '<table>' +
+                        '<tr><th>Action</th><th>Keyboard</th><th>Gamepad</th><th>Touch</th></tr>' +
+                        '<tr><td>Move</td><td>Arrow keys / WASD</td><td>D-pad / Left stick</td><td>Virtual joystick</td></tr>' +
+                        '<tr><td>Dash</td><td>Hold Shift</td><td>R1 (button 5)</td><td>Double-tap</td></tr>' +
+                        '<tr><td>Leave Game</td><td>Escape</td><td>—</td><td>Leave button</td></tr>' +
+                        '</table>'
+                },
+                {
+                    heading: 'Tech Stack',
+                    html: '<table>' +
+                        '<tr><th>Layer</th><th>Choice</th></tr>' +
+                        '<tr><td>Client</td><td>Vanilla JS + HTML5 Canvas</td></tr>' +
+                        '<tr><td>Server</td><td>Node.js + Express + ws</td></tr>' +
+                        '<tr><td>Audio</td><td>Web Audio API (oscillator-based SFX)</td></tr>' +
+                        '<tr><td>Input</td><td>Keyboard, Gamepad API, Touch events</td></tr>' +
+                        '</table>'
+                },
+                {
+                    heading: 'License',
+                    html: '<p>ISC License — see the <code>LICENSE</code> file in the project root for details.</p>'
+                }
+            ]
+        };
+
+        function renderAboutContent() {
+            const body = document.getElementById('aboutBody');
+            let html = '<h1>' + ABOUT_CONTENT.appName + '</h1>';
+            html += '<p class="about-tagline">' + ABOUT_CONTENT.tagline + '</p>';
+            ABOUT_CONTENT.sections.forEach((section) => {
+                html += '<h2>' + section.heading + '</h2>';
+                html += section.html;
+            });
+            body.innerHTML = html;
+        }
+
+        function openAbout() {
+            renderAboutContent();
+            const build = getAboutBuildInfo();
+            document.getElementById('aboutBuild').textContent = build;
+            document.getElementById('aboutBackdrop').classList.add('open');
+        }
+
+        function closeAbout() {
+            document.getElementById('aboutBackdrop').classList.remove('open');
+        }
+
+        function getAboutBuildInfo() {
+            // No build step in this project — version is static from package.json.
+            const version = '0.0.1';
+            const date = new Date().toLocaleDateString('en-US', {
+                year: 'numeric', month: 'short', day: 'numeric'
+            });
+            return 'v' + version + ' · ' + date;
+        }
+
+        // About modal event listeners — guard with null checks so the test
+        // environment (which loads only a subset of the DOM) doesn't crash.
+        const aboutButton = document.getElementById('aboutButton');
+        if (aboutButton) {
+            aboutButton.addEventListener('click', () => {
+                ensureAudio();
+                openAbout();
+            });
+        }
+        const aboutCloseBtn = document.getElementById('aboutCloseBtn');
+        if (aboutCloseBtn) aboutCloseBtn.addEventListener('click', closeAbout);
+        const aboutCloseBtn2 = document.getElementById('aboutCloseBtn2');
+        if (aboutCloseBtn2) aboutCloseBtn2.addEventListener('click', closeAbout);
+        const aboutBackdrop = document.getElementById('aboutBackdrop');
+        if (aboutBackdrop) {
+            aboutBackdrop.addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) closeAbout();
+            });
+        }
+
         // --- Audio (src/audio.js — chiptune SFX) ---
         // AudioContext must be created/resumed on a user gesture. We init on the
         // first lobby interaction; until then sounds are no-ops.
@@ -721,6 +1073,19 @@
             ws.send(JSON.stringify({ type: 'startGame' }));
         });
 
+        // Single-player: start a solo match immediately. No ready-up or
+        // countdown — the player faces the ghosts alone. The match ends only
+        // when they run out of lives (not via "last man standing").
+        // Guard with null check so the test environment (minimal DOM) works.
+        const singlePlayerButton = document.getElementById('singlePlayerButton');
+        if (singlePlayerButton) {
+            singlePlayerButton.addEventListener('click', () => {
+                ensureAudio();
+                isSinglePlayer = true;
+                ws.send(JSON.stringify({ type: 'startSinglePlayer' }));
+            });
+        }
+
         const muteButton = document.getElementById('muteButton');
         muteButton.addEventListener('click', () => {
             ensureAudio();
@@ -762,14 +1127,19 @@
                     // the ID after a previous game where we may have been a spectator.
                     myPlayerId = message.playerId;
                     isSpectating = false;
+                    amInGame = true; // this client is a participant in the current game
                     console.log(`[CLIENT] Assigned player ID: ${myPlayerId}`);
                     break;
                 case 'lobbyState':
                     clientGameState = message.currentGameState;
-                    // Returning to lobby (e.g. after game over) clears spectating.
+                    // Returning to lobby (e.g. after game over) clears spectating
+                    // and participation flags. A client is "in the game" only
+                    // while a match it is part of is running.
                     if (clientGameState === 'LOBBY' || clientGameState === 'COUNTDOWN') {
                         isSpectating = false;
+                        amInGame = false;
                         finalScoreRecorded = false;
+                        isSinglePlayer = false;
                     }
                     // Update lobby player list — render all 4 slots color-coded.
                     // Filled slots show the player's color, name, Host/You tag, and a
@@ -819,17 +1189,20 @@
                         hostStatus.textContent = 'Waiting for players to join…';
                         hostStatus.style.color = '#aaa';
                     }
-                    // Manage UI visibility. Both LOBBY and COUNTDOWN show the lobby
-                    // (with a countdown overlay during COUNTDOWN); the game canvas is
-                    // shown only during actual play / game-over / level-complete.
-                    if (clientGameState === 'LOBBY' || clientGameState === 'COUNTDOWN') {
-                         lobbyDiv.style.display = 'flex';
-                         canvas.style.display = 'none';
-                         setLeaveButtonVisible(false);
-                    } else {
+                    // Manage UI visibility. The game canvas is shown only to
+                    // participants (amInGame) and spectators. In single-player
+                    // mode the match is IN_PROGRESS globally, but other lobby
+                    // players are NOT in the game — so we gate on amInGame /
+                    // isSpectating rather than the global state alone. Everyone
+                    // else stays in the lobby.
+                    if (amInGame || isSpectating) {
                          lobbyDiv.style.display = 'none';
                          canvas.style.display = 'block';
                          setLeaveButtonVisible(true);
+                    } else {
+                         lobbyDiv.style.display = 'flex';
+                         canvas.style.display = 'none';
+                         setLeaveButtonVisible(false);
                     }
                     // Countdown overlay (feature D): render the 3-2-1-GO during COUNTDOWN.
                     renderCountdown(message.countdown, clientGameState);
@@ -838,6 +1211,17 @@
                     console.log('[CLIENT] GameState received. Current State:', clientGameState, 'My Player ID:', myPlayerId);
                     const prevState = clientGameState;
                     clientGameState = message.gameState.currentGameState; // Assuming server sends currentGameState in gameState
+
+                    // Non-participants (lobby players who are not in this game and
+                    // not spectating) ignore game state entirely — they stay in
+                    // the lobby while someone else plays single-player.
+                    // The countdown overlay is a lobby element, so hide it before
+                    // bailing out (a game starting means the countdown is over).
+                    if (!amInGame && !isSpectating) {
+                        renderCountdown(null, clientGameState);
+                        break;
+                    }
+
                     // Reset high score recording flag when a new game/level starts.
                     if (clientGameState === 'IN_PROGRESS' && prevState !== 'IN_PROGRESS') {
                         finalScoreRecorded = false;
@@ -929,10 +1313,16 @@
                 event.preventDefault();
                 return;
             }
-            // Press Escape to leave the current game (active player or spectator).
-            // Returns to the lobby so the player can quit or start a fresh match.
+            // Press Escape to close the about modal, or leave the current game
+            // (active player or spectator). Returns to the lobby so the player
+            // can quit or start a fresh match.
             if (event.key === 'Escape') {
                 event.preventDefault();
+                const aboutBackdropEl = document.getElementById('aboutBackdrop');
+                if (aboutBackdropEl && aboutBackdropEl.classList.contains('open')) {
+                    closeAbout();
+                    return;
+                }
                 leaveGame();
                 return;
             }
@@ -1404,8 +1794,10 @@
             }
 
             if (clientGameState === 'GAME_OVER' && latestServerState) {
-                const winner = latestServerState.players.length > 0 ? latestServerState.players[0].name : 'No one';
-                const heading = `Game Over! Winner: ${winner}`;
+                // Single-player: show the final score instead of a winner.
+                const heading = isSinglePlayer
+                    ? 'Game Over!'
+                    : `Game Over! Winner: ${latestServerState.players.length > 0 ? latestServerState.players[0].name : 'No one'}`;
 
                 ctx.textAlign = 'center';
 
@@ -1441,6 +1833,13 @@
                 ctx.fillStyle = '#ff4444';
                 ctx.fillText(heading, canvas.width / 2, canvas.height / 2);
                 ctx.restore();
+                // Single-player: show the final score beneath the heading.
+                if (isSinglePlayer) {
+                    const myScore = myPlayer ? myPlayer.score : lastScore;
+                    ctx.fillStyle = '#ffe600';
+                    ctx.font = '32px Arial';
+                    ctx.fillText(`Score: ${myScore.toLocaleString()}`, canvas.width / 2, canvas.height / 2 + 56);
+                }
                 if (showNewHighScore) {
                     ctx.fillStyle = '#ffd700';
                     ctx.font = '36px Arial';

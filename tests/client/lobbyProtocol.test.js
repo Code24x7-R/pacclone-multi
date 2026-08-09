@@ -70,6 +70,7 @@ describe('Lobby protocol (features A–E)', () => {
         <button id="readyButton" style="display:none">Ready</button>
         <ul id="playersList"></ul>
         <ol id="highScoresList"></ol>
+        <button id="singlePlayerButton" class="btn btn-single">Single Player</button>
         <button id="startGameButton" disabled>Start Game</button>
         <div id="hostStatus"></div>
         <div id="countdownOverlay" style="display:none"><div id="countdownNumber">3</div></div>

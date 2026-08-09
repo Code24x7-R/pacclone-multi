@@ -62,6 +62,17 @@ let currentGameState = GAME_STATES.LOBBY;
 let lobbyPlayers = []; // Array to hold players in the lobby
 const spectators = []; // Array to hold WebSocket connections of players in spectator mode
 
+// Single-player mode flag. When true, the match is a solo game: the level
+// does not end with one player remaining (no "last man standing" win), and
+// the player only loses by running out of lives. Set when a client sends
+// 'startSinglePlayer' and cleared when the match ends or returns to lobby.
+let isSinglePlayerMatch = false;
+
+// The single player's identity (token + name), captured when a single-player
+// game starts. Used to rebuild the lobby after the match ends — without it
+// the player would be spliced from players[] on death and lost.
+let singlePlayerInfo = null;
+
 // Reconnection grace timers, keyed by player id (token). When a player
 // disconnects mid-match, a timer is set; if they reconnect before it fires,
 // the timer is cleared and their slot is restored.
@@ -183,6 +194,73 @@ function startGame() {
     console.log('[SERVER] Game started with players:', players.map(p => p.id));
     broadcastLobbyState(); // Send updated lobby state (empty)
     // The gameLoop will immediately broadcast gameState
+}
+
+// --- Single-player mode: start a solo match with one player ---
+// Bypasses the ready-up gate and countdown. The requesting player is removed
+// from the lobby and placed into a fresh match by themselves. The match ends
+// only when they run out of lives (not via "last man standing"). Clearing all
+// pellets advances to the next level, just like multiplayer.
+function startSinglePlayer(ws) {
+    if (currentGameState !== GAME_STATES.LOBBY) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Can only start from the lobby.' }));
+        return;
+    }
+    // Identify the requesting player by their stable token. They must have
+    // joined the lobby first.
+    if (!ws.playerToken) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Join the lobby first.' }));
+        return;
+    }
+    const lobbyIndex = lobbyPlayers.findIndex(lp => lp.id === ws.playerToken);
+    if (lobbyIndex === -1) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Join the lobby first.' }));
+        return;
+    }
+    const lobbyPlayer = lobbyPlayers[lobbyIndex];
+
+    // Remove this player from the lobby (other lobby players remain).
+    lobbyPlayers.splice(lobbyIndex, 1);
+
+    // Mark the match as single-player and capture the player's identity so the
+    // lobby can be rebuilt around them when the match ends.
+    isSinglePlayerMatch = true;
+    singlePlayerInfo = { id: lobbyPlayer.id, name: lobbyPlayer.name };
+
+    currentGameState = GAME_STATES.IN_PROGRESS;
+    initializeGameState(); // Resets pellets, power pellets, and ghosts
+
+    // Place the single player at the top-left starting position.
+    players = [{
+        id: lobbyPlayer.id,
+        name: lobbyPlayer.name,
+        x: 1.5,
+        y: 1.5,
+        color: 'yellow',
+        lives: 3,
+        score: 0,
+        direction: null,
+        poweredUp: false,
+        poweredUpTicks: 0,
+        extraLivesAwarded: 0,
+        dashActiveTicks: 0,
+        dashCooldownTicks: 0,
+        dashing: false,
+    }];
+
+    // Link the requesting client to their player slot and tell them their ID.
+    ws.playerId = players[0].id;
+    ws.send(JSON.stringify({ type: 'playerAssigned', playerId: players[0].id }));
+
+    if (!gameInterval) {
+        console.log('[SERVER] Starting single-player game loop.');
+        gameInterval = setInterval(gameLoop, GAME_LOOP_INTERVAL);
+    }
+
+    console.log(`[SERVER] Single-player game started for ${lobbyPlayer.name}.`);
+    // Update the remaining lobby players (this player left the lobby).
+    broadcastLobbyState();
+    // The gameLoop will immediately broadcast gameState to all clients.
 }
 
 // --- Countdown (feature D): a brief 3-2-1 before the match begins ---
@@ -514,9 +592,18 @@ function gameLoop() {
                     if (player.lives <= 0) {
                         const clientWs = Array.from(wss.clients).find(client => client.playerId === player.id);
                         if (clientWs) {
-                            spectators.push(clientWs);
-                            clientWs.send(JSON.stringify({ type: 'spectatorMode', message: 'You ran out of lives! You are now spectating.' }));
-                            clientWs.playerId = null;
+                            if (isSinglePlayerMatch) {
+                                // Single-player: there is nothing to spectate, so
+                                // just clear the player ID. The match ends via
+                                // getLevelTransition (players.length === 0).
+                                clientWs.playerId = null;
+                            } else {
+                                // Multiplayer: move to spectator mode so they
+                                // can watch the rest of the match.
+                                spectators.push(clientWs);
+                                clientWs.send(JSON.stringify({ type: 'spectatorMode', message: 'You ran out of lives! You are now spectating.' }));
+                                clientWs.playerId = null;
+                            }
                         }
                         players.splice(playerIndex, 1);
                     } else {
@@ -539,10 +626,13 @@ function gameLoop() {
     });
 
     // Win/Loss Conditions
-    //   - Last Man Standing (1 player left)        -> GAME_OVER (match ends)
-    //   - All pellets eaten (2+ players alive)     -> LEVEL_COMPLETE -> next level
+    //   - Last Man Standing (1 player left, multiplayer) -> GAME_OVER (match ends)
+    //   - All pellets eaten (2+ players alive, or single-player) -> LEVEL_COMPLETE -> next level
+    //   - Single-player: the match ends only when the player loses all lives
+    //     (players.length === 0 after the spectator-mode splice). One player
+    //     remaining is NOT a win in single-player mode.
     if (currentGameState === GAME_STATES.IN_PROGRESS) {
-        const transition = getLevelTransition(players, pellets, powerPellets);
+        const transition = getLevelTransition(players, pellets, powerPellets, isSinglePlayerMatch);
         if (transition === GAME_STATES.GAME_OVER) {
             endMatch(players[0] || null);
         } else if (transition === GAME_STATES.LEVEL_COMPLETE) {
@@ -572,7 +662,7 @@ function broadcastGameState() {
  * @param {Object} winner - The last surviving player.
  */
 function endMatch(winner) {
-    console.log(`[SERVER] Game Over: ${winner ? winner.name : 'No winner'} is the Last Man Standing!`);
+    console.log(`[SERVER] Game Over: ${winner ? winner.name : 'No winner'} is the ${isSinglePlayerMatch ? 'single-player game' : 'Last Man Standing'}!`);
     currentGameState = GAME_STATES.GAME_OVER;
     clearInterval(gameInterval);
     gameInterval = null;
@@ -597,12 +687,28 @@ function endMatch(winner) {
         currentGameState = GAME_STATES.LOBBY;
         // Clear stale spectator references so they don't persist across matches.
         spectators.length = 0;
-        // Warm rejoin (feature A): rebuild the lobby from the just-finished
-        // match so the group stays together for a rematch. The winner is placed
-        // first (becomes the new host). Player ids ARE their stable tokens, so
-        // reconnecting clients will recognize their slot. Everyone starts
-        // not-ready so the group must ready up again.
-        lobbyPlayers = rebuildLobbyFromMatch(matchPlayers, winnerId);
+        if (isSinglePlayerMatch && singlePlayerInfo) {
+            // Single-player: the player was spliced from players[] on death, so
+            // matchPlayers is empty. Rebuild the lobby with the single player
+            // using the identity captured at game start so they return to the
+            // lobby and can play again.
+            lobbyPlayers = [{
+                id: singlePlayerInfo.id,
+                name: singlePlayerInfo.name,
+                token: singlePlayerInfo.id,
+                ready: false,
+            }];
+        } else {
+            // Warm rejoin (feature A): rebuild the lobby from the just-finished
+            // match so the group stays together for a rematch. The winner is placed
+            // first (becomes the new host). Player ids ARE their stable tokens, so
+            // reconnecting clients will recognize their slot. Everyone starts
+            // not-ready so the group must ready up again.
+            lobbyPlayers = rebuildLobbyFromMatch(matchPlayers, winnerId);
+        }
+        // Reset single-player state for the next match.
+        isSinglePlayerMatch = false;
+        singlePlayerInfo = null;
         // Re-link any still-connected client to their rebuilt lobby slot by token.
         wss.clients.forEach(client => {
             if (client.playerId) client.playerId = null;
@@ -815,6 +921,11 @@ wss.on('connection', (ws) => {
                 return;
             }
             beginCountdown();
+        } else if (data.type === 'startSinglePlayer' && currentGameState === GAME_STATES.LOBBY) {
+            // Single-player: the requesting player starts a solo match
+            // immediately — no ready-up or countdown required. They are
+            // removed from the lobby and placed into a game by themselves.
+            startSinglePlayer(ws);
         } else if (data.type === 'leaveGame') {
             handleLeaveGame(ws);
         }

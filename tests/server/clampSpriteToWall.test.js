@@ -133,3 +133,50 @@ describe('clampSpriteToWall', () => {
     expect(result.x).toBeCloseTo(3.67, 5);
   });
 });
+
+describe('clampSpriteToWall — tunnel edges', () => {
+  // Tunnel row: leftmost tile is type 4 (EMPTY walkable tunnel). The player
+  // must be able to reach x=0 (and beyond) to trigger the horizontal wrap.
+  // The clamp must NOT pin the player ~0.45 tiles short of the edge.
+  const R = 0.45; // player radius in tile units
+  const TUNNEL_MAZE = [
+    [1, 1, 1, 1, 1, 1, 1, 1],
+    [4, 4, 4, 4, 0, 1, 1, 1], // row 1 is a tunnel row (col 0 = 4)
+    [1, 1, 1, 1, 1, 1, 1, 1],
+  ];
+
+  test('does not clamp the player away from the left tunnel edge', () => {
+    // Player moving left toward x=0. Without the fix, the clamp pins the
+    // player at x=0.45 (left edge at x=0 is "out of bounds" = wall).
+    const result = clampSpriteToWall(0.1, 1.5, R, TUNNEL_MAZE);
+    // The player should be able to reach x=0.1 (or very close), NOT pinned.
+    expect(result.x).toBeLessThan(0.45);
+  });
+
+  test('does not clamp the player away from the right tunnel edge', () => {
+    // Player moving right toward the edge at x=width. Row 1 tunnel extends
+    // to col 4; col 5 is a wall. Place the tunnel opening at the right.
+    const MAZE2 = [
+      [1, 1, 1, 1, 1, 1, 1, 1],
+      [1, 1, 1, 0, 4, 4, 4, 4], // row 1 tunnel opens at right edge (col 7 = 4)
+      [1, 1, 1, 1, 1, 1, 1, 1],
+    ];
+    // Player at x=7.9 on the tunnel row. Right edge at 8.35 is out of bounds,
+    // but on a tunnel row it should NOT be clamped back.
+    const result = clampSpriteToWall(7.9, 1.5, R, MAZE2);
+    expect(result.x).toBeGreaterThan(7.5);
+  });
+
+  test('still clamps the player from walls on a tunnel row', () => {
+    // The tunnel row has a wall at col 5. A player at x=4.95 (edge at 5.4,
+    // which is the wall tile col 5) must still be clamped back.
+    const result = clampSpriteToWall(4.95, 1.5, R, TUNNEL_MAZE);
+    expect(result.x).toBeCloseTo(4.55, 5); // 5 - 0.45
+  });
+
+  test('player can reach x=0 on a tunnel row (wrap trigger point)', () => {
+    // The critical case: player at x=0.0 should NOT be pushed right.
+    const result = clampSpriteToWall(0.0, 1.5, R, TUNNEL_MAZE);
+    expect(result.x).toBeCloseTo(0.0, 5);
+  });
+});
