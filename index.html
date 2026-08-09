@@ -1248,11 +1248,43 @@
             }
 
             if (clientGameState === 'GAME_OVER' && latestServerState) {
-                ctx.fillStyle = 'red';
-                ctx.font = '80px Arial';
-                ctx.textAlign = 'center';
                 const winner = latestServerState.players.length > 0 ? latestServerState.players[0].name : 'No one';
-                ctx.fillText(`Game Over! Winner: ${winner}`, canvas.width / 2, canvas.height / 2);
+                const heading = `Game Over! Winner: ${winner}`;
+
+                ctx.textAlign = 'center';
+
+                // Decorative panel: rounded rect behind the heading with a soft
+                // red→black gradient and a subtle outer glow.
+                ctx.font = '48px Arial';
+                const textW = ctx.measureText(heading).width;
+                const panelX = canvas.width / 2 - textW / 2 - 24;
+                const panelY = canvas.height / 2 - 52;
+                const panelW = textW + 48;
+                const panelH = 72;
+                ctx.save();
+                ctx.shadowColor = 'rgba(255,0,0,0.55)';
+                ctx.shadowBlur = 28;
+                const grad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
+                grad.addColorStop(0, 'rgba(60,0,0,0.85)');
+                grad.addColorStop(1, 'rgba(20,0,0,0.85)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.roundRect(panelX, panelY, panelW, panelH, 14);
+                ctx.fill();
+                // Border accent.
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = 'rgba(255,80,80,0.7)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.restore();
+
+                // Heading with a subtle glow.
+                ctx.save();
+                ctx.shadowColor = 'rgba(255,60,60,0.8)';
+                ctx.shadowBlur = 18;
+                ctx.fillStyle = '#ff4444';
+                ctx.fillText(heading, canvas.width / 2, canvas.height / 2);
+                ctx.restore();
                 if (showNewHighScore) {
                     ctx.fillStyle = '#ffd700';
                     ctx.font = '36px Arial';
