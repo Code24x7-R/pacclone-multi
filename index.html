@@ -63,9 +63,33 @@
         let lastLives = 0; // for extra-life sound
         let lastPoweredUpState = false; // for power-up sound
         let lastGhostPositions = []; // for ghost eaten sound
+        let playerLastDirs = {}; // id -> last non-null direction (for mouth facing)
         let highScores = HighScores.loadHighScores();
         let finalScoreRecorded = false;
         let gameOverSoundPlayed = false; // one-shot guard for game-over SFX
+        let showNewHighScore = false; // overlay flag set on game-over
+        let showHighScore = false; // overlay flag set on game-over
+
+        // --- Smooth rendering loop ---
+        // The server sends state at 60Hz, but rendering only on packet arrival
+        // looks jerky. We store the latest server state and draw it every frame
+        // via requestAnimationFrame so the mouth animation, dash glow, and other
+        // effects animate smoothly. We render the latest position directly (no
+        // interpolation) to avoid input lag — at 60Hz server / 60Hz display this
+        // is the most responsive, matching the reference's local game loop.
+        var latestServerState = null; // raw state from server
+        var renderLoopStarted = false;
+        function startRenderLoop() {
+            if (renderLoopStarted) return;
+            renderLoopStarted = true;
+            requestAnimationFrame(renderLoop);
+        }
+        function renderLoop() {
+            if (latestServerState) {
+                render(latestServerState);
+            }
+            requestAnimationFrame(renderLoop);
+        }
 
         // Render the high score list into an element using the HighScores module.
         function renderHighScores(el) {
@@ -217,76 +241,34 @@
                     if (clientGameState === 'IN_PROGRESS' && prevState !== 'IN_PROGRESS') {
                         finalScoreRecorded = false;
                         gameOverSoundPlayed = false;
+                        showNewHighScore = false;
+                        showHighScore = false;
                         playStart();
                     }
                     if (clientGameState === 'IN_PROGRESS' || clientGameState === 'GAME_OVER' || clientGameState === 'LEVEL_COMPLETE') {
                         lobbyDiv.style.display = 'none';
                         canvas.style.display = 'block';
 
-                        console.log('[CLIENT] Calling render() with gameState:', message.gameState);
-                        render(message.gameState); // Always render the game elements
+                        // Store the latest server state; the rAF render loop draws it.
+                        latestServerState = message.gameState;
+                        lastSnapshotTime = performance.now();
+                        startRenderLoop();
 
-                        const activePlayer = message.gameState.players.find(p => p.id === myPlayerId);
-
-                        // If spectating in IN_PROGRESS state, draw a spectator message
-                        if (!activePlayer && clientGameState === 'IN_PROGRESS') {
-                            ctx.fillStyle = 'white';
-                            ctx.font = '30px Arial';
-                            ctx.textAlign = 'center';
-                            ctx.fillText('You are spectating...', canvas.width / 2, canvas.height / 2 + 50);
+                        // Record high score once per game over (side effect lives here,
+                        // overlay drawing moved into render() so it survives rAF frames).
+                        if (clientGameState === 'GAME_OVER' && !finalScoreRecorded) {
+                            finalScoreRecorded = true;
+                            const myFinalPlayer = message.gameState.players.find(p => p.id === myPlayerId);
+                            const finalScore = myFinalPlayer ? myFinalPlayer.score : lastScore;
+                            const previousTop = highScores.length ? highScores[0].score : 0;
+                            highScores = HighScores.insertHighScore(currentPlayerName, finalScore);
+                            showNewHighScore = finalScore > previousTop && highScores.length > 0 && highScores[0].score === finalScore && finalScore > 0;
+                            showHighScore = !showNewHighScore && finalScore > 0 && highScores.some(e => e.score === finalScore && e.name === currentPlayerName);
+                            if (showNewHighScore) playHighScore();
                         }
 
-                        // If game is over, display message
-                        if (clientGameState === 'GAME_OVER') {
-                            ctx.fillStyle = 'red';
-                            ctx.font = '80px Arial';
-                            ctx.textAlign = 'center';
-                            const winner = message.gameState.players.length > 0 ? message.gameState.players[0].name : 'No one';
-                            ctx.fillText(`Game Over! Winner: ${winner}`, canvas.width / 2, canvas.height / 2);
-
-                            // Record high score once per game over.
-                            if (!finalScoreRecorded) {
-                                finalScoreRecorded = true;
-                                gameOverSoundPlayed = false; // will be set true below after playing
-                                // At GAME_OVER, dead players are removed from the players array
-                                // (they became spectators). Use the client-tracked score as the
-                                // authoritative final score; fall back to the server's player
-                                // object only for the winner (who remains in the array).
-                                const myFinalPlayer = message.gameState.players.find(p => p.id === myPlayerId);
-                                const finalScore = myFinalPlayer ? myFinalPlayer.score : lastScore;
-                                const previousTop = highScores.length ? highScores[0].score : 0;
-                                highScores = HighScores.insertHighScore(currentPlayerName, finalScore);
-                                const isNewTop = highScores.length > 0 && highScores[0].score === finalScore && finalScore > 0;
-                                const isHighScore = finalScore > 0 && highScores.some(e => e.score === finalScore && e.name === currentPlayerName);
-                                if (isNewTop && finalScore > previousTop) {
-                                    ctx.fillStyle = '#ffd700';
-                                    ctx.font = '36px Arial';
-                                    ctx.fillText('New High Score!', canvas.width / 2, canvas.height / 2 + 80);
-                                    playHighScore();
-                                } else if (isHighScore) {
-                                    ctx.fillStyle = '#ffd700';
-                                    ctx.font = '28px Arial';
-                                    ctx.fillText('High Score!', canvas.width / 2, canvas.height / 2 + 80);
-                                }
-                            }
-
-                            if (!activePlayer) { // If spectating during game over
-                                ctx.fillStyle = 'white';
-                                ctx.font = '30px Arial';
-                                ctx.fillText('You are spectating.', canvas.width / 2, canvas.height / 2 + 120);
-                            }
-                        }
-
-                        // Level complete overlay (brief transition between levels)
                         if (clientGameState === 'LEVEL_COMPLETE') {
                             playCelebrate();
-                            ctx.fillStyle = 'lime';
-                            ctx.font = '60px Arial';
-                            ctx.textAlign = 'center';
-                            ctx.fillText(`Level ${message.gameState.level - 1} Complete!`, canvas.width / 2, canvas.height / 2 - 20);
-                            ctx.fillStyle = 'white';
-                            ctx.font = '30px Arial';
-                            ctx.fillText(`Get ready for Level ${message.gameState.level}...`, canvas.width / 2, canvas.height / 2 + 30);
                         }
                     } else if (clientGameState === 'LOBBY') { // Back to lobby state
                          lobbyDiv.style.display = 'flex';
@@ -526,12 +508,10 @@
         }, { passive: false });
         
         function render(gameState) {
-            console.log('[CLIENT] Entering render function. GameState:', gameState);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const { maze, players, ghosts, pellets, powerPellets, level = 1 } = gameState;
             const myPlayer = players.find(p => p.id === myPlayerId);
-            console.log('[CLIENT] My Player:', myPlayer);
 
             // NEW: Sound triggers for current player
             if (myPlayer) {
@@ -574,8 +554,16 @@
                 ctx.fill();
             });
 
-            // Draw players
+            // Draw players (Pac-Man style: mouth opens/closes, faces movement direction).
+            // Smooth sine-wave chomp (period ~150ms) for fluid animation, independent
+            // of packet timing since this runs in the rAF loop.
+            var chompPhase = (performance.now() / 75) % (Math.PI * 2);
+            var mouthAngle = (Math.sin(chompPhase) * 0.5 + 0.5) * (Math.PI / 4);
             players.forEach(p => {
+                // Track last non-null direction so the mouth keeps facing when stopped.
+                if (p.direction) playerLastDirs[p.id] = p.direction;
+                var dir = playerLastDirs[p.id] || 'right';
+
                 // Dash glow effect: cyan outline when dashing.
                 if (p.dashing) {
                     ctx.strokeStyle = '#0ff';
@@ -585,9 +573,18 @@
                     ctx.stroke();
                     ctx.lineWidth = 1;
                 }
+
+                // Direction angle: 0=right, π/2=down, π=left, -π/2=up.
+                var dirAngle = 0;
+                if (dir === 'down') dirAngle = Math.PI / 2;
+                else if (dir === 'left') dirAngle = Math.PI;
+                else if (dir === 'up') dirAngle = -Math.PI / 2;
+
                 ctx.fillStyle = p.poweredUp ? 'orange' : p.color;
                 ctx.beginPath();
-                ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2.5, 0, Math.PI * 2);
+                ctx.arc(p.x * TILE_SIZE, p.y * TILE_SIZE, TILE_SIZE / 2.5,
+                    dirAngle + mouthAngle, dirAngle + Math.PI * 2 - mouthAngle);
+                ctx.lineTo(p.x * TILE_SIZE, p.y * TILE_SIZE);
                 ctx.fill();
             });
 
@@ -660,12 +657,46 @@
                 ctx.textAlign = 'left';
             }
 
-            // Game Over
-            if (myPlayerId && !myPlayer) {
+            // --- Overlays (drawn every frame so they survive the rAF render loop) ---
+
+            // Spectating during active play.
+            if (!myPlayer && clientGameState === 'IN_PROGRESS') {
+                ctx.fillStyle = 'white';
+                ctx.font = '30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('You are spectating...', canvas.width / 2, canvas.height / 2 + 50);
+            }
+
+            if (clientGameState === 'GAME_OVER' && latestServerState) {
                 ctx.fillStyle = 'red';
                 ctx.font = '80px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2);
+                const winner = latestServerState.players.length > 0 ? latestServerState.players[0].name : 'No one';
+                ctx.fillText(`Game Over! Winner: ${winner}`, canvas.width / 2, canvas.height / 2);
+                if (showNewHighScore) {
+                    ctx.fillStyle = '#ffd700';
+                    ctx.font = '36px Arial';
+                    ctx.fillText('New High Score!', canvas.width / 2, canvas.height / 2 + 80);
+                } else if (showHighScore) {
+                    ctx.fillStyle = '#ffd700';
+                    ctx.font = '28px Arial';
+                    ctx.fillText('High Score!', canvas.width / 2, canvas.height / 2 + 80);
+                }
+                if (!myPlayer) {
+                    ctx.fillStyle = 'white';
+                    ctx.font = '30px Arial';
+                    ctx.fillText('You are spectating.', canvas.width / 2, canvas.height / 2 + 120);
+                }
+            }
+
+            if (clientGameState === 'LEVEL_COMPLETE' && latestServerState) {
+                ctx.fillStyle = 'lime';
+                ctx.font = '60px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Level ${latestServerState.level - 1} Complete!`, canvas.width / 2, canvas.height / 2 - 20);
+                ctx.fillStyle = 'white';
+                ctx.font = '30px Arial';
+                ctx.fillText(`Get ready for Level ${latestServerState.level}...`, canvas.width / 2, canvas.height / 2 + 30);
             }
         }
 
