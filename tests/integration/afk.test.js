@@ -182,6 +182,39 @@ describe('AFK lobby sweep', () => {
     }
   });
 
+  test('remaining players receive an IRC-style kick notice', async () => {
+    const alice = await connect();
+    const bob = await connect();
+
+    await waitFor(alice, 'welcome');
+    await waitFor(bob, 'welcome');
+
+    send(alice, { type: 'joinLobby', name: 'Alice' });
+    await waitFor(alice, 'lobbyJoined');
+    send(bob, { type: 'joinLobby', name: 'Bob' });
+    await waitFor(bob, 'lobbyJoined');
+    await waitFor(alice, 'lobbyState');
+    await waitFor(bob, 'lobbyState');
+
+    // Bob stays active; Alice goes silent.
+    const keepalive = setInterval(() => {
+      if (bob.ws.readyState === WebSocket.OPEN) send(bob, { type: 'chat', text: 'here' });
+    }, 50);
+
+    try {
+      // Bob should receive a kickNotice naming Alice.
+      const notice = await waitForPredicate(
+        bob,
+        (m) => m.type === 'kickNotice' && /Alice/.test(m.text),
+        3000,
+      );
+      expect(notice.text).toContain('Alice');
+      expect(notice.text).toContain('kicked for inactivity');
+    } finally {
+      clearInterval(keepalive);
+    }
+  });
+
   test('an active player is NOT removed by the AFK sweep', async () => {
     const alice = await connect();
     await waitFor(alice, 'welcome');

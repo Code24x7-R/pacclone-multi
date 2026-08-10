@@ -1259,14 +1259,22 @@ function checkAfkPlayers() {
     if (currentGameState === GAME_STATES.LOBBY || currentGameState === GAME_STATES.COUNTDOWN) {
         const afkIndices = findAfkPlayerIndices(lobbyPlayers, now, AFK_TIMEOUT_MS);
         if (afkIndices.length > 0) {
+            // Collect names BEFORE splicing so we can tell remaining players who left.
+            const removedNames = [];
             // Splice in reverse so earlier indices stay valid.
             for (let i = afkIndices.length - 1; i >= 0; i--) {
                 const idx = afkIndices[i];
                 const removed = lobbyPlayers[idx];
+                removedNames.unshift(removed.name);
                 console.log(`[SERVER] Removing AFK lobby player: ${removed.name} (idle ${Math.round((now - removed.lastActivity) / 1000)}s)`);
                 // Notify the kicked client so its UI can reset.
                 notifyAfkKick(removed.id);
                 lobbyPlayers.splice(idx, 1);
+            }
+            // Broadcast an IRC-style notice to everyone still connected so all
+            // players see who was removed and why (e.g. "Bob was kicked for inactivity").
+            if (removedNames.length > 0) {
+                broadcastKickNotice(removedNames);
             }
             // Removing a player can change host / ready state — cancel countdown
             // if not everyone is still ready, then broadcast the new lobby.
@@ -1306,6 +1314,27 @@ function notifyAfkKick(playerId) {
             client.lobbyPlayerId = null;
             client.playerId = null;
         }
+    }
+}
+
+// Broadcast an IRC-style kick notice to every open connection so all players
+// see who was removed and why. Names are joined naturally: a single name is
+// used directly; multiple names are combined with "and".
+function broadcastKickNotice(names) {
+    let who;
+    if (names.length === 1) {
+        who = names[0];
+    } else if (names.length === 2) {
+        who = `${names[0]} and ${names[1]}`;
+    } else {
+        who = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    }
+    const payload = JSON.stringify({
+        type: 'kickNotice',
+        text: `${who} was kicked for inactivity.`,
+    });
+    for (const client of wss.clients) {
+        if (client.readyState === WebSocket.OPEN) client.send(payload);
     }
 }
 

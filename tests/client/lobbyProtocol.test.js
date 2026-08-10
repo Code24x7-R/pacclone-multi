@@ -381,8 +381,10 @@ describe('Lobby protocol (features A–E)', () => {
     expect(joinBtn.style.display).toBe('none');
     expect(readyBtn.style.display).not.toBe('none');
 
-    // Server kicks us (AFK).
+    // Server kicks us (AFK): tells our client to reset, and broadcasts an
+    // IRC-style notice to all connections (including us).
     ws.dispatch({ type: 'kicked', message: 'You were removed for inactivity.' });
+    ws.dispatch({ type: 'kickNotice', text: 'Me was kicked for inactivity.' });
 
     // Join state reset: join button visible again, name input enabled.
     expect(joinBtn.style.display).toBe('inline-block');
@@ -392,9 +394,67 @@ describe('Lobby protocol (features A–E)', () => {
     // Chat disabled again (no longer in lobby).
     expect(document.getElementById('chatInput').disabled).toBe(true);
     expect(document.getElementById('chatSendBtn').disabled).toBe(true);
-    // Banner displays the kick reason.
-    const banner = document.getElementById('inGameBanner');
-    expect(banner.style.display).toBe('block');
-    expect(banner.textContent).toBe('You were removed for inactivity.');
+    // Kick reason shown as an IRC-style system message in the chat log.
+    const chatLog = document.getElementById('chatLog');
+    const sysMsg = chatLog.querySelector('.chat-msg.system');
+    expect(sysMsg).not.toBeNull();
+    expect(sysMsg.querySelector('.chat-name').textContent).toBe('*');
+    expect(sysMsg.querySelector('.chat-text').textContent).toBe('Me was kicked for inactivity.');
+  });
+
+  test('spacebar in the chat input does not trigger weapon fire', async () => {
+    loadClient();
+    const ws = await openConnection();
+    ws.dispatch({ type: 'welcome', message: 'hi', clientId: 1 });
+    ws.dispatch({ type: 'lobbyJoined', token: 'tok-me' });
+    ws.dispatch({
+      type: 'lobbyState',
+      lobbyPlayers: [{ id: 'tok-me', name: 'Me', token: 'tok-me', ready: false }],
+      currentGameState: 'LOBBY',
+      countdown: null,
+    });
+
+    // Joined → chat input enabled. Focus it and press space.
+    const chatInput = document.getElementById('chatInput');
+    expect(chatInput.disabled).toBe(false);
+    chatInput.focus();
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+
+    // No input message should have been sent — the global weapon-fire handler
+    // must skip keys typed into an input field.
+    const fired = ws.sent.find((m) => m.type === 'input' && m.fire);
+    expect(fired).toBeUndefined();
+  });
+
+  test('spacebar outside an input still fires when armed', async () => {
+    loadClient();
+    const ws = await openConnection();
+    ws.dispatch({ type: 'welcome', message: 'hi', clientId: 1 });
+    // Join a running game and get assigned a player ID.
+    ws.dispatch({ type: 'lobbyJoined', token: 'tok-me' });
+    ws.dispatch({ type: 'playerAssigned', playerId: 'tok-me' });
+    ws.dispatch({
+      type: 'gameState',
+      gameState: {
+        currentGameState: 'IN_PROGRESS',
+        players: [{ id: 'tok-me', name: 'Me', weapon: 'pistol' }],
+        ghosts: [],
+        pellets: [],
+        powerPellets: [],
+      },
+    });
+
+    // Ensure no input is focused, set a direction, then press space.
+    document.body.focus();
+    ws.sent.length = 0;
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    ws.sent.length = 0;
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+
+    // Outside an input, space fires the weapon.
+
+    // Outside an input, space fires the weapon.
+    const fired = ws.sent.find((m) => m.type === 'input' && m.fire);
+    expect(fired).toBeDefined();
   });
 });

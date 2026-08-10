@@ -193,6 +193,17 @@
         .chat-text {
             color: var(--text);
         }
+        .chat-msg.system {
+            color: var(--text-dim);
+            font-style: italic;
+            font-size: 0.78rem;
+        }
+        .chat-msg.system .chat-name {
+            color: var(--accent2);
+        }
+        .chat-msg.system .chat-name::after {
+            content: ' ';
+        }
         .chat-input-row {
             display: flex;
             gap: 6px;
@@ -973,18 +984,8 @@
             // Not in the lobby anymore — show the join form.
             hasJoinedLobby = false;
             renderJoinState();
-            // Surface the reason to the player.
-            const banner = document.getElementById('inGameBanner');
-            if (banner) {
-                banner.textContent = reason || 'You were removed from the lobby.';
-                banner.style.display = 'block';
-                banner.style.background = '#dc2626';
-                setTimeout(() => {
-                    if (banner.textContent === (reason || 'You were removed from the lobby.')) {
-                        banner.style.display = 'none';
-                    }
-                }, 4000);
-            }
+            // The server broadcasts a `kickNotice` to all connections (including
+            // us) for the IRC-style message — nothing to render here.
             console.log(`[CLIENT] Kicked: ${reason}`);
         }
 
@@ -1362,6 +1363,24 @@
             chatLogEl.appendChild(row);
             chatLogEl.scrollTop = chatLogEl.scrollHeight;
         }
+        // Append an IRC-style system message (no real sender) to the chat log.
+        // Rendered in italic with an accent-colored name so it reads as a
+        // server notice rather than a player message.
+        function appendSystemMessage(name, text) {
+            if (!chatLogEl) return;
+            const row = document.createElement('div');
+            row.className = 'chat-msg system';
+            const nameEl = document.createElement('span');
+            nameEl.className = 'chat-name';
+            nameEl.textContent = name;
+            const textEl = document.createElement('span');
+            textEl.className = 'chat-text';
+            textEl.textContent = text;
+            row.appendChild(nameEl);
+            row.appendChild(textEl);
+            chatLogEl.appendChild(row);
+            chatLogEl.scrollTop = chatLogEl.scrollHeight;
+        }
         function sendChat() {
             if (!hasJoinedLobby || !chatInput) return;
             const text = chatInput.value.trim();
@@ -1622,6 +1641,11 @@
                     // join state so we can rejoin the lobby.
                     handleKicked(message.message);
                     break;
+                case 'kickNotice':
+                    // IRC-style notice broadcast to all players: "<name> was
+                    // kicked for inactivity." Rendered as a system message.
+                    appendSystemMessage('*', message.text);
+                    break;
                 case 'error':
                     console.error('[SERVER ERROR]:', message.message);
                     alert(`Error: ${message.message}`);
@@ -1638,6 +1662,14 @@
         let shiftHeld = false;
         let lastDirection = null;
         document.addEventListener('keydown', (event) => {
+            // Don't hijack keys when the user is typing in an input field
+            // (chat entry, name entry, textarea, or any contenteditable).
+            // This lets Space, letters, etc. reach the field normally.
+            const tag = document.activeElement && document.activeElement.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' ||
+                (document.activeElement && document.activeElement.isContentEditable)) {
+                return;
+            }
             if (event.key === 'Shift') {
                 shiftHeld = true;
                 event.preventDefault();
