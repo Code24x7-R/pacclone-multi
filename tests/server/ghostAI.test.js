@@ -42,7 +42,7 @@ const HOUSE_CONFIG = {
   centerX: 5.5,
   centerY: 4.5,
   exitX: 5.5,
-  exitY: 3.5,
+  exitY: 2.5,
   gateX: 5,
   gateY: 3,
 };
@@ -117,7 +117,7 @@ describe("getDefaultHouseConfig", () => {
     expect(config.centerX).toBe(5.5);
     expect(config.centerY).toBe(4.5);
     expect(config.exitX).toBe(5.5);
-    expect(config.exitY).toBe(3.5);
+    expect(config.exitY).toBe(2.5);
   });
 
   test("returns defaults when no gate found", () => {
@@ -280,7 +280,7 @@ describe("getGhostTarget", () => {
   test("exitingHouse targets the exit point", () => {
     const ghost = { id: "pinky", state: "exitingHouse", x: 5.5, y: 4.5 };
     const target = getGhostTarget(ghost, context);
-    expect(target).toEqual({ tileX: 5, tileY: 3 });
+    expect(target).toEqual({ tileX: 5, tileY: 2 });
   });
 
   test("eaten targets the house center", () => {
@@ -634,6 +634,29 @@ describe("updateGhostHouseState", () => {
     updateGhostHouseState(ghost, { pelletsEaten: 0, deltaTime: 600 });
     expect(ghost.state).toBe("exitingHouse");
     expect(ghost.reReleaseTimer).toBe(0);
+  });
+
+  test("ghost exits house by moving up through gate to tile above", () => {
+    const ghost = createGhost("pinky", HOUSE_CONFIG);
+    ghost.state = "exitingHouse";
+    ghost.x = HOUSE_CONFIG.centerX;
+    ghost.y = HOUSE_CONFIG.centerY;
+    ghost.direction = "up";
+
+    // The exit point should be the tile above the gate, not the gate tile.
+    // This ensures the ghost fully clears the gate before transitioning.
+    expect(HOUSE_CONFIG.exitY).toBeLessThan(HOUSE_CONFIG.gateY);
+
+    // Simulate the ghost reaching the exit point
+    ghost.x = HOUSE_CONFIG.exitX;
+    ghost.y = HOUSE_CONFIG.exitY;
+    updateGhostHouseState(ghost, {
+      pelletsEaten: 0,
+      deltaTime: 16,
+      houseConfig: HOUSE_CONFIG,
+      globalMode: "scatter",
+    });
+    expect(ghost.state).toBe("scatter");
   });
 });
 

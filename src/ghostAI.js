@@ -165,11 +165,16 @@ function getDefaultHouseConfig(maze) {
     if (gateX !== -1) break;
   }
 
-  // House center is below the gate, exit is above it
+  // House center is below the gate, exit is above it.
+  // The exit point is the tile ABOVE the gate (not the gate tile itself)
+  // so ghosts fully clear the gate before transitioning to scatter/chase.
+  // If the exit were at the gate tile, a ghost could transition to scatter
+  // and then walk back down into the house, where the gate becomes
+  // impassable — permanently trapping it.
   const centerX = gateX === -1 ? 9.5 : gateX + 0.5;
   const centerY = gateY === -1 ? 9.5 : gateY + 1.5;
   const exitX = centerX;
-  const exitY = gateY === -1 ? 7.5 : gateY + 0.5;
+  const exitY = gateY === -1 ? 6.5 : gateY - 0.5;
 
   return {
     centerX,
