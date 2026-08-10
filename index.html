@@ -717,6 +717,7 @@
         let lastWeaponState = null; // for weapon pickup sound
         let lastGhostPositions = []; // for ghost eaten sound
         let playerLastDirs = {}; // id -> last non-null direction (for mouth facing)
+        let latestGameState = null; // latest server state (for input handler lookups)
         let highScores = HighScores.loadHighScores();
         let finalScoreRecorded = false;
         let gameOverSoundPlayed = false; // one-shot guard for game-over SFX
@@ -1246,6 +1247,7 @@
                     break;
                 case 'gameState':
                     console.log('[CLIENT] GameState received. Current State:', clientGameState, 'My Player ID:', myPlayerId);
+                    latestGameState = message.gameState; // Store for input handler lookups
                     const prevState = clientGameState;
                     clientGameState = message.gameState.currentGameState; // Assuming server sends currentGameState in gameState
 
@@ -1346,6 +1348,9 @@
             // Press Space to fire weapon (if armed).
             if (event.key === ' ' || event.code === 'Space') {
                 event.preventDefault();
+                const myPlayer = latestGameState && latestGameState.players
+                    ? latestGameState.players.find(p => p.id === myPlayerId)
+                    : null;
                 if (myPlayerId && !isSpectating && myPlayer && myPlayer.weapon && lastDirection) {
                     ws.send(JSON.stringify({ type: 'input', direction: lastDirection, fire: true }));
                     if (myPlayer.weapon === 'pistol') {
