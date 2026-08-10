@@ -21,6 +21,7 @@ const {
   createModeCycle,
   updateModeCycle,
   isGhostWalkable,
+  isGhostStuck,
   shouldGhostFlash,
   GHOST_EAT_SCORE,
   GHOST_FRIGHTENED_SPEED,
@@ -673,6 +674,22 @@ function gameLoop() {
             // Tunnel wrapping: on tunnel rows, walking off one horizontal
             // edge teleports the ghost to the other side (classic Pac-Man tunnel).
             ghost.x = wrapTunnelX(ghost.x, ghost.y, currentMaze);
+
+            // Stuck-ghost rescue: if the ghost is trapped (all surrounding
+            // tiles are walls), send it back to the house to respawn. This
+            // can happen if maze generation creates a dead end that traps
+            // a ghost. The ghost transitions to eaten state and returns to
+            // the house center, then respawns after the re-release timer.
+            if (ghost.state !== 'inHouse' && ghost.state !== 'exitingHouse') {
+                const stuck = isGhostStuck(ghost, currentMaze, currentMaze[0].length, currentMaze.length);
+                if (stuck) {
+                    console.log(`[SERVER] Ghost ${ghost.name} is stuck at (${ghost.x.toFixed(2)}, ${ghost.y.toFixed(2)}). Sending to house.`);
+                    ghost.eaten = true;
+                    ghost.frightened = false;
+                    ghost.speed = GHOST_EATEN_SPEED;
+                    ghost.state = 'eaten';
+                }
+            }
         }
 
         // Player collision

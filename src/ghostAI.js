@@ -522,6 +522,31 @@ function getWalkableDirections(ghost, maze, mazeWidth, mazeHeight, directions = 
 }
 
 /**
+ * Check if a ghost is stuck (all surrounding tiles are walls/blocked).
+ * Used to detect ghosts trapped in dead ends so they can be sent back
+ * to the house to respawn.
+ * @param {Object} ghost - Ghost object { x, y }.
+ * @param {number[][]} maze - The maze grid.
+ * @param {number} mazeWidth - Maze width in tiles.
+ * @param {number} mazeHeight - Maze height in tiles.
+ * @returns {boolean} True if the ghost cannot move in any direction.
+ */
+function isGhostStuck(ghost, maze, mazeWidth, mazeHeight) {
+  const tileX = Math.floor(ghost.x);
+  const tileY = Math.floor(ghost.y);
+
+  for (const dir of DIRECTION_NAMES) {
+    const vec = DIRECTION_VECTORS[dir];
+    const nextX = tileX + vec.dx;
+    const nextY = tileY + vec.dy;
+    if (isGhostWalkable(maze, nextX, nextY, ghost.state, mazeWidth, mazeHeight)) {
+      return false; // At least one direction is walkable
+    }
+  }
+  return true; // All directions blocked
+}
+
+/**
  * Choose the best direction for a ghost to move toward a target tile.
  * Picks the direction whose next tile center is closest to the target.
  * In frightened mode, picks the direction that maximizes distance (runs away).
@@ -768,6 +793,7 @@ module.exports = {
   isGhostWalkable,
   getWalkableDirections,
   chooseDirection,
+  isGhostStuck,
   isAtTileCenter,
   snapToTileCenter,
   // State

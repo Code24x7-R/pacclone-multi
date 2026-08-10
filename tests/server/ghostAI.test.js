@@ -10,6 +10,7 @@ const {
   isGhostWalkable,
   getWalkableDirections,
   chooseDirection,
+  isGhostStuck,
   isAtTileCenter,
   snapToTileCenter,
   updateGhostHouseState,
@@ -460,6 +461,56 @@ describe("chooseDirection", () => {
     const dir = chooseDirection(ghost, target, maze, 5, 5);
     // Frightened ghost should reverse to left to maximize distance from target
     expect(dir).toBe("left");
+  });
+});
+
+describe("isGhostStuck", () => {
+  test("returns true when all directions are walls", () => {
+    const maze = [
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+      [1, 1, 0, 1, 1], // Ghost at (2,2), all neighbors are walls
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = { x: 2.5, y: 2.5, state: "chase" };
+    expect(isGhostStuck(ghost, maze, 5, 5)).toBe(true);
+  });
+
+  test("returns false when at least one direction is open", () => {
+    const maze = [
+      [1, 1, 1, 1, 1],
+      [1, 1, 0, 1, 1], // Up is open
+      [1, 1, 0, 1, 1], // Ghost at (2,2)
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = { x: 2.5, y: 2.5, state: "chase" };
+    expect(isGhostStuck(ghost, maze, 5, 5)).toBe(false);
+  });
+
+  test("returns false in open space", () => {
+    const maze = [
+      [1, 1, 1, 1, 1],
+      [1, 0, 0, 0, 1],
+      [1, 0, 0, 0, 1], // Ghost at (2,2), all directions open
+      [1, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = { x: 2.5, y: 2.5, state: "chase" };
+    expect(isGhostStuck(ghost, maze, 5, 5)).toBe(false);
+  });
+
+  test("gate tile counts as walkable for stuck detection", () => {
+    const maze = [
+      [1, 1, 1, 1, 1],
+      [1, 1, 6, 1, 1], // Gate above
+      [1, 1, 0, 1, 1], // Ghost at (2,2)
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = { x: 2.5, y: 2.5, state: "chase" };
+    expect(isGhostStuck(ghost, maze, 5, 5)).toBe(false);
   });
 });
 
