@@ -10,6 +10,7 @@
 
 | # | Symptom | Root Cause | Fix | Date | Commit |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| B-009 | Player gets stuck after clearing level 1 — level 2 starts in a dead end, eats ~5 pellets, hits a wall with no alternative exit | The procedurally generated maze (`mazeGenerator.js`) ensures starting tiles are walkable but does NOT ensure they have ≥2 open neighbors. Tile (1,1) is often a dead end (only 1 open neighbor: down). Player eats the power pellet + 4 more going down, then hits a wall and appears stuck. | Added dead-end detection in step 8 of maze generation: if a start tile has <2 open neighbors, carve a path to a wall neighbor to create an exit. Verified 600/600 start positions across 100 seeds now have ≥2 open neighbors. | 2026-08-10 | — |
 | B-008 | Ghosts freeze (stop moving) when hitting a wall during power-up / frightened state | Server's wall collision logic snapped ghosts to the tile **edge** (`Math.floor(x) + 0.99` / `+ 0.01`) instead of the tile **center**. A ghost at `x ≈ 4.99` is not within `isAtTileCenter`'s epsilon (0.04) of any center, so it never picks a new direction — infinite loop of hitting the wall every tick. Frightened ghosts are more likely to trigger this because they run toward walls while fleeing the player. | Snap to tile center (`snapToTileCenter`) on wall collision instead of tile edge. 3 new simulation tests: buggy code freezes at `x ≈ 4.99`, fixed code recovers and continues moving. | 2026-08-10 | — |
 
 ## Previously Fixed

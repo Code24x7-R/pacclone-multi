@@ -192,10 +192,12 @@ function generateMaze(options = {}) {
   placePowerUpLeft(1, qHeight, 1, halfWidth); // top-left quadrant → mirrors to top-right
   placePowerUpLeft(qHeight, height - 1, 1, halfWidth); // bottom-left quadrant → mirrors to bottom-right
 
-  // 8. Ensure player starting tiles are walkable so players never spawn
-  //    inside a wall. The server uses these tile positions (matching the
-  //    starting positions in server.js startGame / startNextLevel):
-  //    (1,1), (w-2,1), (1,4), (w-2,4), plus the corners from STARTING_POSITIONS.
+  // 8. Ensure player starting tiles are walkable AND not dead ends.
+  //    The server uses these tile positions (matching the starting positions
+  //    in server.js startGame / startNextLevel): (1,1), (w-2,1), (1,4), etc.
+  //    A dead-end start traps the player in a 1-tile corridor where they can
+  //    only backtrack — they eat the power pellet plus ~4 pellets going one
+  //    direction, then hit a wall with no alternative exit.
   const startTiles = [
     [1, 1],
     [width - 2, 1],
@@ -204,9 +206,39 @@ function generateMaze(options = {}) {
     [1, height - 2],
     [width - 2, height - 2],
   ];
+  const dirs = [
+    [0, -1], // up
+    [0, 1],  // down
+    [-1, 0], // left
+    [1, 0],  // right
+  ];
   for (const [c, r] of startTiles) {
-    if (r > 0 && r < height - 1 && c > 0 && c < width - 1 && grid[r][c] === WALL) {
+    if (r <= 0 || r >= height - 1 || c <= 0 || c >= width - 1) continue;
+    // Make sure the tile itself is walkable.
+    if (grid[r][c] === WALL) {
       grid[r][c] = PELLET;
+    }
+    // Count open neighbors.
+    let openNeighbors = 0;
+    for (const [dc, dr] of dirs) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr > 0 && nr < height - 1 && nc > 0 && nc < width - 1 && grid[nr][nc] !== WALL) {
+        openNeighbors++;
+      }
+    }
+    // If this start tile is a dead end (only 1 open neighbor), carve a path
+    // to a second neighbor so the player has an alternative exit.
+    if (openNeighbors < 2) {
+      for (const [dc, dr] of dirs) {
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr > 0 && nr < height - 1 && nc > 0 && nc < width - 1 && grid[nr][nc] === WALL) {
+          grid[nr][nc] = PELLET;
+          openNeighbors++;
+          if (openNeighbors >= 2) break;
+        }
+      }
     }
   }
 
