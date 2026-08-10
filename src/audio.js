@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Richard Robertson
+
 /**
  * audio.js — Chiptune sound effects for pacclone-multi.
  *

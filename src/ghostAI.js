@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Richard Robertson
+
 /**
  * ghostAI.js — Pure ghost AI logic for pacclone-multi.
  *

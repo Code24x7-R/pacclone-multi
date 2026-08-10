@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Richard Robertson
+
 /**
  * highScores.js — Client-side high score persistence.
  *

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Richard Robertson
+
 /**
  * Ghost rendering — pure drawing functions for the Canvas 2D context.
  *

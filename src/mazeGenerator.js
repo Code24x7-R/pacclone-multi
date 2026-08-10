@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Richard Robertson
+
 /**
  * mazeGenerator.js — Pure procedural maze generation for pacclone-multi.
  *
