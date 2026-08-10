@@ -724,6 +724,9 @@
         let showNewHighScore = false; // overlay flag set on game-over
         let showHighScore = false; // overlay flag set on game-over
         let showPosDebug = false; // press 'P' to toggle position-vs-pellet-line debug overlay
+        var playerSpawnTimes = {}; // id -> timestamp of last spawn/respawn (for spawn animation)
+        var playerLastPositions = {}; // id -> {x, y} last known position (for respawn detection)
+        var SPAWN_ANIM_MS = 1000; // duration of spawn fade-in animation
 
         // --- Smooth rendering loop ---
         // The server sends state at 60Hz, but rendering only on packet arrival
@@ -1684,6 +1687,23 @@
                 if (p.direction) playerLastDirs[p.id] = p.direction;
                 var dir = playerLastDirs[p.id] || 'right';
 
+                // Detect spawn/respawn: new player or large position jump (teleport).
+                if (!playerSpawnTimes[p.id]) {
+                    playerSpawnTimes[p.id] = performance.now();
+                    playerLastPositions[p.id] = { x: p.x, y: p.y };
+                } else {
+                    var dx = p.x - playerLastPositions[p.id].x;
+                    var dy = p.y - playerLastPositions[p.id].y;
+                    var dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 3) playerSpawnTimes[p.id] = performance.now(); // respawn detected
+                }
+                playerLastPositions[p.id] = { x: p.x, y: p.y };
+
+                // Spawn animation: fade in + slight scale-up over SPAWN_ANIM_MS.
+                var spawnAge = performance.now() - (playerSpawnTimes[p.id] || 0);
+                var spawnAlpha = spawnAge < SPAWN_ANIM_MS ? Math.min(1, spawnAge / SPAWN_ANIM_MS) : 1;
+                var spawnScale = spawnAge < SPAWN_ANIM_MS ? 0.5 + 0.5 * (spawnAge / SPAWN_ANIM_MS) : 1;
+
                 // Direction angle: 0=right, π/2=down, π=left, -π/2=up.
                 var dirAngle = 0;
                 if (dir === 'down') dirAngle = Math.PI / 2;
@@ -1695,14 +1715,15 @@
                 var offsets = tunnelOffsets(p.x, p.y);
                 offsets.forEach(function (off, idx) {
                     // The ghost copy (non-zero offset) is drawn faded.
-                    if (off !== 0) ctx.globalAlpha = 0.4;
+                    if (off !== 0) ctx.globalAlpha = 0.4 * spawnAlpha;
+                    else ctx.globalAlpha = spawnAlpha;
 
                     var px = (p.x + off) * TILE_SIZE;
                     var py = p.y * TILE_SIZE;
 
                     // Phase-dash visual effect: semi-transparent + cyan glow.
                     if (p.dashing) {
-                        ctx.globalAlpha = (off === 0 ? 0.5 : 0.2);
+                        ctx.globalAlpha = (off === 0 ? 0.5 : 0.2) * spawnAlpha;
                         ctx.strokeStyle = '#0ff';
                         ctx.lineWidth = 3;
                         ctx.beginPath();
@@ -1717,7 +1738,8 @@
                     // corridor (radius ≈ half a tile) so it sits centered on the pellet
                     // line. A smaller radius (the old TILE_SIZE/2.5) left the character
                     // floating and visually misaligned with pellets.
-                    ctx.arc(px, py, TILE_SIZE / 2 - 2,
+                    // Spawn animation scales the radius from 50% to 100%.
+                    ctx.arc(px, py, (TILE_SIZE / 2 - 2) * spawnScale,
                         dirAngle + mouthAngle, dirAngle + Math.PI * 2 - mouthAngle);
                     ctx.lineTo(px, py);
                     ctx.fill();

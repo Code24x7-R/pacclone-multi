@@ -153,6 +153,31 @@ describe('generateMaze', () => {
     }
   });
 
+  test('tile above ghost house gate is walkable (ghost exit path)', () => {
+    for (let seed = 0; seed < 50; seed++) {
+      const maze = generateMaze({ seed });
+      // Find the gate tile
+      let gateR = -1, gateC = -1;
+      for (let r = 0; r < maze.length; r++) {
+        for (let c = 0; c < maze[r].length; c++) {
+          if (maze[r][c] === GATE) {
+            gateR = r;
+            gateC = c;
+            break;
+          }
+        }
+        if (gateR !== -1) break;
+      }
+      if (gateR === -1) continue; // No gate found, skip
+      // Tile above the gate must be walkable (not wall, not gate)
+      const aboveR = gateR - 1;
+      if (aboveR > 0) {
+        expect(maze[aboveR][gateC]).not.toBe(WALL);
+        expect(maze[aboveR][gateC]).not.toBe(GATE);
+      }
+    }
+  });
+
   test('has a reasonable number of pellet tiles', () => {
     const maze = generateMaze({ seed: 42 });
     let pelletCount = 0;

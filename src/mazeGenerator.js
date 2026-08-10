@@ -142,6 +142,13 @@ function generateMaze(options = {}) {
     // Gate at the top center of the house (ghosts exit/return here).
     grid[houseTop][houseLeft + 2] = GATE;
     grid[houseTop][houseLeft + 3] = GATE;
+    // Ensure the tile above the gate is walkable so ghosts can exit.
+    // Without this, the tile above is a wall and ghosts get stuck at the
+    // gate after transitioning from exitingHouse to scatter/chase.
+    if (houseTop - 1 > 0) {
+      grid[houseTop - 1][houseLeft + 2] = PELLET;
+      grid[houseTop - 1][houseLeft + 3] = PELLET;
+    }
     // Fill the bottom row of the house solid.
     for (let c = houseLeft; c < houseLeft + houseWidth; c++) {
       grid[houseTop + houseHeight - 1][c] = WALL;
