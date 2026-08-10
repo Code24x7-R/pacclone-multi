@@ -1,11 +1,13 @@
 /**
  * frightenGhosts.test.js / revertFrightenedGhosts.test.js
  *
- * When a power pellet is eaten, EVERY non-eaten ghost must turn scared — including
- * ghosts still in the house or mid-exit. Before the fix, the code skipped
- * inHouse ghosts entirely (they never turned blue), and exitingHouse ghosts got
- * frightened=true but were never reverted when the timer expired (the reversion
- * check only looked at state === 'frightened').
+ * When a power pellet is eaten, ghosts OUTSIDE the house turn scared.
+ * Ghosts inside the house (inHouse/exitingHouse) are NOT frightened —
+ * only ghosts outside the house turn blue. This matches classic Pac-Man
+ * behavior where house ghosts are immune to the power-up until they exit.
+ *
+ * Ghosts that exit the house while a power-up is active will become
+ * frightened via the house state transition logic.
  *
  * These helpers centralize that logic so it can be unit-tested in isolation.
  */
@@ -47,23 +49,23 @@ describe('frightenGhosts', () => {
     expect(ghosts[1].direction).toBe('down'); // reversed
   });
 
-  test('frightens ghosts still in the house (the reported bug)', () => {
+  test('does NOT frighten ghosts still in the house', () => {
     const ghosts = [makeGhost({ id: 'inky', state: 'inHouse' })];
     frightenGhosts(ghosts, FRIGHTENED_SPEED, OPPOSITE);
 
-    // Must turn blue, but keep its state so house bobbing/release continues.
-    expect(ghosts[0].frightened).toBe(true);
+    // House ghosts are NOT frightened — only ghosts outside the house turn blue.
+    expect(ghosts[0].frightened).toBe(false);
     expect(ghosts[0].state).toBe('inHouse');
-    expect(ghosts[0].speed).toBe(FRIGHTENED_SPEED);
+    expect(ghosts[0].speed).toBe(NORMAL_SPEED);
   });
 
-  test('frightens ghosts mid-exit without changing their state', () => {
+  test('does NOT frighten ghosts mid-exit', () => {
     const ghosts = [makeGhost({ id: 'clyde', state: 'exitingHouse' })];
     frightenGhosts(ghosts, FRIGHTENED_SPEED, OPPOSITE);
 
-    expect(ghosts[0].frightened).toBe(true);
+    expect(ghosts[0].frightened).toBe(false);
     expect(ghosts[0].state).toBe('exitingHouse'); // preserved for house logic
-    expect(ghosts[0].speed).toBe(FRIGHTENED_SPEED);
+    expect(ghosts[0].speed).toBe(NORMAL_SPEED);
   });
 
   test('skips already-eaten ghosts (eyes returning to house)', () => {
@@ -74,7 +76,7 @@ describe('frightenGhosts', () => {
     expect(ghosts[0].state).toBe('eaten');
   });
 
-  test('frightens a mixed group correctly (the full reported scenario)', () => {
+  test('frightens only patrolling ghosts in a mixed group', () => {
     const ghosts = [
       makeGhost({ id: 'blinky', state: 'chase' }),
       makeGhost({ id: 'pinky', state: 'scatter' }),
@@ -83,8 +85,11 @@ describe('frightenGhosts', () => {
     ];
     frightenGhosts(ghosts, FRIGHTENED_SPEED, OPPOSITE);
 
-    // Every non-eaten ghost must be frightened.
-    ghosts.forEach(g => expect(g.frightened).toBe(true));
+    // Only patrolling ghosts are frightened; house ghosts are NOT.
+    expect(ghosts[0].frightened).toBe(true);
+    expect(ghosts[1].frightened).toBe(true);
+    expect(ghosts[2].frightened).toBe(false);
+    expect(ghosts[3].frightened).toBe(false);
     // Patrolling ghosts changed state; house ghosts kept theirs.
     expect(ghosts[0].state).toBe('frightened');
     expect(ghosts[1].state).toBe('frightened');
@@ -116,9 +121,9 @@ describe('revertFrightenedGhosts', () => {
     expect(ghosts[0].state).toBe('scatter');
   });
 
-  test('reverts house ghosts without changing their state (the related bug)', () => {
-    // An exitingHouse ghost that was frightened must be cleared of the
-    // frightened flag but KEEP exiting — otherwise the house logic stalls.
+  test('reverts house ghosts without changing their state', () => {
+    // House ghosts that were frightened (e.g., from exiting during power-up)
+    // must be cleared of the frightened flag but keep their state.
     const ghosts = [
       makeGhost({ id: 'inky', state: 'inHouse', frightened: true }),
       makeGhost({ id: 'clyde', state: 'exitingHouse', frightened: true }),
@@ -145,7 +150,7 @@ describe('revertFrightenedGhosts', () => {
   test('handles a mix of frightened patrolling and house ghosts', () => {
     const ghosts = [
       makeGhost({ id: 'a', state: 'frightened', frightened: true }),
-      makeGhost({ id: 'b', state: 'inHouse', frightened: true }),
+      makeGhost({ id: 'b', state: 'inHouse', frightened: false }), // house ghosts not frightened
       makeGhost({ id: 'c', state: 'scatter', frightened: false }),
     ];
     revertFrightenedGhosts(ghosts, NORMAL_SPEED, 'chase');
@@ -173,8 +178,11 @@ describe('frighten then revert round-trip', () => {
     const snapshot = ghosts.map(g => ({ state: g.state, direction: g.direction }));
 
     frightenGhosts(ghosts, FRIGHTENED_SPEED, OPPOSITE);
-    // All non-eaten ghosts are frightened now.
-    ghosts.forEach(g => expect(g.frightened).toBe(true));
+    // Only patrolling ghosts are frightened; house ghosts are NOT.
+    expect(ghosts[0].frightened).toBe(true);
+    expect(ghosts[1].frightened).toBe(true);
+    expect(ghosts[2].frightened).toBe(false);
+    expect(ghosts[3].frightened).toBe(false);
 
     revertFrightenedGhosts(ghosts, NORMAL_SPEED, 'scatter');
     // No ghost is frightened; house ghosts kept their state; patrolling

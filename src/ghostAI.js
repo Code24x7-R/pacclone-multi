@@ -613,10 +613,10 @@ function snapToTileCenter(ghost) {
  * Handles bobbing, release thresholds, and re-release timers.
  *
  * @param {Object} ghost - Ghost object (mutated in place).
- * @param {Object} context - { pelletsEaten, deltaTime }
+ * @param {Object} context - { pelletsEaten, deltaTime, frightenedTimer }
  */
 function updateGhostHouseState(ghost, context) {
-  const { pelletsEaten, deltaTime } = context;
+  const { pelletsEaten, deltaTime, frightenedTimer } = context;
 
   if (ghost.state === "inHouse") {
     // Bob up and down (visual effect; position handled by caller)
@@ -650,8 +650,14 @@ function updateGhostHouseState(ghost, context) {
       if (distToExit < 0.3) {
         ghost.x = houseConfig.exitX;
         ghost.y = houseConfig.exitY;
-        // Transition to current global mode
-        ghost.state = context.globalMode || "scatter";
+        // If power-up is active, ghost exits as frightened (blue)
+        if (frightenedTimer > 0) {
+          ghost.frightened = true;
+          ghost.state = "frightened";
+        } else {
+          // Transition to current global mode
+          ghost.state = context.globalMode || "scatter";
+        }
       }
     }
   }

@@ -66,10 +66,12 @@ function checkPlayerPellets(player, pellets, powerPellets) {
             // Tick-based power-up countdown (avoids storing non-serializable
             // Timeout objects on the player and prevents timer drift).
             player.poweredUpTicks = Math.ceil(frightenedDurationMs / GAME_LOOP_INTERVAL);
-            // Frighten all non-eaten ghosts. Patrolling ghosts switch to
-            // the 'frightened' state; house ghosts keep their state so the
-            // house logic can finish (they still render blue). Eaten ghosts
-            // (eyes returning to the house) are skipped — classic behavior.
+            // Frighten all non-eaten ghosts that are outside the house.
+            // Ghosts inside the house (inHouse/exitingHouse) are NOT frightened
+            // — only ghosts outside the house turn blue. Eaten ghosts (eyes
+            // returning to the house) are skipped — classic behavior.
+            // Ghosts that exit the house while power-up is active will become
+            // frightened via the house state transition logic.
             ghostFrightenedTimer = frightenedDurationMs;
             frightenGhosts(ghosts, GHOST_FRIGHTENED_SPEED, OPPOSITE);
         }
@@ -618,6 +620,7 @@ function gameLoop() {
             deltaTime: GAME_LOOP_INTERVAL,
             houseConfig: ghostHouseConfig,
             globalMode: modeCycle ? modeCycle.mode : 'scatter',
+            frightenedTimer: ghostFrightenedTimer,
         });
 
         // Bobbing for ghosts waiting in the house

@@ -544,9 +544,12 @@ function buildGameStatePayload(maze, players, ghosts, pellets, powerPellets, cur
 function frightenGhosts(ghosts, frightenedSpeed, opposite) {
   ghosts.forEach(ghost => {
     if (ghost.state === 'eaten') return;
-    ghost.frightened = true;
-    ghost.speed = frightenedSpeed;
+    // Only frighten ghosts that are outside the house (chase/scatter).
+    // Ghosts inside the house (inHouse/exitingHouse) keep their state and
+    // are NOT frightened — only ghosts outside the house turn blue.
     if (ghost.state === 'chase' || ghost.state === 'scatter') {
+      ghost.frightened = true;
+      ghost.speed = frightenedSpeed;
       ghost.state = 'frightened';
       ghost.direction = opposite[ghost.direction] || ghost.direction;
     }
