@@ -726,7 +726,7 @@
         let showPosDebug = false; // press 'P' to toggle position-vs-pellet-line debug overlay
         var playerSpawnTimes = {}; // id -> timestamp of last spawn/respawn (for spawn animation)
         var playerLastPositions = {}; // id -> {x, y} last known position (for respawn detection)
-        var SPAWN_ANIM_MS = 1000; // duration of spawn fade-in animation
+        var SPAWN_ANIM_MS = 2000; // duration of spawn fade-in animation
 
         // --- Smooth rendering loop ---
         // The server sends state at 60Hz, but rendering only on packet arrival
