@@ -69,15 +69,17 @@ function generateMaze(options = {}) {
   const grid = Array.from({ length: height }, () => Array(width).fill(WALL));
 
   // 2. Reserve the ghost house area (left half only — right half is mirrored).
-  //    House is centered horizontally and placed in the vertical middle.
-  //    For the default 20x13 maze this gives rows 8-11, cols 7-12 (6x4).
+  //    House is centered in the maze with variable gate orientation.
+  //    For the default 20x13 maze this gives rows 5-8, cols 7-12 (6x4).
   const houseWidth = 6;
   const houseHeight = 4;
   const houseLeft = Math.floor((halfWidth - houseWidth / 2));
-  // Place the house near the bottom (like the original maze) so there's a
-  // tunnel row beneath it and plenty of carved maze above for gameplay.
-  const houseTop = height - houseHeight - 1;
+  // Place the house near the center of the maze.
+  const houseTop = Math.floor((height - houseHeight) / 2);
   const houseFits = houseTop > 1 && houseTop + houseHeight < height && houseLeft > 1;
+
+  // Gate orientation: 0=top, 1=bottom (only top/bottom to preserve symmetry)
+  const gateOrientation = houseFits ? Math.floor(rng() * 2) : 0;
 
   if (houseFits) {
     // Reserve the ghost house area (left half only — right half is mirrored).
@@ -139,19 +141,34 @@ function generateMaze(options = {}) {
         }
       }
     }
-    // Gate at the top center of the house (ghosts exit/return here).
-    grid[houseTop][houseLeft + 2] = GATE;
-    grid[houseTop][houseLeft + 3] = GATE;
-    // Ensure the tile above the gate is walkable so ghosts can exit.
-    // Without this, the tile above is a wall and ghosts get stuck at the
-    // gate after transitioning from exitingHouse to scatter/chase.
-    if (houseTop - 1 > 0) {
-      grid[houseTop - 1][houseLeft + 2] = PELLET;
-      grid[houseTop - 1][houseLeft + 3] = PELLET;
+    // Place gate based on orientation. Gate is 2 tiles wide on the chosen side.
+    // Ensure the tile outside the gate is walkable so ghosts can pass through.
+    let gateX1, gateY1, gateX2, gateY2;
+    let outsideX1, outsideY1, outsideX2, outsideY2;
+    switch (gateOrientation) {
+      case 0: // top
+      default:
+        gateX1 = houseLeft + 2; gateY1 = houseTop;
+        gateX2 = houseLeft + 3; gateY2 = houseTop;
+        outsideX1 = houseLeft + 2; outsideY1 = houseTop - 1;
+        outsideX2 = houseLeft + 3; outsideY2 = houseTop - 1;
+        break;
+      case 1: // bottom
+        gateX1 = houseLeft + 2; gateY1 = houseTop + houseHeight - 1;
+        gateX2 = houseLeft + 3; gateY2 = houseTop + houseHeight - 1;
+        outsideX1 = houseLeft + 2; outsideY1 = houseTop + houseHeight;
+        outsideX2 = houseLeft + 3; outsideY2 = houseTop + houseHeight;
+        break;
     }
-    // Fill the bottom row of the house solid.
-    for (let c = houseLeft; c < houseLeft + houseWidth; c++) {
-      grid[houseTop + houseHeight - 1][c] = WALL;
+    // Place gate tiles
+    grid[gateY1][gateX1] = GATE;
+    grid[gateY2][gateX2] = GATE;
+    // Ensure tiles outside the gate are walkable
+    if (outsideY1 > 0 && outsideY1 < height - 1 && outsideX1 > 0 && outsideX1 < width - 1) {
+      grid[outsideY1][outsideX1] = PELLET;
+    }
+    if (outsideY2 > 0 && outsideY2 < height - 1 && outsideX2 > 0 && outsideX2 < width - 1) {
+      grid[outsideY2][outsideX2] = PELLET;
     }
   }
 

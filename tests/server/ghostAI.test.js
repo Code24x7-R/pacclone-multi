@@ -115,9 +115,10 @@ describe("getDefaultHouseConfig", () => {
     expect(config.gateX).toBe(5);
     expect(config.gateY).toBe(3);
     expect(config.centerX).toBe(5.5);
-    expect(config.centerY).toBe(4.5);
+    // Walkable space is below the gate (row 4), so exit is below, house center is above
+    expect(config.centerY).toBe(2.5);
     expect(config.exitX).toBe(5.5);
-    expect(config.exitY).toBe(2.5);
+    expect(config.exitY).toBe(4.5);
   });
 
   test("returns defaults when no gate found", () => {
@@ -127,9 +128,11 @@ describe("getDefaultHouseConfig", () => {
       [1, 1, 1],
     ];
     const config = getDefaultHouseConfig(noGateMaze);
-    expect(config.centerX).toBe(9.5); // fallback centerX
-    expect(config.gateX).toBe(9); // fallback gateX when no gate in maze
-    expect(config.gateY).toBe(7); // fallback gateY
+    // Fallback: center of maze, gate at -1 (not found)
+    expect(config.centerX).toBe(1.5);
+    expect(config.centerY).toBe(1.5);
+    expect(config.gateX).toBe(-1);
+    expect(config.gateY).toBe(-1);
   });
 });
 
@@ -314,8 +317,12 @@ describe("isGhostWalkable", () => {
     expect(isGhostWalkable(powerMaze, 1, 1, "chase", 3, 3)).toBe(true);
   });
 
-  test("gate is not walkable for chase state", () => {
-    expect(isGhostWalkable(MAZE, 5, 3, "chase", 10, 10)).toBe(false);
+  test("gate is walkable for chase state", () => {
+    expect(isGhostWalkable(MAZE, 5, 3, "chase", 10, 10)).toBe(true);
+  });
+
+  test("gate is walkable for scatter state", () => {
+    expect(isGhostWalkable(MAZE, 5, 3, "scatter", 10, 10)).toBe(true);
   });
 
   test("gate is walkable for exitingHouse state", () => {
@@ -324,6 +331,10 @@ describe("isGhostWalkable", () => {
 
   test("gate is walkable for eaten state", () => {
     expect(isGhostWalkable(MAZE, 5, 3, "eaten", 10, 10)).toBe(true);
+  });
+
+  test("gate is walkable for frightened state", () => {
+    expect(isGhostWalkable(MAZE, 5, 3, "frightened", 10, 10)).toBe(true);
   });
 
   test("out of bounds is not walkable", () => {

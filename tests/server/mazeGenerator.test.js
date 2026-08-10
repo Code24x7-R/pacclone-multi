@@ -107,12 +107,13 @@ describe('generateMaze', () => {
 
   test('ghost house interior is walkable (empty)', () => {
     const maze = generateMaze({ seed: 55 });
-    // Interior cells (rows 9-10, cols 8-11) should be EMPTY.
+    // House is centered: houseTop = floor((13-4)/2) = 4, houseLeft = 7
+    // Interior cells (rows 5-6, cols 8-11) should be EMPTY.
     const interiorWalkable =
-      maze[9][8] === EMPTY &&
-      maze[9][11] === EMPTY &&
-      maze[10][8] === EMPTY &&
-      maze[10][11] === EMPTY;
+      maze[5][8] === EMPTY &&
+      maze[5][11] === EMPTY &&
+      maze[6][8] === EMPTY &&
+      maze[6][11] === EMPTY;
     expect(interiorWalkable).toBe(true);
   });
 

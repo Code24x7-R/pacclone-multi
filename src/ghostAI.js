@@ -147,42 +147,134 @@ function createInitialGhosts(houseConfig) {
 
 /**
  * Compute the default ghost house config from a maze layout.
- * Finds the gate tile (type 6) and computes house center.
+ * Finds the gate tiles (type 6) and computes house center and exit points.
+ * Supports gates on any side of the house (top, bottom, left, right).
  * @param {number[][]} maze
  * @returns {{centerX: number, centerY: number, exitX: number, exitY: number, gateX: number, gateY: number}}
  */
 function getDefaultHouseConfig(maze) {
-  let gateX = -1;
-  let gateY = -1;
-  for (let y = 0; y < maze.length; y++) {
+  const height = maze.length;
+  const width = maze[0].length;
+
+  // Collect all gate tiles
+  const gateTiles = [];
+  for (let y = 0; y < height; y++) {
     for (let x = 0; x < maze[y].length; x++) {
       if (maze[y][x] === 6) {
-        gateX = x;
-        gateY = y;
-        break;
+        gateTiles.push({ x, y });
       }
     }
-    if (gateX !== -1) break;
   }
 
-  // House center is below the gate, exit is above it.
-  // The exit point is the tile ABOVE the gate (not the gate tile itself)
-  // so ghosts fully clear the gate before transitioning to scatter/chase.
-  // If the exit were at the gate tile, a ghost could transition to scatter
-  // and then walk back down into the house, where the gate becomes
-  // impassable — permanently trapping it.
-  const centerX = gateX === -1 ? 9.5 : gateX + 0.5;
-  const centerY = gateY === -1 ? 9.5 : gateY + 1.5;
-  const exitX = centerX;
-  const exitY = gateY === -1 ? 6.5 : gateY - 0.5;
+  if (gateTiles.length === 0) {
+    // No gate found, return defaults
+    return {
+      centerX: width / 2,
+      centerY: height / 2,
+      exitX: width / 2,
+      exitY: height / 2,
+      gateX: -1,
+      gateY: -1,
+    };
+  }
+
+  // Find the bounding box of the gate tiles
+  const minGateX = Math.min(...gateTiles.map(t => t.x));
+  const maxGateX = Math.max(...gateTiles.map(t => t.x));
+  const minGateY = Math.min(...gateTiles.map(t => t.y));
+  const maxGateY = Math.max(...gateTiles.map(t => t.y));
+
+  // Determine gate orientation based on gate tile positions and surrounding tiles.
+  // For a single gate tile, check which side has walkable space (the exit side).
+  // For multiple gate tiles, use their arrangement to determine orientation.
+  const isHorizontalGate = maxGateX > minGateX;
+  const isVerticalGate = maxGateY > minGateY;
+
+  let centerX, centerY, exitX, exitY;
+
+  if (isHorizontalGate) {
+    // Gate tiles are arranged horizontally (top or bottom of house)
+    const gateCenterX = (minGateX + maxGateX) / 2 + 0.5;
+    const gateY = minGateY;
+    // Check which side has walkable space (that's the exit side)
+    const hasSpaceAbove = gateY > 0 && maze[gateY - 1][minGateX] !== 1;
+    const hasSpaceBelow = gateY < height - 1 && maze[gateY + 1][minGateX] !== 1;
+
+    if (hasSpaceAbove || !hasSpaceBelow) {
+      // Exit is above the gate
+      centerX = gateCenterX;
+      centerY = gateY + 1.5;
+      exitX = gateCenterX;
+      exitY = gateY - 0.5;
+    } else {
+      // Exit is below the gate
+      centerX = gateCenterX;
+      centerY = gateY - 0.5;
+      exitX = gateCenterX;
+      exitY = gateY + 1.5;
+    }
+  } else if (isVerticalGate) {
+    // Gate tiles are arranged vertically (left or right of house)
+    const gateCenterY = (minGateY + maxGateY) / 2 + 0.5;
+    const gateX = minGateX;
+    // Check which side has walkable space (that's the exit side)
+    const hasSpaceLeft = gateX > 0 && maze[minGateY][gateX - 1] !== 1;
+    const hasSpaceRight = gateX < width - 1 && maze[minGateY][gateX + 1] !== 1;
+
+    if (hasSpaceRight || !hasSpaceLeft) {
+      // Exit is to the right of the gate
+      centerX = gateX - 0.5;
+      centerY = gateCenterY;
+      exitX = gateX + 1.5;
+      exitY = gateCenterY;
+    } else {
+      // Exit is to the left of the gate
+      centerX = gateX + 1.5;
+      centerY = gateCenterY;
+      exitX = gateX - 0.5;
+      exitY = gateCenterY;
+    }
+  } else {
+    // Single gate tile - determine orientation by checking surrounding tiles
+    const gx = minGateX;
+    const gy = minGateY;
+    const hasSpaceAbove = gy > 0 && maze[gy - 1][gx] !== 1;
+    const hasSpaceBelow = gy < height - 1 && maze[gy + 1][gx] !== 1;
+    const hasSpaceLeft = gx > 0 && maze[gy][gx - 1] !== 1;
+    const hasSpaceRight = gx < width - 1 && maze[gy][gx + 1] !== 1;
+
+    // The exit is on the side with walkable space
+    if (hasSpaceAbove) {
+      centerX = gx + 0.5;
+      centerY = gy + 1.5;
+      exitX = gx + 0.5;
+      exitY = gy - 0.5;
+    } else if (hasSpaceBelow) {
+      centerX = gx + 0.5;
+      centerY = gy - 0.5;
+      exitX = gx + 0.5;
+      exitY = gy + 1.5;
+    } else if (hasSpaceRight) {
+      centerX = gx - 0.5;
+      centerY = gy + 0.5;
+      exitX = gx + 1.5;
+      exitY = gy + 0.5;
+    } else {
+      // hasSpaceLeft or default
+      centerX = gx + 1.5;
+      centerY = gy + 0.5;
+      exitX = gx - 0.5;
+      exitY = gy + 0.5;
+    }
+  }
 
   return {
     centerX,
     centerY,
     exitX,
     exitY,
-    gateX: gateX === -1 ? 9 : gateX,
-    gateY: gateY === -1 ? 7 : gateY,
+    gateX: minGateX,
+    gateY: minGateY,
   };
 }
 
@@ -388,9 +480,10 @@ function isGhostWalkable(maze, tileX, tileY, ghostState, mazeWidth, mazeHeight) 
   if (tile === undefined) return false;
   if (tile === 1) return false; // wall
 
-  // Gate (type 6): only passable when exiting house or eaten
+  // Gate (type 6): passable for all ghost states (it's a corridor for ghosts).
+  // Players treat it as a wall (see isWall in gameLogic.js).
   if (tile === 6) {
-    return ghostState === "exitingHouse" || ghostState === "eaten";
+    return true;
   }
 
   return true;
