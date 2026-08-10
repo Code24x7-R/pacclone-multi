@@ -22,6 +22,7 @@ const {
   firePistol,
   detonateExplosive,
   updateProjectiles,
+  assignWeaponOnRespawn,
 } = require('../../src/gameLogic');
 
 // ---------------------------------------------------------------------------
@@ -44,6 +45,20 @@ const MAZE_WALLED = [
   [1, 1, 1, 1, 1],
   [1, 1, 1, 1, 1],
   [1, 1, 1, 1, 1],
+];
+
+// Maze with non-path tiles: 4 = ghost house interior (EMPTY), 6 = gate.
+// Weapons must only spawn on pellet paths (0) and power pellets (2, 3).
+const MAZE_WITH_NONPATH = [
+  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 1, 1, 1, 1, 1, 1, 0, 1],
+  [1, 0, 1, 4, 4, 4, 4, 1, 0, 1],
+  [1, 0, 1, 4, 6, 6, 4, 1, 0, 1],
+  [1, 0, 1, 4, 4, 4, 4, 1, 0, 1],
+  [1, 0, 1, 1, 1, 1, 1, 1, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 2, 1],
+  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
 ];
 
 // ---------------------------------------------------------------------------
@@ -147,6 +162,32 @@ describe('spawnWeapon', () => {
     expect(Number.isInteger(weapon.x)).toBe(true);
     expect(Number.isInteger(weapon.y)).toBe(true);
   });
+
+  test('weapons only spawn on pellet paths and power pellets — not ghost house or gates', () => {
+    // MAZE_WITH_NONPATH has EMPTY (4) tiles in the ghost house and GATE (6)
+    // tiles at the house entrance. Weapons must never spawn on them.
+    for (let i = 0; i < 50; i += 1) {
+      const weapon = spawnWeapon(MAZE_WITH_NONPATH, []);
+      expect(weapon).not.toBeNull();
+      const tile = MAZE_WITH_NONPATH[weapon.y][weapon.x];
+      expect(tile).not.toBe(1); // not a wall
+      expect(tile).not.toBe(4); // not ghost house interior
+      expect(tile).not.toBe(6); // not a gate
+      // Must be a pellet path (0) or power pellet (2, 3)
+      expect([0, 2, 3]).toContain(tile);
+    }
+  });
+
+  test('returns null when only non-path tiles exist', () => {
+    // A maze with only walls, ghost house, and gates — no valid spawn.
+    const noPath = [
+      [1, 1, 1, 1, 1],
+      [1, 4, 4, 6, 1],
+      [1, 4, 4, 4, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    expect(spawnWeapon(noPath, [])).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -247,33 +288,26 @@ describe('firePistol', () => {
     expect(proj.y).toBeCloseTo(3.5, 5);
   });
 
-  test('firing consumes one round', () => {
+  test('firing does not consume rounds (infinite ammo)', () => {
     const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol', weaponRounds: 6 };
     const projectiles = [];
     firePistol(player, projectiles);
-    // Pistol has rounds — one round consumed per shot
-    expect(player.weaponRounds).toBe(5);
-    expect(player.weapon).toBe('pistol'); // Still has weapon
+    // Pistol has infinite rounds — ammo is never consumed.
+    expect(player.weaponRounds).toBe(6);
+    expect(player.weapon).toBe('pistol');
   });
 
-  test('weapon is gone when rounds reach zero', () => {
-    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol', weaponRounds: 1 };
+  test('pistol can fire any number of times without running out', () => {
+    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol', weaponRounds: 6 };
     const projectiles = [];
-    firePistol(player, projectiles);
-    // Last round consumed — weapon is gone
-    expect(player.weaponRounds).toBe(0);
-    expect(player.weapon).toBeNull();
+    for (let i = 0; i < 50; i += 1) firePistol(player, projectiles);
+    expect(projectiles.length).toBe(50);
+    expect(player.weapon).toBe('pistol');
+    expect(player.weaponRounds).toBe(6);
   });
 
-  test('does not fire without a direction', () => {
+  test('does not fire without a direction (infinite rounds)', () => {
     const player = { x: 3.5, y: 3.5, direction: null, weapon: 'pistol', weaponRounds: 6 };
-    const projectiles = [];
-    firePistol(player, projectiles);
-    expect(projectiles.length).toBe(0);
-  });
-
-  test('does not fire without rounds', () => {
-    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol', weaponRounds: 0 };
     const projectiles = [];
     firePistol(player, projectiles);
     expect(projectiles.length).toBe(0);
@@ -477,5 +511,39 @@ describe('updateProjectiles', () => {
     updateProjectiles(projectiles, MAZE_OPEN, [], []);
     expect(projectiles[0].x).toBeGreaterThan(3.5);
     expect(projectiles[1].x).toBeLessThan(3.5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// assignWeaponOnRespawn
+// ---------------------------------------------------------------------------
+
+describe('assignWeaponOnRespawn', () => {
+  test('pistol persists across respawn (infinite rounds)', () => {
+    const player = { weapon: 'pistol', weaponRounds: 6 };
+    assignWeaponOnRespawn(player);
+    expect(player.weapon).toBe('pistol');
+    expect(player.weaponRounds).toBe(6);
+  });
+
+  test('player without a weapon gets an explosive on respawn', () => {
+    const player = { weapon: null, weaponRounds: 0 };
+    assignWeaponOnRespawn(player);
+    expect(player.weapon).toBe('explosive');
+  });
+
+  test('player who had an explosive gets a fresh one on respawn', () => {
+    // Explosive is single-use per life, like dash — fresh on every respawn.
+    const player = { weapon: 'explosive' };
+    assignWeaponOnRespawn(player);
+    expect(player.weapon).toBe('explosive');
+  });
+
+  test('player with weaponRounds=0 but pistol type keeps the pistol', () => {
+    // Infinite rounds means weaponRounds never depletes, but even if it did,
+    // the pistol type persists.
+    const player = { weapon: 'pistol', weaponRounds: 0 };
+    assignWeaponOnRespawn(player);
+    expect(player.weapon).toBe('pistol');
   });
 });

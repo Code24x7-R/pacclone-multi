@@ -50,6 +50,13 @@ tests/                 # Jest test suites
 - Lobby players can watch an in-progress match (`spectateGame`); `lobbyState` reports match type + participants via `inProgressMatch`.
 - Lobby chat (`chat` / `getChatHistory`) persists in a rolling in-memory history (capped at 100) and is broadcast to all clients.
 
+### Weapons
+- When all pellets + power pellets are eaten, weapons spawn on random walkable tiles (50/50 pistol/explosive, 3s cooldown, max 2 on board).
+- **Pistol**: shared — picking it up arms all living players; fires yellow projectile (Space) that damages ghosts/players in its path; **infinite rounds** (never depletes). Persists across respawns; lost only when eliminated or level ends.
+- **Explosive**: single-user; detonation (Space) damages players/ghosts within `EXPLOSIVE_BLAST_RADIUS` and clears pellets within `EXPLOSIVE_PELLET_RADIUS`. **Single-use per life** — like phase-dash, a fresh one is granted on each respawn (if the player has no pistol).
+- **Rendering** (Canvas 2D): pistol = gray gun shape with grip lines and highlight; explosive = red dynamite stick with gold warning band, curved fuse, and spark. Both cast a grounding shadow on their tile.
+- HUD indicators show "PISTOL [Space]" or "EXPLOSIVE [Space]" near the bottom of the canvas.
+
 ---
 
 ## Client Architecture (`index.html`)
@@ -72,7 +79,7 @@ tests/                 # Jest test suites
 | C → S | `joinLobby` | `{ name, token? }` |
 | C → S | `input` | `{ direction }` |
 | C → S | `startGame` | `{}` |
-| S → C | `gameState` | `{ maze, players, ghosts, pellets, powerPellets }` |
+| S → C | `gameState` | `{ maze, players, ghosts, pellets, powerPellets, level, weapons, projectiles }` |
 | S → C | `spectatorMode` | `{ message, voluntary? }` |
 | C → S | `startSinglePlayer` | `{}` |
 | C → S | `leaveGame` | `{}` |

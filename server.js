@@ -20,7 +20,7 @@ try {
 
 // Generate a stable, unique player token (used as the player's persistent
 // identity across reconnects). 128-bit uuid — collision risk is negligible.
-const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, executePhaseDash, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod, isWall, extractPellets, PELLET_SCORE, POWER_PELLET_SCORE, PLAYER_EAT_SCORE, WEAPON_TYPES, WEAPON_SPAWN_COOLDOWN_TICKS, MAX_WEAPONS_ON_BOARD, EXPLOSIVE_SCORE_PELLET, shouldSpawnWeapons, spawnWeapon, checkWeaponPickup, firePistol, detonateExplosive, updateProjectiles, AFK_TIMEOUT_MS, AFK_CHECK_INTERVAL_MS, findAfkPlayerIndices } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, executePhaseDash, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod, isWall, extractPellets, PELLET_SCORE, POWER_PELLET_SCORE, PLAYER_EAT_SCORE, WEAPON_TYPES, WEAPON_SPAWN_COOLDOWN_TICKS, MAX_WEAPONS_ON_BOARD, EXPLOSIVE_SCORE_PELLET, shouldSpawnWeapons, spawnWeapon, checkWeaponPickup, firePistol, detonateExplosive, updateProjectiles, assignWeaponOnRespawn, AFK_TIMEOUT_MS, AFK_CHECK_INTERVAL_MS, findAfkPlayerIndices } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -549,9 +549,9 @@ function gameLoop() {
                         otherPlayer.dashAvailable = true;
                         otherPlayer.dashing = false;
                         otherPlayer.dashActiveTicks = 0;
-                        // Reset weapon on respawn (pistol rounds are per-life).
-                        otherPlayer.weapon = null;
-                        otherPlayer.weaponRounds = 0;
+                        // Weapon lifetime rules: pistol persists (infinite rounds);
+                        // explosive is single-use per life (like dash) — fresh on respawn.
+                        assignWeaponOnRespawn(otherPlayer);
                     }
                 } else if (!player.poweredUp && otherPlayer.poweredUp) {
                     // Other player is powered up and eats current player (handled by otherPlayer's loop iteration)
@@ -608,7 +608,9 @@ function gameLoop() {
             hitPlayer.dashAvailable = true;
             hitPlayer.dashing = false;
             hitPlayer.dashActiveTicks = 0;
-            hitPlayer.weapon = null; // Lose weapon on death
+            // Weapon lifetime rules: pistol persists (infinite rounds);
+            // explosive is single-use per life (like dash) — fresh on respawn.
+            assignWeaponOnRespawn(hitPlayer);
         }
     }
 
@@ -722,6 +724,9 @@ function gameLoop() {
                 const snapped = snapToTileCenter(ghost);
                 ghost.x = snapped.x;
                 ghost.y = snapped.y;
+                // Remember the blocked direction so chooseDirection can avoid
+                // picking it again (prevents wall-snap oscillation).
+                ghost.lastBlockedDirection = ghost.direction;
             } else {
                 ghost.x = nextX;
                 ghost.y = nextY;
@@ -810,6 +815,9 @@ function gameLoop() {
                         player.dashAvailable = true;
                         player.dashing = false;
                         player.dashActiveTicks = 0;
+                        // Weapon lifetime rules: pistol persists (infinite rounds);
+                        // explosive is single-use per life (like dash) — fresh on respawn.
+                        assignWeaponOnRespawn(player);
                     }
                 }
             }
@@ -1128,7 +1136,9 @@ wss.on('connection', (ws) => {
                                     hitPlayer.y = pos.y;
                                     hitPlayer.poweredUp = false;
                                     hitPlayer.dashAvailable = true;
-                                    hitPlayer.weapon = null;
+                                    // Weapon lifetime rules: pistol persists (infinite rounds);
+                                    // explosive is single-use per life (like dash) — fresh on respawn.
+                                    assignWeaponOnRespawn(hitPlayer);
                                 }
                             }
                             // Apply explosive damage to ghosts

@@ -623,7 +623,10 @@ function spawnWeapon(maze, existingWeapons, player) {
 
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
-      if (maze[y][x] === 1) continue; // Wall
+      const tile = maze[y][x];
+      // Only spawn on pellet paths and power pellet tiles — not walls (1),
+      // ghost house interior (4), gates (6), or other non-path tiles.
+      if (tile !== 0 && tile !== 2 && tile !== 3) continue;
       // Avoid existing weapons
       if (existingWeapons.some(w => w.x === x && w.y === y)) continue;
       // Avoid player position (single-player)
@@ -684,7 +687,8 @@ function checkWeaponPickup(player, players, weapons) {
  */
 function firePistol(player, projectiles) {
   if (!player.direction || player.weapon !== WEAPON_TYPES.PISTOL) return;
-  if (player.weaponRounds <= 0) return; // No rounds left
+  // Pistol has infinite rounds — available until the player is eliminated
+  // (last man standing) or the level ends. Never consumed.
 
   projectiles.push({
     x: player.x,
@@ -695,11 +699,23 @@ function firePistol(player, projectiles) {
     distanceTraveled: 0,
     ownerId: player.id,
   });
+}
 
-  player.weaponRounds--; // Consume one round
-  if (player.weaponRounds <= 0) {
-    player.weapon = null; // Out of rounds — weapon is gone
+/**
+ * Assign a weapon to a player on respawn, matching the lifetime rules:
+ * - Pistol persists across respawns (infinite rounds, kept until the player
+ *   is eliminated or the level ends).
+ * - Explosive is single-use per life, like dash: a fresh one is granted on
+ *   respawn only if the player has no pistol.
+ * @param {Object} player - Player object { weapon }.
+ */
+function assignWeaponOnRespawn(player) {
+  if (player.weapon === WEAPON_TYPES.PISTOL) {
+    // Keep the pistol (infinite rounds — no reset needed).
+    return;
   }
+  // No pistol: grant a single explosive for this life (mirrors dash).
+  player.weapon = WEAPON_TYPES.EXPLOSIVE;
 }
 
 /**
@@ -991,6 +1007,7 @@ module.exports = {
   firePistol,
   detonateExplosive,
   updateProjectiles,
+  assignWeaponOnRespawn,
   // Lobby exports
   COUNTDOWN_DURATION_MS,
   RECONNECT_GRACE_MS,

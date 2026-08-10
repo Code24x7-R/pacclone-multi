@@ -93,6 +93,11 @@ describe("createGhost", () => {
     expect(g1.idleTimer).toBeGreaterThanOrEqual(0);
     expect(g2.idleTimer).toBeGreaterThanOrEqual(0);
   });
+
+  test("ghosts initialize lastBlockedDirection to null", () => {
+    const blinky = createGhost("blinky", HOUSE_CONFIG);
+    expect(blinky.lastBlockedDirection).toBeNull();
+  });
 });
 
 describe("createInitialGhosts", () => {
@@ -461,6 +466,50 @@ describe("chooseDirection", () => {
     const target = { tileX: 4, tileY: 4 }; // Far to the right
     const dir = chooseDirection(ghost, target, maze, 5, 5);
     // Frightened ghost should reverse to left to maximize distance from target
+    expect(dir).toBe("left");
+  });
+
+  test("excludes lastBlockedDirection to prevent wall-snap oscillation", () => {
+    // Ghost at (2,1) with right=(3,1)=wall, left=(1,1)=open, up/down=wall.
+    // Ghost moving right just hit a wall — lastBlockedDirection = 'right'.
+    // chooseDirection should exclude 'right' and pick 'left'.
+    const deadEndMaze = [
+      [1, 1, 1, 1, 1],
+      [1, 0, 0, 1, 1],
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = {
+      x: 2.5, y: 1.5, direction: "right", state: "chase",
+      lastBlockedDirection: "right",
+    };
+    const target = { tileX: 4, tileY: 4 }; // Far to the right
+    const dir = chooseDirection(ghost, target, deadEndMaze, 5, 5);
+    // 'right' is blocked (wall + lastBlockedDirection), must go 'left'
+    expect(dir).toBe("left");
+    // lastBlockedDirection should be cleared after a successful choice
+    expect(ghost.lastBlockedDirection).toBeNull();
+  });
+
+  test("frightened ghost also excludes lastBlockedDirection", () => {
+    // Ghost at (2,1) with right=(3,1)=wall, left=(1,1)=open.
+    // Frightened ghost moving right just hit a wall.
+    // Even though frightened ghosts can U-turn, lastBlockedDirection still applies.
+    const maze = [
+      [1, 1, 1, 1, 1],
+      [1, 0, 0, 1, 1],
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = {
+      x: 2.5, y: 1.5, direction: "right", state: "frightened",
+      lastBlockedDirection: "right",
+    };
+    const target = { tileX: 4, tileY: 4 };
+    const dir = chooseDirection(ghost, target, maze, 5, 5);
+    // 'right' is blocked, must go 'left'
     expect(dir).toBe("left");
   });
 });

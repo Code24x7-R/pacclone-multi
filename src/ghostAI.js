@@ -139,6 +139,7 @@ function createGhost(personality, houseConfig) {
     idleTimer: Math.random() * 1000,
     reReleaseTimer: 0,
     stuckTicks: 0, // ticks since last position change; used by isGhostStuck timeout
+    lastBlockedDirection: null, // direction that just hit a wall (excluded from next choice)
   };
 }
 
@@ -592,14 +593,19 @@ function chooseDirection(ghost, target, maze, mazeWidth, mazeHeight) {
   // other option. Frightened ghosts can turn freely — filtering reverse
   // here can leave them stuck when the only open path is back the way
   // they came.
+  // Also filter out the direction that just led to a wall (if any) so the
+  // ghost doesn't oscillate: choose wall → snap back → choose same wall.
+  const excluded = ghost.lastBlockedDirection;
   const noReverse = ghost.state === "frightened"
-    ? walkable
-    : walkable.filter((d) => OPPOSITE[d] !== ghost.direction);
+    ? walkable.filter((d) => d !== excluded)
+    : walkable.filter((d) => OPPOSITE[d] !== ghost.direction && d !== excluded);
   const candidates = noReverse.length > 0 ? noReverse : walkable;
 
   if (candidates.length === 0) {
     // Stuck: allow reverse
     const reverse = OPPOSITE[ghost.direction];
+    // Clear the blocked direction so we don't keep trying the same failed direction.
+    ghost.lastBlockedDirection = null;
     return reverse || ghost.direction || "left";
   }
 
@@ -626,6 +632,10 @@ function chooseDirection(ghost, target, maze, mazeWidth, mazeHeight) {
       }
     }
   }
+
+  // Clear the blocked direction now that a new choice has been made.
+  // It will be re-set on the next wall collision (in server.js).
+  ghost.lastBlockedDirection = null;
 
   return bestDir;
 }

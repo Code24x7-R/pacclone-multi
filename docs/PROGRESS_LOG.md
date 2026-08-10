@@ -30,6 +30,24 @@
 - 1 new integration test (`tests/integration/afk.test.js`): remaining players receive the notice naming the kicked player. Updated existing `kicked` client test to also dispatch `kickNotice`. 421 total pass.
 - Files changed: `server.js` (`broadcastKickNotice`, `checkAfkPlayers` collects names before splice), `index.html` (`kickNotice` handler, `appendSystemMessage`, `.chat-msg.system` CSS, removed local banner kick display), `docs/Architecture.md` (protocol table).
 
+### [FEATURE] Weapon lifetime rules — infinite pistol, per-life explosive
+- Symptom: pistol rounds depleted and were lost on death; explosive behavior was inconsistent with other per-life abilities.
+- Fix: pistol now has infinite rounds (never depletes, persists across respawns). Explosive is single-use per life — like phase-dash, it resets on every respawn. A new pure helper `assignWeaponOnRespawn(player)` in `src/gameLogic.js` keeps a player's pistol if they have one, otherwise grants a fresh explosive. All four respawn points in `server.js` now call this helper instead of clearing `weapon`/`weaponRounds`. The client HUD no longer shows a round count for the pistol.
+- 4 new tests in `tests/server/weapons.test.js` for `assignWeaponOnRespawn` + 2 updated pistol tests (infinite ammo). Removed 2 obsolete tests (round consumption, weapon-gone-at-zero). 424 total pass.
+- Files changed: `src/gameLogic.js` (`firePistol` no longer consumes rounds, new `assignWeaponOnRespawn`), `server.js` (4 respawn points call helper), `index.html` (HUD text simplified), `tests/server/weapons.test.js`.
+
+### [BUGFIX] Weapons no longer spawn outside the maze (ghost house / gates)
+- Symptom: weapons could spawn on EMPTY (4) tiles — ghost house interior and tunnel areas — appearing outside the playable maze corridors.
+- Fix: `spawnWeapon()` now only considers pellet paths (0) and power pellets (2, 3) as valid spawn tiles. All other tile types (walls, ghost house interior, gates) are skipped.
+- 2 new tests: weapons avoid non-path tiles across 50 iterations; returns null when only non-path tiles exist. 426 total pass.
+- Files changed: `src/gameLogic.js` (`spawnWeapon` tile filter), `tests/server/weapons.test.js`.
+
+### [BUGFIX] Ghost wall-snap oscillation — ghosts no longer stick to walls
+- Symptom: ghosts repeatedly got stuck at tile centers next to walls (e.g. "Ghost Blinky is stuck at (17.46, 1.50)"). When a ghost chose a direction leading to a wall, it moved into the wall, snapped back to center, but kept the same direction — so it chose the same wall-bound direction again, oscillating until the stuck-timeout rescue fired after ~3 seconds.
+- Fix: Added a `lastBlockedDirection` field to each ghost, set in `server.js` when a wall collision occurs. `chooseDirection()` in `src/ghostAI.js` now excludes this direction from candidates, forcing the pick of a new direction that actually makes progress. The field is cleared after every successful direction choice.
+- 3 new tests: `lastBlockedDirection` excluded from choice (chase + frightened), `createGhost` initializes it to null. 429 total pass.
+- Files changed: `src/ghostAI.js` (`chooseDirection` excludes blocked dir, `lastBlockedDirection` field), `server.js` (set blocked dir on wall collision), `tests/server/ghostAI.test.js`.
+
 ### [FEATURE] AFK auto-removal — server resets idle players autonomously
 - Symptom: the server required hand-holding. An AFK host blocked the lobby (nobody else could start), and an AFK player in a match prevented the game from ever ending. No mechanism existed to evict idle users.
 - Fix: every lobby player and in-game player now carries a `lastActivity` timestamp, refreshed on meaningful client messages (`input`, `chat`, `toggleReady`) via a shared `touchActivity(ws)` helper. A periodic sweep (`setInterval`, every `AFK_CHECK_INTERVAL_MS` ≈ 30 s) calls a pure `findAfkPlayerIndices()` helper to locate players idle longer than `AFK_TIMEOUT_MS` (≈ 2 min) and splices them out. In the lobby, removal auto-migrates the host role to `lobbyPlayers[0]` (the client already derives host from the first slot) and cancels any running countdown; a `kicked` (S→C) message tells the evicted client to reset to the fresh join screen. In a match, removal thins the roster and ends the game if fewer than 2 players remain. A client-side `handleKicked()` resets identity/participation flags, shows the lobby-join form, surfaces the kick reason on the in-game banner, and disables chat until the player rejoins. Both timeouts are configurable via `AFK_TIMEOUT_MS` / `AFK_CHECK_INTERVAL_MS` env vars so tests can run on a fast cycle. The sweep interval is unref'd so it doesn't block process exit in tests.
@@ -59,8 +77,6 @@
 - 5 new regression tests in `tests/server/level2Stuck.test.js`.
 
 ### [FEATURE] Weapon powerups — pistol + explosive (PvP resolution)
-
-### [FEATURE] Weapon powerups — pistol + explosive (PvP resolution)
 - Symptom: PvP deadlock when powerups exhausted — players can't eliminate each other.
 - Solution: New weapon powerups that spawn when all power pellets are eaten.
 - Pistol: Single-shot projectile (speed 0.25 tiles/tick, range 8 tiles). Hits first player/ghost in path. Consumed on fire.
@@ -71,6 +87,12 @@
 - Works in single-player (vs ghosts) and multiplayer (vs players + ghosts).
 - 41 new unit tests in `tests/server/weapons.test.js`.
 - Files changed: `src/gameLogic.js` (weapon constants + 7 functions), `src/audio.js` (3 new sounds), `server.js` (integration), `index.html` (rendering + input).
+
+### [FEATURE] Weapon rendering — clearer pistol + explosive icons
+- Symptom: pistol icon was too small to read; explosive was just a red circle with a stripe — neither looked like a recognizable weapon.
+- Fix: Redrew both pickup icons in Canvas 2D. Pistol now a larger gun shape (barrel + tip + handle with grip lines + trigger guard + highlight). Explosive now a red dynamite stick with gold warning band, curved fuse, and glowing spark. Both cast a grounding shadow on their tile so they read as placed objects.
+- Updated `docs/Architecture.md` with a Weapons subsection (spawning, behavior, rendering) and corrected the `gameState` protocol payload to include `weapons`, `projectiles`, and `level`.
+- Files changed: `index.html` (rendering), `docs/Architecture.md`.
 
 ### [BUGFIX] Player gets stuck at level 2 start — dead-end starting position (B-009)
 - Symptom: Player clears level 1, level 2 starts, eats about 5 pellets, then gets stuck.
