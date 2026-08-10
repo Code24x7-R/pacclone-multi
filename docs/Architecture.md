@@ -82,4 +82,5 @@ tests/                 # Jest test suites
 | C → S | `getChatHistory` | `{}` |
 | S → C | `chatMessage` | `{ message: { name, id, text, ts } }` |
 | S → C | `chatHistory` | `{ messages: [{ name, id, text, ts }] }` |
+| S → C | `kicked` | `{ message }` |  
 | S → C | `error` | `{ message }` |

@@ -97,6 +97,12 @@ const COUNTDOWN_DURATION_MS = 3000;
 // is restored instead of removed.
 const RECONNECT_GRACE_MS = 15000;
 
+// AFK detection: players who send no meaningful message within this window are
+// considered idle and removed from the lobby / match so the server can run
+// autonomously. Both are overridable via env vars for testing / tuning.
+const AFK_TIMEOUT_MS = parseInt(process.env.AFK_TIMEOUT_MS, 10) || 120000; // 2 min
+const AFK_CHECK_INTERVAL_MS = parseInt(process.env.AFK_CHECK_INTERVAL_MS, 10) || 30000; // 30 s
+
 // Starting positions for up to 4 players (corners of the maze)
 const STARTING_POSITIONS = [
   { x: 1.5, y: 1.5 },
@@ -912,6 +918,27 @@ function isWithinGracePeriod(disconnectedAt, now) {
   return now - disconnectedAt < RECONNECT_GRACE_MS;
 }
 
+/**
+ * Find the indices of AFK players — those whose lastActivity is older than the
+ * timeout. Pure function: takes the player array, a "now" timestamp and a
+ * timeout, returns indices so the caller can splice without surprises.
+ * @param {Array} players - player objects with optional lastActivity (ms)
+ * @param {number} now - current time (ms). Defaults to Date.now().
+ * @param {number} timeoutMs - inactivity threshold (ms). Defaults to AFK_TIMEOUT_MS.
+ * @returns {number[]} indices of AFK players (ascending order)
+ */
+function findAfkPlayerIndices(players, now = Date.now(), timeoutMs = AFK_TIMEOUT_MS) {
+  const indices = [];
+  for (let i = 0; i < players.length; i++) {
+    const lp = players[i];
+    // A player with no lastActivity is treated as fresh (just joined / unknown).
+    if (lp.lastActivity && now - lp.lastActivity > timeoutMs) {
+      indices.push(i);
+    }
+  }
+  return indices;
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -969,4 +996,8 @@ module.exports = {
   togglePlayerReady,
   getCountdownTick,
   isWithinGracePeriod,
+  // AFK detection exports
+  AFK_TIMEOUT_MS,
+  AFK_CHECK_INTERVAL_MS,
+  findAfkPlayerIndices,
 };

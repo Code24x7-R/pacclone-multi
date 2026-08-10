@@ -78,6 +78,7 @@ describe('Lobby protocol (features A–E)', () => {
         <input id="chatInput" class="chat-input" disabled />
         <button id="chatSendBtn" class="btn chat-send" disabled>Send</button>
       </div>
+      <div id="inGameBanner" class="in-game-banner" style="display:none"></div>
       <canvas id="gameCanvas" width="800" height="520"></canvas>
       <button id="leaveButton" style="display:none">Leave</button>
       <button id="muteButton">Mute</button>
@@ -360,5 +361,40 @@ describe('Lobby protocol (features A–E)', () => {
     expect(chatMsg).toBeDefined();
     expect(chatMsg.text).toBe('hello everyone');
     expect(chatInput.value).toBe('');
+  });
+
+  test('a kicked message resets the client to the fresh join state', async () => {
+    loadClient();
+    const ws = await openConnection();
+    ws.dispatch({ type: 'welcome', message: 'hi', clientId: 1 });
+    ws.dispatch({ type: 'lobbyJoined', token: 'tok-me' });
+    ws.dispatch({
+      type: 'lobbyState',
+      lobbyPlayers: [{ id: 'tok-me', name: 'Me', token: 'tok-me', ready: false }],
+      currentGameState: 'LOBBY',
+      countdown: null,
+    });
+
+    // Sanity: joined state shows the ready button, hides join button.
+    const joinBtn = document.getElementById('joinLobbyButton');
+    const readyBtn = document.getElementById('readyButton');
+    expect(joinBtn.style.display).toBe('none');
+    expect(readyBtn.style.display).not.toBe('none');
+
+    // Server kicks us (AFK).
+    ws.dispatch({ type: 'kicked', message: 'You were removed for inactivity.' });
+
+    // Join state reset: join button visible again, name input enabled.
+    expect(joinBtn.style.display).toBe('inline-block');
+    expect(readyBtn.style.display).toBe('none');
+    const nameInput = document.getElementById('playerNameInput');
+    expect(nameInput.disabled).toBe(false);
+    // Chat disabled again (no longer in lobby).
+    expect(document.getElementById('chatInput').disabled).toBe(true);
+    expect(document.getElementById('chatSendBtn').disabled).toBe(true);
+    // Banner displays the kick reason.
+    const banner = document.getElementById('inGameBanner');
+    expect(banner.style.display).toBe('block');
+    expect(banner.textContent).toBe('You were removed for inactivity.');
   });
 });

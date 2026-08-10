@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 // Generate a stable, unique player token (used as the player's persistent
 // identity across reconnects). 128-bit uuid — collision risk is negligible.
-const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, executePhaseDash, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod, isWall, extractPellets, PELLET_SCORE, POWER_PELLET_SCORE, PLAYER_EAT_SCORE, WEAPON_TYPES, WEAPON_SPAWN_COOLDOWN_TICKS, MAX_WEAPONS_ON_BOARD, EXPLOSIVE_SCORE_PELLET, shouldSpawnWeapons, spawnWeapon, checkWeaponPickup, firePistol, detonateExplosive, updateProjectiles } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, executePhaseDash, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod, isWall, extractPellets, PELLET_SCORE, POWER_PELLET_SCORE, PLAYER_EAT_SCORE, WEAPON_TYPES, WEAPON_SPAWN_COOLDOWN_TICKS, MAX_WEAPONS_ON_BOARD, EXPLOSIVE_SCORE_PELLET, shouldSpawnWeapons, spawnWeapon, checkWeaponPickup, firePistol, detonateExplosive, updateProjectiles, AFK_TIMEOUT_MS, AFK_CHECK_INTERVAL_MS, findAfkPlayerIndices } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -159,6 +159,24 @@ function cancelPendingLobbyReset() {
     }
 }
 
+// --- AFK activity tracking ---
+// Every meaningful client message (input, chat, ready toggle) should call
+// touchActivity so the player's lastActivity timestamp is refreshed. The
+// periodic checkAfkPlayers sweep (below) removes anyone who has gone quiet.
+function touchActivity(ws) {
+    const now = Date.now();
+    // Refresh the lobby player slot.
+    if (ws.lobbyPlayerId) {
+        const lp = lobbyPlayers.find(p => p.id === ws.lobbyPlayerId);
+        if (lp) lp.lastActivity = now;
+    }
+    // Refresh the in-game player slot.
+    if (ws.playerId) {
+        const p = players.find(pl => pl.id === ws.playerId);
+        if (p) p.lastActivity = now;
+    }
+}
+
 // Countdown state: when set, holds the timestamps (ms) of the remaining
 // countdown ticks so they can be cancelled if a player un-readies / leaves.
 let countdownTimers = [];
@@ -231,6 +249,8 @@ function startGame() {
         // Weapon state: null = unarmed, 'pistol' | 'explosive' = armed
         weapon: null, // picked up from weapon drops
         weaponRounds: 0, // remaining rounds (pistol only)
+        // AFK tracking: last time this player sent an input message.
+        lastActivity: Date.now(),
     }));
     lobbyPlayers = []; // Clear lobby after starting game
 
@@ -311,6 +331,8 @@ function startSinglePlayer(ws) {
         dashActiveTicks: 0,
         weapon: null,
         weaponRounds: 0,
+        // AFK tracking: last time this player sent an input message.
+        lastActivity: Date.now(),
     }];
 
     // Link the requesting client to their player slot and tell them their ID.
@@ -368,6 +390,12 @@ function cancelCountdown() {
 // Game Loop
 const GAME_LOOP_INTERVAL = 1000 / 60; // 60 FPS
 let gameInterval = null;
+
+// AFK check interval — always running so idle players are swept even when
+// no match is in progress. Keeps the server autonomous. Unref'd so it does
+// not keep the Node process alive after tests tear down the server.
+const afkCheckInterval = setInterval(checkAfkPlayers, AFK_CHECK_INTERVAL_MS);
+afkCheckInterval.unref();
 
 function gameLoop() {
     if (currentGameState !== GAME_STATES.IN_PROGRESS) { // Only run game logic if IN_PROGRESS
@@ -855,6 +883,10 @@ function endMatch(winner) {
             // reconnecting clients will recognize their slot. Everyone starts
             // not-ready so the group must ready up again.
             lobbyPlayers = rebuildLobbyFromMatch(matchPlayers, winnerId);
+            // Stamp fresh activity on the rebuilt lobby players so they aren't
+            // swept as AFK immediately on the next check.
+            const rebuiltAt = Date.now();
+            for (const lp of lobbyPlayers) lp.lastActivity = rebuiltAt;
         }
         // Reset single-player state for the next match.
         isSinglePlayerMatch = false;
@@ -1004,6 +1036,7 @@ wss.on('connection', (ws) => {
                 const existing = lobbyPlayers.find(lp => lp.id === matchToken);
                 if (existing) {
                     existing.name = data.name || existing.name;
+                    existing.lastActivity = Date.now(); // activity: reconnect
                     ws.lobbyPlayerId = existing.id;
                     ws.playerToken = existing.id;
                     ws.playerName = existing.name;
@@ -1015,7 +1048,7 @@ wss.on('connection', (ws) => {
 
             // --- Brand-new lobby join: mint a stable token that persists across reconnects ---
             const token = crypto.randomUUID();
-            const newLobbyPlayer = { id: token, name: data.name || `Player ${token.slice(-4)}`, token, ready: false };
+            const newLobbyPlayer = { id: token, name: data.name || `Player ${token.slice(-4)}`, token, ready: false, lastActivity: Date.now() };
             lobbyPlayers.push(newLobbyPlayer);
             ws.lobbyPlayerId = token;
             ws.playerToken = token;
@@ -1028,6 +1061,7 @@ wss.on('connection', (ws) => {
             // Toggle this player's ready flag. Identified by stable token so a
             // reconnecting client can still toggle after a dropped connection.
             if (currentGameState !== GAME_STATES.LOBBY || !ws.playerToken) return;
+            touchActivity(ws); // activity: ready toggle
             lobbyPlayers = togglePlayerReady(lobbyPlayers, ws.playerToken);
             // If a player un-readies during a countdown, cancel it.
             if (!areAllReady(lobbyPlayers)) cancelCountdown();
@@ -1035,6 +1069,7 @@ wss.on('connection', (ws) => {
         } else if (data.type === 'input' && currentGameState === GAME_STATES.IN_PROGRESS) {
             const player = players.find(p => p.id === ws.playerId);
             if (player) {
+                touchActivity(ws); // activity: movement / dash / fire
                 // Only update direction when one is provided. A dash-only input
                 // (direction === undefined/null) must not clear the current direction.
                 if (data.direction) {
@@ -1122,6 +1157,7 @@ wss.on('connection', (ws) => {
         } else if (data.type === 'spectateGame') {
             handleSpectateGame(ws);
         } else if (data.type === 'chat') {
+            touchActivity(ws); // activity: chat message
             handleChat(ws, data);
         } else if (data.type === 'getChatHistory') {
             ws.send(JSON.stringify({ type: 'chatHistory', messages: chatHistory }));
@@ -1200,6 +1236,66 @@ wss.on('connection', (ws) => {
     });
 });
 
+// --- AFK sweep: runs on AFK_CHECK_INTERVAL_MS and removes idle players. ---
+// This keeps the server autonomous: an AFK host won't block the lobby forever,
+// and an AFK player in a match won't prevent the game from ending.
+function checkAfkPlayers() {
+    const now = Date.now();
+
+    // Lobby AFK sweep (also covers COUNTDOWN — lobbyPlayers still populated).
+    if (currentGameState === GAME_STATES.LOBBY || currentGameState === GAME_STATES.COUNTDOWN) {
+        const afkIndices = findAfkPlayerIndices(lobbyPlayers, now, AFK_TIMEOUT_MS);
+        if (afkIndices.length > 0) {
+            // Splice in reverse so earlier indices stay valid.
+            for (let i = afkIndices.length - 1; i >= 0; i--) {
+                const idx = afkIndices[i];
+                const removed = lobbyPlayers[idx];
+                console.log(`[SERVER] Removing AFK lobby player: ${removed.name} (idle ${Math.round((now - removed.lastActivity) / 1000)}s)`);
+                // Notify the kicked client so its UI can reset.
+                notifyAfkKick(removed.id);
+                lobbyPlayers.splice(idx, 1);
+            }
+            // Removing a player can change host / ready state — cancel countdown
+            // if not everyone is still ready, then broadcast the new lobby.
+            if (!areAllReady(lobbyPlayers)) cancelCountdown();
+            broadcastLobbyState();
+        }
+    }
+
+    // In-game AFK sweep.
+    if (currentGameState === GAME_STATES.IN_PROGRESS) {
+        const afkIndices = findAfkPlayerIndices(players, now, AFK_TIMEOUT_MS);
+        if (afkIndices.length > 0) {
+            for (let i = afkIndices.length - 1; i >= 0; i--) {
+                const idx = afkIndices[i];
+                const removed = players[idx];
+                console.log(`[SERVER] Removing AFK player from match: ${removed.name || removed.id} (idle ${Math.round((now - removed.lastActivity) / 1000)}s)`);
+                notifyAfkKick(removed.id);
+                players.splice(idx, 1);
+            }
+            // If the match has thinned out too far, end it.
+            if (players.length < 2) {
+                endMatch(players[0] || null);
+            } else {
+                broadcastGameState();
+            }
+        }
+    }
+}
+
+// Notify a kicked player's connection (if still open) so the client UI resets.
+// The client hears `kicked` and returns to the lobby-join screen.
+function notifyAfkKick(playerId) {
+    for (const client of wss.clients) {
+        if (client.readyState === WebSocket.OPEN && (client.lobbyPlayerId === playerId || client.playerId === playerId)) {
+            client.send(JSON.stringify({ type: 'kicked', message: 'You were removed for inactivity.' }));
+            // Clear associations so the client rejoins fresh.
+            client.lobbyPlayerId = null;
+            client.playerId = null;
+        }
+    }
+}
+
 function handleLeaveGame(ws) {
     // Remove from players[] if active, capturing the name first so we can
     // show it in the lobby after they leave.
@@ -1231,7 +1327,7 @@ function handleLeaveGame(ws) {
     const token = ws.playerToken || crypto.randomUUID();
     ws.playerToken = token;
     if (!lobbyPlayers.find(lp => lp.id === token)) {
-        lobbyPlayers.push({ id: token, name: name, ready: false });
+        lobbyPlayers.push({ id: token, name: name, ready: false, lastActivity: Date.now() });
         ws.lobbyPlayerId = token;
     }
 

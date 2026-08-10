@@ -903,6 +903,52 @@
             }
         }
 
+        // Handle a `kicked` message from the server (e.g. AFK removal). Reset
+        // all identity and game state and return to the fresh lobby-join screen
+        // so the player can rejoin with their stored name.
+        function handleKicked(reason) {
+            // Stop the game render loop if it was running.
+            renderLoopStarted = false;
+            // Clear all identity and participation flags.
+            isSpectating = false;
+            amInGame = false;
+            myPlayerId = null;
+            isReady = false;
+            isSinglePlayer = false;
+            // If we were in a match, switch the view back to the lobby.
+            if (canvas) canvas.style.display = 'none';
+            if (lobbyDiv) lobbyDiv.style.display = 'flex';
+            setLeaveButtonVisible(false);
+            clientGameState = 'LOBBY';
+            renderCountdown(null, 'LOBBY');
+            // Reset lobby-dependent UI.
+            const playersList = document.getElementById('playersList');
+            if (playersList) playersList.innerHTML = '';
+            const highScoresList = document.getElementById('highScoresList');
+            renderHighScores(highScoresList);
+            const hostStatusEl = document.getElementById('hostStatus');
+            if (hostStatusEl) {
+                hostStatusEl.textContent = 'Waiting for players to join…';
+                hostStatusEl.style.color = '#aaa';
+            }
+            // Not in the lobby anymore — show the join form.
+            hasJoinedLobby = false;
+            renderJoinState();
+            // Surface the reason to the player.
+            const banner = document.getElementById('inGameBanner');
+            if (banner) {
+                banner.textContent = reason || 'You were removed from the lobby.';
+                banner.style.display = 'block';
+                banner.style.background = '#dc2626';
+                setTimeout(() => {
+                    if (banner.textContent === (reason || 'You were removed from the lobby.')) {
+                        banner.style.display = 'none';
+                    }
+                }, 4000);
+            }
+            console.log(`[CLIENT] Kicked: ${reason}`);
+        }
+
         // Send a leave-game request to the server. Works whether we are an
         // active player or a spectator.
         function leaveGame() {
@@ -1526,6 +1572,11 @@
                 case 'chatMessage':
                     // A new message from any lobby player — append if present.
                     if (chatLogEl) appendChatMessage(message.message);
+                    break;
+                case 'kicked':
+                    // Server removed us (AFK or other reason). Reset to a fresh
+                    // join state so we can rejoin the lobby.
+                    handleKicked(message.message);
                     break;
                 case 'error':
                     console.error('[SERVER ERROR]:', message.message);
