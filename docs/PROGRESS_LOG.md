@@ -4,6 +4,28 @@
 
 ## 2026-08-10
 
+### [FEATURE] Lobby chat — persistent messaging for joined players
+- Symptom: no way for players waiting in the lobby to communicate.
+- Fix: a chat panel under the high scores in the right lobby column. Players who have joined the lobby can send messages (Send button or Enter); messages are validated server-side (membership via stable token, trimmed, max 200 chars), appended to a rolling in-memory history (capped at 100), and broadcast as `chatMessage` to all connected clients. On join, the client requests `getChatHistory` and receives the full `chatHistory` log so late joiners see prior messages. Name/text are textContent-set on the client to prevent markup injection. Chat input is disabled until the player joins the lobby.
+- New server messages: `chat` (C→S, `{text}`), `getChatHistory` (C→S, `{}`). New client→server on join: `getChatHistory`. New server→client: `chatMessage` (`{message:{name,id,text,ts}}`), `chatHistory` (`{messages:[...]}`).
+- 4 integration tests in `tests/integration/chat.test.js` (real-time delivery, late-joiner history, non-member blocked, empty ignored) + 2 client tests added to `tests/client/lobbyProtocol.test.js` (history request + render, input enable/disable + send).
+- Files changed: `server.js` (chat state, `handleChat`, `chat`/`getChatHistory` cases), `index.html` (chat panel HTML + CSS, `appendChatMessage`, send handling, `chatMessage`/`chatHistory` cases, history request on join, disabled-until-joined).
+
+### [FEATURE] Lobby spectate — see in-progress matches and watch
+- Symptom: Players in the lobby had no visibility into a running match. `lobbyState` reported `currentGameState: IN_PROGRESS` but carried no detail about the match (single-player vs multiplayer, who was playing), and there was no way to watch — only dead players were promoted to spectators.
+- Fix: `broadcastLobbyState()` now includes an `inProgressMatch` payload (`isSinglePlayer`, `playerCount`, `players: [{id, name}]`) whenever a match is running, and `null` in the LOBBY state. A new `spectateGame` (C→S) message lets any lobby player opt in: the server removes them from the waiting lobby, adds them to `spectators[]`, sends a voluntary `spectatorMode` ack plus an immediate `gameState` snapshot, and the 60 FPS broadcast keeps them in sync. The lobby banner shows match type + participants and a Spectate button; leaving spectating returns the player to the lobby via the existing `leaveGame` path.
+- New server message: `spectateGame` (C→S, `{}`). `spectatorMode` (S→C) now carries a `voluntary` flag so the client skips the "eaten" sound for a chosen spectate.
+- 5 new integration tests in `tests/integration/spectate.test.js`: in-progress single-player report, spectate receives snapshot, null in LOBBY, ongoing stream + leave, rejection when idle.
+- Files changed: `server.js` (`broadcastLobbyState` enrichment, `handleSpectateGame`, `spectateGame` case), `index.html` (banner markup + CSS, banner logic in `lobbyState` handler, `voluntary` flag handling, spectate button handler).
+
+### [BUGFIX] isGhostStuck catchall — movement-timeout for frozen ghosts
+- Symptom: When a player eats a power pellet, some frightened ghosts occasionally freeze in place despite having valid exits. They stay frozen until consumed and never revert from frightened state.
+- Root cause: `isGhostStuck` only checked if all 4 neighbors were walls. A ghost that stopped moving (e.g. due to an AI edge case while frightened) but had open corridors was never detected as stuck.
+- Fix: Added a movement-timeout detection mode to `isGhostStuck`. A new `stuckTicks` counter on each ghost is maintained by the server: incremented when the ghost's position doesn't change between ticks, reset when it does. When `stuckTicks >= STUCK_TICK_THRESHOLD` (180 ticks ≈ 3 seconds at 60 FPS), `isGhostStuck` returns true and the ghost is sent back to the house as if eaten. This is a catchall safety net — the wall-surround check remains the primary detection.
+- New constant: `STUCK_TICK_THRESHOLD = 180` exported from `src/ghostAI.js`.
+- 5 new unit tests in `tests/server/ghostAI.test.js`: timeout triggers despite open neighbors, below-threshold returns false, exact-threshold boundary, missing `stuckTicks` defaults to 0, threshold value verification.
+- Files changed: `src/ghostAI.js` (constant, `stuckTicks` init, `isGhostStuck` timeout check), `server.js` (position-change tracking + reset on rescue).
+
 ### [BUGFIX] Player stuck after level 2 start — isWall used wrong maze (B-010)
 - Symptom: After clearing level 1 and starting level 2, player could only move on tiles where pellets were eaten. Could not move on tiles that still had pellets. Player appeared stuck with pellets on both sides.
 - Root cause: `isWall(nextX, player.y)` was called without the `maze` argument on lines 436-437 of `server.js`. The `isWall` function has a default parameter `maze = MAZE` (the static maze), so on level 2+ (where `currentMaze` is procedurally generated), wall checks used the wrong grid.

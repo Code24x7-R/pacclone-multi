@@ -20,6 +20,7 @@ const {
   GHOST_NORMAL_SPEED,
   GHOST_FRIGHTENED_SPEED,
   GHOST_EATEN_SPEED,
+  STUCK_TICK_THRESHOLD,
 } = require("../../src/ghostAI");
 
 // ---------------------------------------------------------------------------
@@ -511,6 +512,64 @@ describe("isGhostStuck", () => {
     ];
     const ghost = { x: 2.5, y: 2.5, state: "chase" };
     expect(isGhostStuck(ghost, maze, 5, 5)).toBe(false);
+  });
+
+  // --- Movement-timeout stuck detection (catchall for frozen ghosts) ---
+
+  test("returns true when stuckTicks exceeds threshold despite open neighbors", () => {
+    // Open maze — ghost has valid exits but has not moved for too long.
+    // This simulates a frightened ghost that is frozen in place.
+    const maze = [
+      [1, 1, 1, 1, 1],
+      [1, 0, 0, 0, 1],
+      [1, 0, 0, 0, 1], // Ghost at (2,2), all directions open
+      [1, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = { x: 2.5, y: 2.5, state: "frightened", stuckTicks: STUCK_TICK_THRESHOLD };
+    expect(isGhostStuck(ghost, maze, 5, 5)).toBe(true);
+  });
+
+  test("returns false when stuckTicks is below threshold and neighbors are open", () => {
+    const maze = [
+      [1, 1, 1, 1, 1],
+      [1, 0, 0, 0, 1],
+      [1, 0, 0, 0, 1], // Ghost at (2,2)
+      [1, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = { x: 2.5, y: 2.5, state: "frightened", stuckTicks: STUCK_TICK_THRESHOLD - 1 };
+    expect(isGhostStuck(ghost, maze, 5, 5)).toBe(false);
+  });
+
+  test("returns true at exactly the threshold", () => {
+    const maze = [
+      [1, 1, 1, 1, 1],
+      [1, 0, 0, 0, 1],
+      [1, 0, 0, 0, 1], // Ghost at (2,2)
+      [1, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = { x: 2.5, y: 2.5, state: "chase", stuckTicks: STUCK_TICK_THRESHOLD };
+    expect(isGhostStuck(ghost, maze, 5, 5)).toBe(true);
+  });
+
+  test("stuckTicks defaults to 0 when absent", () => {
+    // Ghost without stuckTicks field should not trigger timeout.
+    const maze = [
+      [1, 1, 1, 1, 1],
+      [1, 0, 0, 0, 1],
+      [1, 0, 0, 0, 1], // Ghost at (2,2)
+      [1, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = { x: 2.5, y: 2.5, state: "chase" };
+    expect(isGhostStuck(ghost, maze, 5, 5)).toBe(false);
+  });
+
+  test("threshold is ~3 seconds worth of ticks at 60 FPS", () => {
+    // STUCK_TICK_THRESHOLD should be 180 (60 FPS * 3 seconds).
+    expect(STUCK_TICK_THRESHOLD).toBe(180);
   });
 });
 

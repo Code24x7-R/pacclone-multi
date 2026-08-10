@@ -126,6 +126,11 @@ let currentGameState = GAME_STATES.LOBBY;
 let lobbyPlayers = []; // Array to hold players in the lobby
 const spectators = []; // Array to hold WebSocket connections of players in spectator mode
 
+// Lobby chat history — persists while users are joined (in-memory, per server
+// process). Capped to a rolling window so it can't grow without bound.
+const MAX_CHAT_HISTORY = 100;
+const chatHistory = []; // { name, id, text, ts }
+
 // Single-player mode flag. When true, the match is a solo game: the level
 // does not end with one player remaining (no "last man standing" win), and
 // the player only loses by running out of lives. Set when a client sends
@@ -639,6 +644,11 @@ function gameLoop() {
 
         // Choose direction at tile centers (AI decision point)
         if (ghost.state !== 'inHouse') {
+            // Capture position before movement so we can detect a frozen ghost
+            // (one that fails to change position tick after tick).
+            const prevX = ghost.x;
+            const prevY = ghost.y;
+
             const atCenter = isAtTileCenter(ghost.x, ghost.y, ghostBaseSpeed / 2);
             if (atCenter) {
                 const snapped = snapToTileCenter(ghost);
@@ -680,11 +690,23 @@ function gameLoop() {
             // edge teleports the ghost to the other side (classic Pac-Man tunnel).
             ghost.x = wrapTunnelX(ghost.x, ghost.y, currentMaze);
 
+            // Track how long the ghost has gone without changing position.
+            // A ghost that cannot move (e.g. a frightened ghost frozen despite
+            // having valid exits) will accumulate stuckTicks until the timeout
+            // fires and isGhostStuck returns true, sending it back to the house.
+            if (Math.abs(ghost.x - prevX) < 0.001 && Math.abs(ghost.y - prevY) < 0.001) {
+                ghost.stuckTicks = (ghost.stuckTicks || 0) + 1;
+            } else {
+                ghost.stuckTicks = 0;
+            }
+
             // Stuck-ghost rescue: if the ghost is trapped (all surrounding
-            // tiles are walls), send it back to the house to respawn. This
-            // can happen if maze generation creates a dead end that traps
-            // a ghost. The ghost transitions to eaten state and returns to
-            // the house center, then respawns after the re-release timer.
+            // tiles are walls) OR has not moved for STUCK_TICK_THRESHOLD ticks,
+            // send it back to the house to respawn. The movement-timeout check
+            // catches edge cases like frightened ghosts that stop moving
+            // despite having valid exits. The ghost transitions to eaten state
+            // and returns to the house center, then respawns after the
+            // re-release timer.
             if (ghost.state !== 'inHouse' && ghost.state !== 'exitingHouse') {
                 const stuck = isGhostStuck(ghost, currentMaze, currentMaze[0].length, currentMaze.length);
                 if (stuck) {
@@ -693,6 +715,7 @@ function gameLoop() {
                     ghost.frightened = false;
                     ghost.speed = GHOST_EATEN_SPEED;
                     ghost.state = 'eaten';
+                    ghost.stuckTicks = 0; // reset so it doesn't immediately re-trigger
                 }
             }
         }
@@ -1096,6 +1119,12 @@ wss.on('connection', (ws) => {
             startSinglePlayer(ws);
         } else if (data.type === 'leaveGame') {
             handleLeaveGame(ws);
+        } else if (data.type === 'spectateGame') {
+            handleSpectateGame(ws);
+        } else if (data.type === 'chat') {
+            handleChat(ws, data);
+        } else if (data.type === 'getChatHistory') {
+            ws.send(JSON.stringify({ type: 'chatHistory', messages: chatHistory }));
         }
     });
 
@@ -1227,6 +1256,16 @@ function broadcastLobbyState() {
     if (currentGameState === GAME_STATES.COUNTDOWN && countdownStart > 0) {
         countdown = getCountdownTick(Date.now() - countdownStart);
     }
+    // When a game is in progress, expose its type + participants to the lobby
+    // so waiting players can decide to spectate or wait it out.
+    let inProgressMatch = null;
+    if (currentGameState === GAME_STATES.IN_PROGRESS || currentGameState === GAME_STATES.GAME_OVER) {
+        inProgressMatch = {
+            isSinglePlayer: isSinglePlayerMatch,
+            playerCount: players.length,
+            players: players.map(p => ({ id: p.id, name: p.name })),
+        };
+    }
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({
@@ -1234,9 +1273,57 @@ function broadcastLobbyState() {
                 lobbyPlayers: lobbyPlayers,
                 currentGameState: currentGameState,
                 countdown: countdown,
+                inProgressMatch: inProgressMatch,
             }));
         }
     });
+}
+
+// Handle an incoming chat message from a lobby player. Validates membership,
+// appends to the rolling history, and broadcasts to every connected client.
+function handleChat(ws, data) {
+    // Only players who have joined the lobby may chat. Identified by the stable
+    // token so the name displayed is the authoritative lobby name.
+    if (!ws.lobbyPlayerId) return;
+    const sender = lobbyPlayers.find(lp => lp.id === ws.lobbyPlayerId);
+    if (!sender) return;
+    const text = String(data.text || '').trim().slice(0, 200);
+    if (!text) return;
+    const msg = { name: sender.name, id: sender.id, text, ts: Date.now() };
+    chatHistory.push(msg);
+    if (chatHistory.length > MAX_CHAT_HISTORY) chatHistory.shift();
+    const payload = JSON.stringify({ type: 'chatMessage', message: msg });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) client.send(payload);
+    });
+}
+
+// A lobby client opts to spectate the in-progress match. Removes them from
+// the waiting lobby list and adds them to spectators so they receive game
+// state broadcasts. They return to the lobby via leaveGame.
+function handleSpectateGame(ws) {
+    if (currentGameState !== GAME_STATES.IN_PROGRESS && currentGameState !== GAME_STATES.GAME_OVER) {
+        ws.send(JSON.stringify({ type: 'error', message: 'No game in progress to spectate.' }));
+        return;
+    }
+    // Remove from the waiting lobby (if present) — they're now spectating.
+    if (ws.lobbyPlayerId) {
+        const idx = lobbyPlayers.findIndex(lp => lp.id === ws.lobbyPlayerId);
+        if (idx !== -1) lobbyPlayers.splice(idx, 1);
+        ws.lobbyPlayerId = null;
+    }
+    // Add to spectators (avoid duplicates).
+    if (!spectators.includes(ws)) {
+        spectators.push(ws);
+    }
+    // Acknowledge and hand an immediate state snapshot so the client doesn't
+    // wait for the next 1/60s broadcast.
+    ws.send(JSON.stringify({ type: 'spectatorMode', voluntary: true, message: 'You are now spectating.' }));
+    ws.send(JSON.stringify({
+        type: 'gameState',
+        gameState: buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, currentGameState, currentLevel, weapons, projectiles),
+    }));
+    broadcastLobbyState();
 }
 
 const PORT = process.env.PORT || 8080;

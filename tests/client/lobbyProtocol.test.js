@@ -74,6 +74,9 @@ describe('Lobby protocol (features A–E)', () => {
         <button id="startGameButton" disabled>Start Game</button>
         <div id="hostStatus"></div>
         <div id="countdownOverlay" style="display:none"><div id="countdownNumber">3</div></div>
+        <div id="chatLog" class="chat-log"></div>
+        <input id="chatInput" class="chat-input" disabled />
+        <button id="chatSendBtn" class="btn chat-send" disabled>Send</button>
       </div>
       <canvas id="gameCanvas" width="800" height="520"></canvas>
       <button id="leaveButton" style="display:none">Leave</button>
@@ -296,5 +299,66 @@ describe('Lobby protocol (features A–E)', () => {
     expect(youTags.length).toBe(1);
     // The "You" tag should be on the slot whose name is Me (matched by token).
     expect(youTags[0].parentElement.querySelector('.player-name').textContent).toBe('Me');
+  });
+
+  test('requests chat history on join and renders incoming messages', async () => {
+    loadClient();
+    const ws = await openConnection();
+    ws.dispatch({ type: 'welcome', message: 'hi', clientId: 1 });
+    ws.dispatch({ type: 'lobbyJoined', token: 'tok-me' });
+
+    // Client should request the persisted history right after joining.
+    const histReq = ws.sent.find((m) => m.type === 'getChatHistory');
+    expect(histReq).toBeDefined();
+
+    // Server returns a history containing one prior message.
+    ws.dispatch({
+      type: 'chatHistory',
+      messages: [{ name: 'Bob', id: 'tok-bob', text: 'welcome!', ts: 1000 }],
+    });
+    const log = document.getElementById('chatLog');
+    expect(log.querySelectorAll('.chat-msg').length).toBe(1);
+    expect(log.querySelector('.chat-name').textContent).toBe('Bob');
+    expect(log.querySelector('.chat-text').textContent).toBe('welcome!');
+
+    // A live message arrives — it is appended (now 2 total).
+    ws.dispatch({
+      type: 'chatMessage',
+      message: { name: 'Bob', id: 'tok-bob', text: 'hi there', ts: 2000 },
+    });
+    expect(log.querySelectorAll('.chat-msg').length).toBe(2);
+    expect(log.querySelectorAll('.chat-text')[1].textContent).toBe('hi there');
+  });
+
+  test('chat input is disabled until the player joins the lobby', async () => {
+    loadClient();
+    const ws = await openConnection();
+    ws.dispatch({ type: 'welcome', message: 'hi', clientId: 1 });
+
+    const chatInput = document.getElementById('chatInput');
+    const chatSendBtn = document.getElementById('chatSendBtn');
+    // Not joined yet → disabled.
+    expect(chatInput.disabled).toBe(true);
+    expect(chatSendBtn.disabled).toBe(true);
+
+    // Join the lobby.
+    ws.dispatch({ type: 'lobbyJoined', token: 'tok-me' });
+    ws.dispatch({
+      type: 'lobbyState',
+      lobbyPlayers: [{ id: 'tok-me', name: 'Me', token: 'tok-me', ready: false }],
+      currentGameState: 'LOBBY',
+      countdown: null,
+    });
+    // Joined → enabled.
+    expect(chatInput.disabled).toBe(false);
+    expect(chatSendBtn.disabled).toBe(false);
+
+    // Typing and sending emits a chat message and clears the input.
+    chatInput.value = 'hello everyone';
+    chatSendBtn.click();
+    const chatMsg = ws.sent.find((m) => m.type === 'chat');
+    expect(chatMsg).toBeDefined();
+    expect(chatMsg.text).toBe('hello everyone');
+    expect(chatInput.value).toBe('');
   });
 });

@@ -41,57 +41,14 @@
 
 ---
 
-## 4. Architecture Quick Reference
+## 4. Architecture
 
-### File Structure
-```
-server.js              # Express + WebSocket server, game loop, state management, collision
-index.html             # Canvas client: rendering, input (keyboard/gamepad/touch), audio
-index.tsx              # Placeholder (unused — vanilla JS project, no React)
-tsconfig.json          # Placeholder (unused)
-vite.config.ts         # Placeholder (unused)
-package.json           # Dependencies: express, ws, uuid
-docs/PLAN.md           # Feature roadmap
-docs/BUGS.md           # Bug tracker
-docs/PROGRESS_LOG.md   # Change log
-docs/PLAYER_MOVEMENT.md # Player movement flow diagram (this doc)
-tests/                 # Jest test suites
-  server/              # Server-side game logic tests (node env)
-  client/              # Client-side rendering & input tests (jsdom env)
-  integration/         # WebSocket message flow tests
-```
+The full architecture reference — file structure, server/client internals, lobby/match flow, and the WebSocket message protocol — lives in [`docs/Architecture.md`](docs/Architecture.md). Read it when you need the game-state FSM, entity model, movement/collision details, or the message protocol.
 
-### Server Architecture (`server.js`)
-- **Game States (FSM):** `LOBBY` → `IN_PROGRESS` → `GAME_OVER` → (5s delay) → `LOBBY`
-- **Game Loop:** `setInterval(gameLoop, 1000/60)` — 60 FPS; only runs when `IN_PROGRESS`
-- **Entities:** `players[]`, `ghosts[]`, `pellets[]`, `powerPellets[]`
-- **Maze:** 2D array — `0` = pellet path, `1` = wall, `2` = power pellet
-- **Collision:** Distance-based via `Math.hypot(dx, dy) < threshold`
-- **Movement:** Direction-based with wall checking (`isWall()`); axis-separated (X then Y) for sliding along walls
-- **Speeds:** `PLAYER_SPEED = 0.05` tiles/tick, `GHOST_SPEED = 0.04` tiles/tick
-- **Power-up:** 10-second duration (`setTimeout`), score +50, enables eating ghosts/players
-- **Lives:** 3 per player; on 0 lives → spectator mode
-- **Win conditions:** Last man standing OR all pellets eaten
-
-### Client Architecture (`index.html`)
-- **Rendering:** HTML5 Canvas 2D, `TILE_SIZE = 40px`, canvas 800×520
-- **Input:** Keyboard (arrows + WASD), Gamepad (D-pad buttons 12–15 + analog axes 0–1), Touch (virtual joystick)
-- **Audio:** Web Audio API oscillator-based SFX (chomp, powerup, ghost-eaten, player-eaten, game-over)
-- **State:** `LOBBY` / `IN_PROGRESS` / `GAME_OVER` / `SPECTATING`
-- **Player name:** Persisted in `localStorage` as `pacclonePlayerName`
-
-### WebSocket Message Protocol
-
-| Direction | Type | Payload |
-| :--- | :--- | :--- |
-| S → C | `welcome` | `{ clientId }` |
-| S → C | `lobbyState` | `{ lobbyPlayers, currentGameState }` |
-| C → S | `joinLobby` | `{ name }` |
-| C → S | `input` | `{ direction }` |
-| C → S | `startGame` | `{}` |
-| S → C | `gameState` | `{ maze, players, ghosts, pellets, powerPellets }` |
-| S → C | `spectatorMode` | `{ message }` |
-| S → C | `error` | `{ message }` |
+At a glance:
+- **Server:** `server.js` — authoritative 60 FPS game loop, FSM (`LOBBY` → `IN_PROGRESS` → `GAME_OVER` → `LOBBY`), Express + `ws`.
+- **Client:** `index.html` — Canvas 2D rendering, keyboard/gamepad/touch input, Web Audio SFX.
+- **Protocol:** clients send *input only*; the server broadcasts state. See the protocol table in `docs/Architecture.md`.
 
 ---
 

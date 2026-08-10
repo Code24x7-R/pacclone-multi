@@ -107,6 +107,99 @@
             margin: 0 0 16px;
         }
 
+        /* --- In-progress match banner --- */
+        .in-game-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            background: rgba(255, 215, 0, 0.12);
+            border: 1px solid rgba(255, 215, 0, 0.4);
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        .in-game-banner-icon {
+            color: #ffd700;
+            font-size: 14px;
+            animation: in-game-pulse 1.5s ease-in-out infinite;
+        }
+        .in-game-banner-text {
+            flex: 1;
+            font-size: 0.85rem;
+            color: #ffe066;
+            line-height: 1.4;
+        }
+        @keyframes in-game-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.35; }
+        }
+
+        /* --- Lobby chat --- */
+        .chat-log {
+            flex: 1;
+            min-height: 80px;
+            max-height: 360px;
+            overflow-y: auto;
+            background: #0c0c20;
+            border: 1px solid #232348;
+            border-radius: 8px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 0.8rem;
+        }
+        .chat-msg {
+            display: flex;
+            gap: 6px;
+            line-height: 1.35;
+            word-break: break-word;
+        }
+        .chat-name {
+            color: #ffd700;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .chat-name::after {
+            content: ':';
+            color: var(--text-dim);
+        }
+        .chat-text {
+            color: var(--text);
+        }
+        .chat-input-row {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 8px 10px;
+            font-size: 0.82rem;
+            background: #0c0c20;
+            border: 1px solid #232348;
+            border-radius: 8px;
+            color: var(--text);
+        }
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--accent2);
+        }
+        .chat-input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .chat-send {
+            padding: 6px 14px;
+            font-size: 0.8rem;
+        }
+        .chat-send:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         /* --- Name row --- */
         .name-row {
             display: flex;
@@ -399,13 +492,14 @@
             width: 100%;
         }
 
-        /* --- Footer row (mute + about) --- */
+        /* --- Footer row (mute + about) — sits at the bottom of the left column --- */
         .lobby-footer {
-            margin-top: 16px;
+            margin-top: auto;
             width: 100%;
             display: flex;
-            justify-content: center;
+            justify-content: flex-start;
             gap: 8px;
+            padding-top: 12px;
         }
 
         /* --- About modal --- */
@@ -629,6 +723,15 @@
             <button id="readyButton" class="btn btn-ready" style="display: none;">Ready</button>
         </div>
 
+        <!-- In-progress match banner: shown when a game is running and this
+             client is not a participant or spectator. Lets lobby players see
+             what's happening and choose to spectate or wait. -->
+        <div id="inGameBanner" class="in-game-banner" style="display: none;">
+            <span class="in-game-banner-icon">&#9654;</span>
+            <span id="inGameBannerText" class="in-game-banner-text">A game is in progress</span>
+            <button id="spectateButton" class="btn btn-cyan">Spectate</button>
+        </div>
+
         <div class="lobby-columns">
             <div class="lobby-col lobby-col-left">
                 <div class="section-h">Players · up to 4</div>
@@ -637,22 +740,29 @@
                 <button id="singlePlayerButton" class="btn btn-single">Single Player</button>
                 <button id="startGameButton" class="btn btn-start" disabled>Start Game</button>
                 <div id="hostStatus"></div>
+
+                <div class="lobby-footer">
+                    <button id="muteButton" class="btn btn-ghost">Mute</button>
+                    <button id="aboutButton" class="btn btn-ghost">About</button>
+                </div>
             </div>
 
             <div class="lobby-col lobby-col-right">
                 <div class="section-h">High Scores</div>
                 <ol id="highScoresList" class="scores-list"></ol>
+
+                <div class="section-h" style="margin-top: 18px;">Chat</div>
+                <div id="chatLog" class="chat-log"></div>
+                <div class="chat-input-row">
+                    <input type="text" id="chatInput" class="chat-input" placeholder="Type a message..." maxlength="200" autocomplete="off" disabled />
+                    <button id="chatSendBtn" class="btn btn-cyan chat-send" disabled>Send</button>
+                </div>
             </div>
         </div>
 
         <!-- Countdown overlay (feature D): shown during COUNTDOWN state. -->
         <div id="countdownOverlay" class="countdown-overlay" style="display: none;">
             <div id="countdownNumber" class="countdown-number">3</div>
-        </div>
-
-        <div class="lobby-footer">
-            <button id="muteButton" class="btn btn-ghost">Mute</button>
-            <button id="aboutButton" class="btn btn-ghost">About</button>
         </div>
     </div>
 
@@ -906,6 +1016,9 @@
         // ready button reflects this client's current ready flag.
         function renderJoinState() {
             const readyButton = document.getElementById('readyButton');
+            // Chat is only usable by players who have joined the lobby.
+            if (chatInput) chatInput.disabled = !hasJoinedLobby;
+            if (chatSendBtn) chatSendBtn.disabled = !hasJoinedLobby;
             if (hasJoinedLobby) {
                 playerNameInput.disabled = true;
                 playerNameInput.style.opacity = '0.6';
@@ -1127,6 +1240,63 @@
             });
         }
 
+        // Spectate: a lobby player opts to watch the in-progress match.
+        // The server adds them to spectators and streams game state. They can
+        // return to the lobby at any time via the Leave Game button.
+        const spectateButton = document.getElementById('spectateButton');
+        if (spectateButton) {
+            spectateButton.addEventListener('click', () => {
+                ensureAudio();
+                ws.send(JSON.stringify({ type: 'spectateGame' }));
+            });
+        }
+
+        // Lobby chat: send on button click or Enter. Only meaningful once the
+        // player has joined the lobby (the server enforces membership too).
+        const chatInput = document.getElementById('chatInput');
+        const chatSendBtn = document.getElementById('chatSendBtn');
+        const chatLogEl = document.getElementById('chatLog');
+
+        // Render a single chat message into the lobby chat log. Escapes the
+        // name/text so user content can't inject markup. Auto-scrolls to the
+        // latest message.
+        function appendChatMessage(msg) {
+            if (!chatLogEl || !msg) return;
+            const row = document.createElement('div');
+            row.className = 'chat-msg';
+            const nameEl = document.createElement('span');
+            nameEl.className = 'chat-name';
+            nameEl.textContent = msg.name;
+            const textEl = document.createElement('span');
+            textEl.className = 'chat-text';
+            textEl.textContent = msg.text;
+            row.appendChild(nameEl);
+            row.appendChild(textEl);
+            chatLogEl.appendChild(row);
+            chatLogEl.scrollTop = chatLogEl.scrollHeight;
+        }
+        function sendChat() {
+            if (!hasJoinedLobby || !chatInput) return;
+            const text = chatInput.value.trim();
+            if (!text) return;
+            ws.send(JSON.stringify({ type: 'chat', text }));
+            chatInput.value = '';
+        }
+        if (chatSendBtn) {
+            chatSendBtn.addEventListener('click', () => {
+                ensureAudio();
+                sendChat();
+            });
+        }
+        if (chatInput) {
+            chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    sendChat();
+                }
+            });
+        }
+
         const muteButton = document.getElementById('muteButton');
         muteButton.addEventListener('click', () => {
             ensureAudio();
@@ -1162,6 +1332,8 @@
                         localStorage.setItem('pacclonePlayerToken', message.token);
                         console.log('[CLIENT] Received token:', message.token.slice(0, 8) + '…');
                     }
+                    // Pull the persisted chat history so a late joiner sees prior messages.
+                    ws.send(JSON.stringify({ type: 'getChatHistory' }));
                     break;
                 case 'playerAssigned':
                     // Server tells us our player ID for the new game. This restores
@@ -1245,6 +1417,26 @@
                          canvas.style.display = 'none';
                          setLeaveButtonVisible(false);
                     }
+                    // In-progress match banner: show when a game is running and this
+                    // client is neither a participant nor already spectating.
+                    // The banner is optional markup — guard so a minimal DOM
+                    // (e.g. a test fixture) doesn't crash on a missing element.
+                    const inGameBanner = document.getElementById('inGameBanner');
+                    const inGameBannerText = document.getElementById('inGameBannerText');
+                    if (inGameBanner && inGameBannerText) {
+                        if (message.inProgressMatch && !amInGame && !isSpectating) {
+                            const m = message.inProgressMatch;
+                            const names = m.players.map(p => p.name).join(', ');
+                            if (m.isSinglePlayer) {
+                                inGameBannerText.textContent = `Single-player game in progress \u2014 ${names}. Lobby opens when it ends.`;
+                            } else {
+                                inGameBannerText.textContent = `Multiplayer game in progress \u2014 ${m.playerCount} players: ${names}.`;
+                            }
+                            inGameBanner.style.display = 'flex';
+                        } else {
+                            inGameBanner.style.display = 'none';
+                        }
+                    }
                     // Countdown overlay (feature D): render the 3-2-1-GO during COUNTDOWN.
                     renderCountdown(message.countdown, clientGameState);
                     break;
@@ -1316,12 +1508,25 @@
                                                 lobbyDiv.style.display = 'none';
                                                 canvas.style.display = 'block';
                                                 setLeaveButtonVisible(true);
-                                                playPlayerEaten(); // Play player eaten sound
+                                                // Only play the "eaten" sound when forced into spectating
+                                                // (ran out of lives). A voluntary lobby spectate is silent.
+                                                if (!message.voluntary) playPlayerEaten();
                                                 break;
                                             case 'returnToLobby':
                                                 // Server has removed us from the game; return to lobby UI.
                                                 handleReturnToLobby(message);
                                                 break;
+                case 'chatHistory':
+                    // Full history sent on join — render all existing messages.
+                    if (chatLogEl) {
+                        chatLogEl.innerHTML = '';
+                        (message.messages || []).forEach(appendChatMessage);
+                    }
+                    break;
+                case 'chatMessage':
+                    // A new message from any lobby player — append if present.
+                    if (chatLogEl) appendChatMessage(message.message);
+                    break;
                 case 'error':
                     console.error('[SERVER ERROR]:', message.message);
                     alert(`Error: ${message.message}`);

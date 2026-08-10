@@ -68,6 +68,12 @@ const GHOST_EAT_SCORE = 200;
 const FRIGHTENED_DURATION_MS = 8000;
 const GHOST_RETURN_DELAY_MS = 5000;
 
+// Stuck-ghost timeout: if a ghost does not change tile for this many ticks
+// (~3 seconds at 60 FPS), it is considered frozen and sent back to the house.
+// This catches edge cases (e.g. frightened ghosts that stop moving despite
+// having valid exits) that the wall-surround check alone misses.
+const STUCK_TICK_THRESHOLD = 180;
+
 // Speed multipliers (relative to base movement speed)
 const GHOST_NORMAL_SPEED = 0.8;
 const GHOST_FRIGHTENED_SPEED = 0.5;
@@ -129,6 +135,7 @@ function createGhost(personality, houseConfig) {
     originalY: houseConfig.centerY,
     idleTimer: Math.random() * 1000,
     reReleaseTimer: 0,
+    stuckTicks: 0, // ticks since last position change; used by isGhostStuck timeout
   };
 }
 
@@ -522,16 +529,31 @@ function getWalkableDirections(ghost, maze, mazeWidth, mazeHeight, directions = 
 }
 
 /**
- * Check if a ghost is stuck (all surrounding tiles are walls/blocked).
- * Used to detect ghosts trapped in dead ends so they can be sent back
- * to the house to respawn.
- * @param {Object} ghost - Ghost object { x, y }.
+ * Check if a ghost is stuck and should be sent back to the house to respawn.
+ * Two detection modes:
+ * 1. Wall-surround: all surrounding tiles are walls (ghost is boxed in).
+ * 2. Movement timeout: the ghost has not changed position for STUCK_TICK_THRESHOLD
+ *    ticks (~3 seconds at 60 FPS). This catches edge cases such as frightened
+ *    ghosts that stop moving despite having valid exits — a catchall that
+ *    should rarely trigger but prevents permanent freezing.
+ *
+ * The movement-timeout counter (`ghost.stuckTicks`) is maintained by the
+ * caller (server.js) which increments it every tick the ghost does not move
+ * and resets it when the ghost changes tile.
+ *
+ * @param {Object} ghost - Ghost object { x, y, stuckTicks }.
  * @param {number[][]} maze - The maze grid.
  * @param {number} mazeWidth - Maze width in tiles.
  * @param {number} mazeHeight - Maze height in tiles.
- * @returns {boolean} True if the ghost cannot move in any direction.
+ * @returns {boolean} True if the ghost is stuck and should be reset.
  */
 function isGhostStuck(ghost, maze, mazeWidth, mazeHeight) {
+  // Movement-timeout check: ghost has not moved in STUCK_TICK_THRESHOLD ticks.
+  if ((ghost.stuckTicks || 0) >= STUCK_TICK_THRESHOLD) {
+    return true;
+  }
+
+  // Wall-surround check: all four neighbors are walls.
   const tileX = Math.floor(ghost.x);
   const tileY = Math.floor(ghost.y);
 
@@ -776,6 +798,7 @@ module.exports = {
   GHOST_NORMAL_SPEED,
   GHOST_FRIGHTENED_SPEED,
   GHOST_EATEN_SPEED,
+  STUCK_TICK_THRESHOLD,
   DIRECTION_VECTORS,
   OPPOSITE,
   // Creation
