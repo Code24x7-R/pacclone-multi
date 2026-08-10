@@ -538,8 +538,13 @@ function chooseDirection(ghost, target, maze, mazeWidth, mazeHeight) {
   const tileY = Math.floor(ghost.y);
   const walkable = getWalkableDirections(ghost, maze, mazeWidth, mazeHeight);
 
-  // Filter out the reverse direction (no U-turns) unless it's the only option
-  const noReverse = walkable.filter((d) => OPPOSITE[d] !== ghost.direction);
+  // Filter out the reverse direction (no U-turns) unless frightened or no
+  // other option. Frightened ghosts can turn freely — filtering reverse
+  // here can leave them stuck when the only open path is back the way
+  // they came.
+  const noReverse = ghost.state === "frightened"
+    ? walkable
+    : walkable.filter((d) => OPPOSITE[d] !== ghost.direction);
   const candidates = noReverse.length > 0 ? noReverse : walkable;
 
   if (candidates.length === 0) {

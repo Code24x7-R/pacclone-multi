@@ -443,6 +443,24 @@ describe("chooseDirection", () => {
     // Only walkable option is left (reverse) since right/up/down are walls
     expect(dir).toBe("left");
   });
+
+  test("frightened ghost can reverse direction to maximize distance", () => {
+    // Ghost at (2,1) with left=(1,1) open and right=(3,1) open.
+    // Ghost moving right, target is far to the right.
+    // Frightened ghost should reverse to left to maximize distance.
+    const maze = [
+      [1, 1, 1, 1, 1],
+      [1, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+      [1, 1, 1, 1, 1],
+    ];
+    const ghost = { x: 2.5, y: 1.5, direction: "right", state: "frightened" };
+    const target = { tileX: 4, tileY: 4 }; // Far to the right
+    const dir = chooseDirection(ghost, target, maze, 5, 5);
+    // Frightened ghost should reverse to left to maximize distance from target
+    expect(dir).toBe("left");
+  });
 });
 
 describe("wall collision bug fix (ghost frozen at tile edge)", () => {
