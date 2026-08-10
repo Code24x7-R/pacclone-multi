@@ -1602,6 +1602,9 @@
                     if (maze[y][x] === 1) { // Wall
                         ctx.fillStyle = 'blue';
                         ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    } else if (maze[y][x] === 6) { // Ghost house gate
+                        ctx.fillStyle = '#ff4da6';
+                        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2 - 3, TILE_SIZE, 6);
                     }
                 }
             }
