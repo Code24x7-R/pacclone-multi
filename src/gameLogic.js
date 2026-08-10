@@ -66,11 +66,12 @@ const WEAPON_PICKUP_DISTANCE = 0.5; // tiles — collision threshold for pickup
 const WEAPON_SPAWN_COOLDOWN_TICKS = 180; // 3 seconds between weapon spawns
 const MAX_WEAPONS_ON_BOARD = 2; // Max simultaneous weapons
 
-// Pistol: single-shot projectile that travels in the facing direction.
-// Hits the first player or ghost in its path. Consumed on fire.
+// Pistol: projectile weapon with limited rounds. Persists until the
+// end of the level or the player dies. Each shot consumes one round.
 const PISTOL_PROJECTILE_SPEED = 0.25; // tiles/tick — fast but dodgeable
 const PISTOL_PROJECTILE_RANGE = 8; // tiles before despawn
 const PISTOL_HIT_RADIUS = 0.4; // tiles — collision threshold
+const PISTOL_ROUNDS = 6; // rounds per pistol (lasts until level end or death)
 
 // Explosive: detonates at player position, creating a blast radius.
 // Damages all players and ghosts within EXPLOSIVE_BLAST_RADIUS.
@@ -633,18 +634,32 @@ function spawnWeapon(maze, existingWeapons, player) {
 /**
  * Check if a player is close enough to pickup a weapon.
  * Only players without a weapon can pick up.
+ * Pistols are distributed to ALL remaining players (alive, not spectating)
+ * when picked up. Explosives are single-user only.
  * @param {Object} player - Player object { x, y, weapon }.
+ * @param {Array} players - All players (for distributing pistol to all).
  * @param {Array} weapons - Array of weapon objects (mutated).
  * @returns {boolean} True if a weapon was picked up.
  */
-function checkWeaponPickup(player, weapons) {
+function checkWeaponPickup(player, players, weapons) {
   if (player.weapon) return false; // Already has a weapon
 
   for (let i = weapons.length - 1; i >= 0; i--) {
     const w = weapons[i];
     const dist = Math.hypot(player.x - (w.x + 0.5), player.y - (w.y + 0.5));
     if (dist < WEAPON_PICKUP_DISTANCE) {
-      player.weapon = w.type;
+      // Pistol is shared: all remaining players get it
+      if (w.type === WEAPON_TYPES.PISTOL) {
+        players.forEach(p => {
+          if (!p.disconnected && p.lives > 0) {
+            p.weapon = w.type;
+            p.weaponRounds = PISTOL_ROUNDS;
+          }
+        });
+      } else {
+        // Explosive is single-user
+        player.weapon = w.type;
+      }
       weapons.splice(i, 1);
       return true;
     }
@@ -660,6 +675,7 @@ function checkWeaponPickup(player, weapons) {
  */
 function firePistol(player, projectiles) {
   if (!player.direction || player.weapon !== WEAPON_TYPES.PISTOL) return;
+  if (player.weaponRounds <= 0) return; // No rounds left
 
   projectiles.push({
     x: player.x,
@@ -671,7 +687,10 @@ function firePistol(player, projectiles) {
     ownerId: player.id,
   });
 
-  player.weapon = null; // Consumed on fire
+  player.weaponRounds--; // Consume one round
+  if (player.weaponRounds <= 0) {
+    player.weapon = null; // Out of rounds — weapon is gone
+  }
 }
 
 /**
@@ -932,6 +951,7 @@ module.exports = {
   PISTOL_PROJECTILE_SPEED,
   PISTOL_PROJECTILE_RANGE,
   PISTOL_HIT_RADIUS,
+  PISTOL_ROUNDS,
   EXPLOSIVE_BLAST_RADIUS,
   EXPLOSIVE_PELLET_RADIUS,
   EXPLOSIVE_SCORE_PELLET,

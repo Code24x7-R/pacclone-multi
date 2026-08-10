@@ -13,6 +13,7 @@ const {
   WEAPON_PICKUP_DISTANCE,
   PISTOL_PROJECTILE_SPEED,
   PISTOL_PROJECTILE_RANGE,
+  PISTOL_ROUNDS,
   EXPLOSIVE_BLAST_RADIUS,
   EXPLOSIVE_PELLET_RADIUS,
   shouldSpawnWeapons,
@@ -153,40 +154,70 @@ describe('spawnWeapon', () => {
 // ---------------------------------------------------------------------------
 
 describe('checkWeaponPickup', () => {
-  test('player picks up weapon within distance', () => {
-    const player = { x: 3.5, y: 3.5, weapon: null };
+  test('player picks up pistol — all remaining players get it', () => {
+    const player1 = { x: 3.5, y: 3.5, weapon: null, weaponRounds: 0, disconnected: false, lives: 3 };
+    const player2 = { x: 1.5, y: 1.5, weapon: null, weaponRounds: 0, disconnected: false, lives: 3 };
+    const players = [player1, player2];
     const weapons = [{ x: 3, y: 3, type: 'pistol' }];
-    const result = checkWeaponPickup(player, weapons);
+    const result = checkWeaponPickup(player1, players, weapons);
     expect(result).toBe(true);
-    expect(player.weapon).toBe('pistol');
+    // Both players get the pistol
+    expect(player1.weapon).toBe('pistol');
+    expect(player1.weaponRounds).toBe(PISTOL_ROUNDS);
+    expect(player2.weapon).toBe('pistol');
+    expect(player2.weaponRounds).toBe(PISTOL_ROUNDS);
+    expect(weapons.length).toBe(0);
+  });
+
+  test('pistol not given to disconnected or spectating players', () => {
+    const player1 = { x: 3.5, y: 3.5, weapon: null, weaponRounds: 0, disconnected: false, lives: 3 };
+    const player2 = { x: 1.5, y: 1.5, weapon: null, weaponRounds: 0, disconnected: true, lives: 3 };
+    const player3 = { x: 2.5, y: 2.5, weapon: null, weaponRounds: 0, disconnected: false, lives: 0 };
+    const players = [player1, player2, player3];
+    const weapons = [{ x: 3, y: 3, type: 'pistol' }];
+    checkWeaponPickup(player1, players, weapons);
+    expect(player1.weapon).toBe('pistol');
+    expect(player2.weapon).toBeNull(); // disconnected
+    expect(player3.weapon).toBeNull(); // spectating (0 lives)
+  });
+
+  test('explosive is single-user only', () => {
+    const player1 = { x: 3.5, y: 3.5, weapon: null, weaponRounds: 0, disconnected: false, lives: 3 };
+    const player2 = { x: 1.5, y: 1.5, weapon: null, weaponRounds: 0, disconnected: false, lives: 3 };
+    const players = [player1, player2];
+    const weapons = [{ x: 3, y: 3, type: 'explosive' }];
+    const result = checkWeaponPickup(player1, players, weapons);
+    expect(result).toBe(true);
+    expect(player1.weapon).toBe('explosive');
+    expect(player2.weapon).toBeNull(); // Only picker gets explosive
     expect(weapons.length).toBe(0);
   });
 
   test('player does not pick up weapon beyond distance', () => {
-    const player = { x: 1.5, y: 1.5, weapon: null };
+    const player = { x: 1.5, y: 1.5, weapon: null, weaponRounds: 0, disconnected: false, lives: 3 };
     const weapons = [{ x: 5, y: 5, type: 'pistol' }];
-    const result = checkWeaponPickup(player, weapons);
+    const result = checkWeaponPickup(player, [player], weapons);
     expect(result).toBe(false);
     expect(player.weapon).toBeNull();
     expect(weapons.length).toBe(1);
   });
 
   test('player with existing weapon does not pick up another', () => {
-    const player = { x: 3.5, y: 3.5, weapon: 'pistol' };
+    const player = { x: 3.5, y: 3.5, weapon: 'pistol', weaponRounds: 3, disconnected: false, lives: 3 };
     const weapons = [{ x: 3, y: 3, type: 'explosive' }];
-    const result = checkWeaponPickup(player, weapons);
+    const result = checkWeaponPickup(player, [player], weapons);
     expect(result).toBe(false);
     expect(player.weapon).toBe('pistol');
     expect(weapons.length).toBe(1);
   });
 
   test('pickup removes only the collected weapon', () => {
-    const player = { x: 3.5, y: 3.5, weapon: null };
+    const player = { x: 3.5, y: 3.5, weapon: null, weaponRounds: 0, disconnected: false, lives: 3 };
     const weapons = [
       { x: 3, y: 3, type: 'pistol' },
       { x: 5, y: 5, type: 'explosive' },
     ];
-    checkWeaponPickup(player, weapons);
+    checkWeaponPickup(player, [player], weapons);
     expect(weapons.length).toBe(1);
     expect(weapons[0].type).toBe('explosive');
   });
@@ -198,7 +229,7 @@ describe('checkWeaponPickup', () => {
 
 describe('firePistol', () => {
   test('creates a projectile in the facing direction', () => {
-    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol' };
+    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol', weaponRounds: 6 };
     const projectiles = [];
     firePistol(player, projectiles);
     expect(projectiles.length).toBe(1);
@@ -208,7 +239,7 @@ describe('firePistol', () => {
   });
 
   test('projectile starts at player position', () => {
-    const player = { x: 3.5, y: 3.5, direction: 'up', weapon: 'pistol' };
+    const player = { x: 3.5, y: 3.5, direction: 'up', weapon: 'pistol', weaponRounds: 6 };
     const projectiles = [];
     firePistol(player, projectiles);
     const proj = projectiles[0];
@@ -216,23 +247,40 @@ describe('firePistol', () => {
     expect(proj.y).toBeCloseTo(3.5, 5);
   });
 
-  test('clearing weapon after fire (single-shot)', () => {
-    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol' };
+  test('firing consumes one round', () => {
+    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol', weaponRounds: 6 };
     const projectiles = [];
     firePistol(player, projectiles);
-    // Pistol is single-shot — weapon consumed on fire
+    // Pistol has rounds — one round consumed per shot
+    expect(player.weaponRounds).toBe(5);
+    expect(player.weapon).toBe('pistol'); // Still has weapon
+  });
+
+  test('weapon is gone when rounds reach zero', () => {
+    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol', weaponRounds: 1 };
+    const projectiles = [];
+    firePistol(player, projectiles);
+    // Last round consumed — weapon is gone
+    expect(player.weaponRounds).toBe(0);
     expect(player.weapon).toBeNull();
   });
 
   test('does not fire without a direction', () => {
-    const player = { x: 3.5, y: 3.5, direction: null, weapon: 'pistol' };
+    const player = { x: 3.5, y: 3.5, direction: null, weapon: 'pistol', weaponRounds: 6 };
+    const projectiles = [];
+    firePistol(player, projectiles);
+    expect(projectiles.length).toBe(0);
+  });
+
+  test('does not fire without rounds', () => {
+    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol', weaponRounds: 0 };
     const projectiles = [];
     firePistol(player, projectiles);
     expect(projectiles.length).toBe(0);
   });
 
   test('projectile has range and speed', () => {
-    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol' };
+    const player = { x: 3.5, y: 3.5, direction: 'right', weapon: 'pistol', weaponRounds: 6 };
     const projectiles = [];
     firePistol(player, projectiles);
     const proj = projectiles[0];

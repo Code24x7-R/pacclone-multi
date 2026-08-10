@@ -225,6 +225,7 @@ function startGame() {
         dashActiveTicks: 0, // visual-effect countdown
         // Weapon state: null = unarmed, 'pistol' | 'explosive' = armed
         weapon: null, // picked up from weapon drops
+        weaponRounds: 0, // remaining rounds (pistol only)
     }));
     lobbyPlayers = []; // Clear lobby after starting game
 
@@ -304,6 +305,7 @@ function startSinglePlayer(ws) {
         dashing: false,
         dashActiveTicks: 0,
         weapon: null,
+        weaponRounds: 0,
     }];
 
     // Link the requesting client to their player slot and tell them their ID.
@@ -456,7 +458,7 @@ function gameLoop() {
 
             // Weapon pickup (only when not dashing)
             if (!player.dashing) {
-                checkWeaponPickup(player, weapons);
+                checkWeaponPickup(player, players, weapons);
             }
         }
 
@@ -501,6 +503,9 @@ function gameLoop() {
                         otherPlayer.dashAvailable = true;
                         otherPlayer.dashing = false;
                         otherPlayer.dashActiveTicks = 0;
+                        // Reset weapon on respawn (pistol rounds are per-life).
+                        otherPlayer.weapon = null;
+                        otherPlayer.weaponRounds = 0;
                     }
                 } else if (!player.poweredUp && otherPlayer.poweredUp) {
                     // Other player is powered up and eats current player (handled by otherPlayer's loop iteration)

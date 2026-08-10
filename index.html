@@ -1633,15 +1633,16 @@
                 const cx = w.x * TILE_SIZE + TILE_SIZE / 2;
                 const cy = w.y * TILE_SIZE + TILE_SIZE / 2;
                 if (w.type === 'pistol') {
-                    // Pistol: gray circle with inner dot
+                    // Pistol icon: simple gun shape
                     ctx.fillStyle = '#888';
-                    ctx.beginPath();
-                    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.fillStyle = '#444';
-                    ctx.beginPath();
-                    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-                    ctx.fill();
+                    // Barrel (horizontal)
+                    ctx.fillRect(cx - 6, cy - 2, 10, 4);
+                    // Handle (vertical)
+                    ctx.fillStyle = '#555';
+                    ctx.fillRect(cx - 2, cy + 1, 5, 7);
+                    // Trigger guard
+                    ctx.fillStyle = '#666';
+                    ctx.fillRect(cx - 1, cy + 1, 3, 3);
                 } else if (w.type === 'explosive') {
                     // Explosive: red circle with warning stripe
                     ctx.fillStyle = '#c00';
@@ -1830,8 +1831,8 @@
                     ctx.font = '14px Arial';
                     ctx.textAlign = 'left';
                     if (myPlayer.weapon === 'pistol') {
-                        ctx.fillStyle = '#888';
-                        ctx.fillText('PISTOL [Space]', 10, canvas.height - 30);
+                        ctx.fillStyle = '#ffcc00';
+                        ctx.fillText(`PISTOL [Space] (${myPlayer.weaponRounds} rounds)`, 10, canvas.height - 30);
                     } else if (myPlayer.weapon === 'explosive') {
                         ctx.fillStyle = '#c00';
                         ctx.fillText('EXPLOSIVE [Space]', 10, canvas.height - 30);
