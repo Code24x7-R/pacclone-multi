@@ -6,6 +6,17 @@ const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
 const crypto = require('crypto');
+const { execSync } = require('child_process');
+
+// Resolve the current git commit hash (short) for display in the client's
+// About dialog. Falls back to 'unknown' if git is unavailable or the working
+// tree isn't a repo (e.g. production checkout without .git).
+let GIT_COMMIT = 'unknown';
+try {
+  GIT_COMMIT = execSync('git rev-parse --short HEAD', { cwd: __dirname, encoding: 'utf8' }).trim();
+} catch (e) {
+  // Not a git repo or git not installed — leave as 'unknown'.
+}
 
 // Generate a stable, unique player token (used as the player's persistent
 // identity across reconnects). 128-bit uuid — collision risk is negligible.
@@ -991,7 +1002,7 @@ wss.on('connection', (ws) => {
     ws.id = Date.now(); // Assign a unique ID to the WebSocket connection
 
     // Send a welcome message, but the player is not yet in the game
-    ws.send(JSON.stringify({ type: 'welcome', message: 'Welcome to Pacclone Multi! Please join the lobby.', clientId: ws.id }));
+    ws.send(JSON.stringify({ type: 'welcome', message: 'Welcome to Pacclone Multi! Please join the lobby.', clientId: ws.id, commit: GIT_COMMIT }));
 
     // NEW: Expect a 'joinLobby' message from the client
     ws.on('message', (message) => {

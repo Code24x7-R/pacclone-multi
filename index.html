@@ -816,6 +816,7 @@
         const LOBBY_SLOT_NAMES = ['yellow', 'lime', 'cyan', 'magenta'];
         let myPlayerId = null;
         let myToken = null; // stable identity token echoed by server on join; persists across reconnects
+        let serverCommit = null; // git commit hash from server welcome message (for About dialog)
         let currentPlayerName = '';
         let hasJoinedLobby = false; // true once this client has joined the lobby
         let isReady = false; // true once this client has toggled ready (feature C)
@@ -1162,12 +1163,14 @@
         }
 
         function getAboutBuildInfo() {
-            // No build step in this project — version is static from package.json.
+            // No build step in this project — version is static, commit comes
+            // from the server's welcome message (resolved from git at startup).
             const version = '0.0.1';
             const date = new Date().toLocaleDateString('en-US', {
                 year: 'numeric', month: 'short', day: 'numeric'
             });
-            return 'v' + version + ' · ' + date;
+            const commitStr = serverCommit ? ' · ' + serverCommit : '';
+            return 'v' + version + ' · ' + date + commitStr;
         }
 
         // About modal event listeners — guard with null checks so the test
@@ -1371,6 +1374,9 @@
                 case 'welcome':
                     console.log(`[SERVER] says: ${message.message}`);
                     myPlayerId = message.clientId; // Capture clientId from welcome message
+                    // Capture server git commit for the About dialog. May be
+                    // 'unknown' if the server isn't running from a git repo.
+                    if (message.commit) serverCommit = message.commit;
                     break;
                 case 'lobbyJoined':
                     // Server echoes our stable token on a fresh join. Persist it so

@@ -67,7 +67,7 @@ tests/                 # Jest test suites
 
 | Direction | Type | Payload |
 | :--- | :--- | :--- |
-| S → C | `welcome` | `{ clientId }` |
+| S → C | `welcome` | `{ clientId, commit }` |
 | S → C | `lobbyState` | `{ lobbyPlayers, currentGameState, countdown, inProgressMatch }` |
 | C → S | `joinLobby` | `{ name, token? }` |
 | C → S | `input` | `{ direction }` |

@@ -191,4 +191,28 @@ describe('About modal', () => {
     const build = document.getElementById('aboutBuild');
     expect(build.textContent).toContain('v0.0.1');
   });
+
+  test('git commit from welcome message is shown in the build info', async () => {
+    loadClient();
+    // Wait for the mock WebSocket to open (onopen fires on a 0ms timer).
+    await new Promise((r) => setTimeout(r, 10));
+    const ws = MockWebSocket.lastInstance;
+    // Server sends welcome with a commit hash on connect.
+    ws.dispatch({ type: 'welcome', message: 'hi', clientId: 1, commit: 'abc1234' });
+
+    document.getElementById('aboutButton').click();
+    const build = document.getElementById('aboutBuild');
+    expect(build.textContent).toContain('v0.0.1');
+    expect(build.textContent).toContain('abc1234');
+  });
+
+  test('missing commit falls back gracefully', () => {
+    loadClient();
+    // No welcome dispatched — serverCommit stays null. About still opens
+    // and shows version + date without a commit segment.
+    document.getElementById('aboutButton').click();
+    const build = document.getElementById('aboutBuild');
+    expect(build.textContent).toContain('v0.0.1');
+    expect(build.textContent).not.toContain(' · unknown');
+  });
 });
