@@ -433,8 +433,8 @@ function gameLoop() {
             // does not block the tunnel entrance.
             nextX = wrapTunnelX(nextX, player.y, currentMaze);
 
-            if (!isWall(nextX, player.y)) player.x = nextX;
-            if (!isWall(player.x, nextY)) player.y = nextY;
+            if (!isWall(nextX, player.y, currentMaze)) player.x = nextX;
+            if (!isWall(player.x, nextY, currentMaze)) player.y = nextY;
 
             // Clamp the player sprite so it never overlaps a wall. The wall
             // check above only gates the sprite *center*, but the player radius

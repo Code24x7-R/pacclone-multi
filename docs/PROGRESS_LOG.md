@@ -4,6 +4,14 @@
 
 ## 2026-08-10
 
+### [BUGFIX] Player stuck after level 2 start — isWall used wrong maze (B-010)
+- Symptom: After clearing level 1 and starting level 2, player could only move on tiles where pellets were eaten. Could not move on tiles that still had pellets. Player appeared stuck with pellets on both sides.
+- Root cause: `isWall(nextX, player.y)` was called without the `maze` argument on lines 436-437 of `server.js`. The `isWall` function has a default parameter `maze = MAZE` (the static maze), so on level 2+ (where `currentMaze` is procedurally generated), wall checks used the wrong grid.
+- Fix: Added `currentMaze` as the third argument to both `isWall` calls in the player movement block.
+- 5 new regression tests in `tests/server/level2Stuck.test.js`.
+
+### [FEATURE] Weapon powerups — pistol + explosive (PvP resolution)
+
 ### [FEATURE] Weapon powerups — pistol + explosive (PvP resolution)
 - Symptom: PvP deadlock when powerups exhausted — players can't eliminate each other.
 - Solution: New weapon powerups that spawn when all power pellets are eaten.

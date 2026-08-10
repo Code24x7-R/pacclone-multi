@@ -252,16 +252,16 @@ Tile Types:
 │  │  │      tileX = Math.floor(x);                                     │  │  │
 │  │  │      tileY = Math.floor(y);                                     │  │  │
 │  │  │      if (out of bounds) return true;                            │  │  │
-│  │  │      return maze[tileY][tileX] === 1 || maze[tileY][tileX] === 6;│  │ │
+│  │  │      return maze[tileY][tileX] === 1 || maze[tileY][tileX] === 6│  │  │
 │  │  └─────────────────────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                    │                                        │
 │                                    ▼                                        │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  STEP 4: Sprite-to-wall clamping (prevent visual overlap)            │  │
+│  │  STEP 4: Sprite-to-wall clamping (prevent visual overlap)             │  │
 │  │  ┌─────────────────────────────────────────────────────────────────┐  │  │
-│  │  │  radius = (TILE_SIZE / 2 - 2) / TILE_SIZE  // ≈ 0.45 tiles    │  │  │
-│  │  │  var clamped = clampSpriteToWall(player.x, player.y, radius, maze);│ │ │
+│  │  │  radius = (TILE_SIZE / 2 - 2) / TILE_SIZE  // ≈ 0.45 tiles      │  │  │
+│  │  │  var clamped = clampSpriteToWall(player.x, player.y, radius, maze);│  │
 │  │  │  player.x = clamped.x;                                          │  │  │
 │  │  │  player.y = clamped.y;                                          │  │  │
 │  │  └─────────────────────────────────────────────────────────────────┘  │  │
@@ -269,7 +269,7 @@ Tile Types:
 │                                    │                                        │
 │                                    ▼                                        │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  STEP 5: Pellet / Power-pellet consumption                           │  │  │
+│  │  STEP 5: Pellet / Power-pellet consumption                            │  │
 │  │  ┌─────────────────────────────────────────────────────────────────┐  │  │
 │  │  │  checkPlayerPellets(player, pellets, powerPellets);             │  │  │
 │  │  └─────────────────────────────────────────────────────────────────┘  │  │
@@ -277,7 +277,7 @@ Tile Types:
 │                                    │                                        │
 │                                    ▼                                        │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  STEP 6: Ghost collision resolution                                  │  │  │
+│  │  STEP 6: Ghost collision resolution                                   │  │
 │  │  ┌─────────────────────────────────────────────────────────────────┐  │  │
 │  │  │  for (ghost of ghosts) {                                        │  │  │
 │  │  │      if (player.dashing) return;  // Invulnerable during dash   │  │  │
@@ -303,16 +303,16 @@ Tile Types:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                     clampSpriteToWall FLOW                                   │
+│                     clampSpriteToWall FLOW                                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  Player radius ≈ 0.45 tiles. Wall check in step 3 only gates the            │
-│  sprite CENTER, but the body can visually overlap the wall. This             │
+│  sprite CENTER, but the body can visually overlap the wall. This            │
 │  function pushes the center back so the edge sits flush.                    │
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  tileY = Math.floor(y)                                               │  │
-│  │  isTunnelRow = (maze[tileY][0] === 4)  // Skip clamp on tunnel edges │  │
+│  │  tileY = Math.floor(y)                                                │  │
+│  │  isTunnelRow = (maze[tileY][0] === 4)  // Skip clamp on tunnel edges  │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
@@ -326,7 +326,7 @@ Tile Types:
 │  │                                                                       │  │
 │  │  Example: x=8.55, radius=0.45, wall at tile 9                         │  │
 │  │  → rightTile = Math.floor(9.0) = 9 (wall)                             │  │
-│  │  → x = 9 - 0.45 = 8.55  (stays, edge flush)                          │  │
+│  │  → x = 9 - 0.45 = 8.55  (stays, edge flush)                           │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
@@ -340,16 +340,16 @@ Tile Types:
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  tileX = Math.floor(x)  // Recompute after X-axis clamp              │  │
+│  │  tileX = Math.floor(x)  // Recompute after X-axis clamp               │  │
 │  │                                                                       │  │
 │  │  CHECK BOTTOM:                                                        │  │
-│  │  bottomTile = Math.floor(y + radius)                                 │  │
+│  │  bottomTile = Math.floor(y + radius)                                  │  │
 │  │  if (isWall(tileX, bottomTile)) {                                     │  │
 │  │      y = bottomTile - radius;  // Push up                             │  │
 │  │  }                                                                    │  │
 │  │                                                                       │  │
 │  │  CHECK TOP:                                                           │  │
-│  │  topTile = Math.floor(y - radius)  // Uses potentially-modified y    │  │
+│  │  topTile = Math.floor(y - radius)  // Uses potentially-modified y     │  │
 │  │  if (isWall(tileX, topTile)) {                                        │  │
 │  │      y = topTile + 1 + radius;  // Push down                          │  │
 │  │  }                                                                    │  │
@@ -368,17 +368,17 @@ Tile Types:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        PELLET CONSUMPTION                                    │
+│                        PELLET CONSUMPTION                                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  Regular Pellets (tile type 0):                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  for (i = pellets.length - 1; i >= 0; i--) {                         │  │
+│  │  for (i = pellets.length - 1; i >= 0; i--) {                          │  │
 │  │      p = pellets[i];                                                  │  │
-│  │      dist = Math.hypot(player.x - (p.x + 0.5), player.y - (p.y + 0.5));│ │
-│  │      if (dist < 0.4) {  // Eat threshold                             │  │
+│  │      dist = Math.hypot(player.x - (p.x + 0.5), player.y - (p.y + 0.5));  │
+│  │      if (dist < 0.4) {  // Eat threshold                              │  │
 │  │          pellets.splice(i, 1);  // Remove from array                  │  │
-│  │          player.score += PELLET_SCORE;  // 10 points                 │  │
+│  │          player.score += PELLET_SCORE;  // 10 points                  │  │
 │  │          playChompSound();                                            │  │
 │  │      }                                                                │  │
 │  │  }                                                                    │  │
@@ -386,12 +386,12 @@ Tile Types:
 │                                                                             │
 │  Power Pellets (tile type 2):                                               │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  for (i = powerPellets.length - 1; i >= 0; i--) {                    │  │
+│  │  for (i = powerPellets.length - 1; i >= 0; i--) {                     │  │
 │  │      pp = powerPellets[i];                                            │  │
-│  │      dist = Math.hypot(player.x - (pp.x + 0.5), player.y - (pp.y + 0.5));│ │
-│  │      if (dist < 0.5) {  // Larger threshold (bigger pellet)          │  │
+│  │      dist = Math.hypot(player.x - (pp.x + 0.5), player.y - (pp.y + 0.5));│
+│  │      if (dist < 0.5) {  // Larger threshold (bigger pellet)           │  │
 │  │          powerPellets.splice(i, 1);                                   │  │
-│  │          player.score += POWER_PELLET_SCORE;  // 50 points           │  │
+│  │          player.score += POWER_PELLET_SCORE;  // 50 points            │  │
 │  │          player.poweredUp = true;                                     │  │
 │  │          player.poweredUpTicks = ceil(frightenedDurationMs / 16.67);  │  │
 │  │          ghostFrightenedTimer = frightenedDurationMs;                 │  │
@@ -404,7 +404,7 @@ Tile Types:
 │  Effect of Power Pellet:                                                    │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │  - All non-eaten ghosts become frightened (state = 'frightened')      │  │
-│  │  - Frightened ghosts reverse direction and slow down (speed × 0.5)   │  │
+│  │  - Frightened ghosts reverse direction and slow down (speed × 0.5)    │  │
 │  │  - Player can now eat ghosts (instead of dying)                       │  │
 │  │  - Duration: ~8 seconds at level 1, scales down with level            │  │
 │  │  - White flashing in last 1/3 of duration (shouldGhostFlash)          │  │
@@ -421,16 +421,16 @@ Tile Types:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                     GHOST COLLISION RESOLUTION                               │
+│                     GHOST COLLISION RESOLUTION                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  For each ghost:                                                            │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  if (player.disconnected) return;  // Grace period — skip            │  │
-│  │  if (player.dashing)      return;  // Invulnerable during phase dash │  │
+│  │  if (player.disconnected) return;  // Grace period — skip             │  │
+│  │  if (player.dashing)      return;  // Invulnerable during phase dash  │  │
 │  │                                                                       │  │
-│  │  dist = Math.hypot(player.x - ghost.x, player.y - ghost.y);          │  │
-│  │  if (dist >= 0.5) return;  // No collision                           │  │
+│  │  dist = Math.hypot(player.x - ghost.x, player.y - ghost.y);           │  │
+│  │  if (dist >= 0.5) return;  // No collision                            │  │
 │  │                                                                       │  │
 │  │  if (ghost.eaten) return;  // Already eaten (eyes returning) — skip   │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
@@ -447,35 +447,36 @@ Tile Types:
 │  └──────────┬─────────────┘              └───────────────┬────────────────┘ │
 │             │                                            │                  │
 │             ▼                                            ▼                  │
-│  ┌────────────────────────┐              ┌────────────────────────────────┐ │
-│  │     PLAYER EATS GHOST  │              │       GHOST CATCHES PLAYER     │ │
-│  ├────────────────────────┤              ├────────────────────────────────┤ │
-│  │ ghost.eaten = true     │              │ player.lives--                 │ │
-│  │ ghost.frightened = false│             │                                │ │
-│  │ ghost.speed = 1.5      │              │ if (player.lives <= 0) {       │ │
-│  │ ghost.state = 'eaten'  │              │     // Move to spectator mode  │ │
-│  │ player.score += 200    │              │     spectators.push(clientWs); │ │
-│  │ playGhostEatenSound()  │              │     clientWs.playerId = null;  │ │
-│  └────────────────────────┘              │     players.splice(i, 1);      │ │
-│                                         │ } else {                       │ │
-│                                         │     // Respawn at random corner│ │
-│                                         │     pos = pickRespawnPosition()│ │
-│                                         │     player.x = pos.x;          │ │
-│                                         │     player.y = pos.y;          │ │
-│                                         │     player.poweredUp = false;  │ │
-│                                         │     player.dashAvailable=true; │ │
-│                                         │ }                              │ │
-│                                         └────────────────────────────────┘ │
-│                                                                             │
+│  ┌────────────────────────┐             ┌─────────────────────────────────┐ │
+│  │     PLAYER EATS GHOST  │             │       GHOST CATCHES PLAYER      │ │
+│  ├────────────────────────┤             ├─────────────────────────────────┤ │
+│  │ ghost.eaten = true     │             │ player.lives--                  │ │
+│  │ ghost.frightened = false│            │                                 │ │
+│  │ ghost.speed = 1.5      │             │ if (player.lives <= 0) {        │ │
+│  │ ghost.state = 'eaten'  │             │     // Move to spectator mode   │ │
+│  │ player.score += 200    │             │     spectators.push(clientWs);  │ │
+│  │ playGhostEatenSound()  │             │     clientWs.playerId = null;   │ │
+│  └────────────────────────┘             │     players.splice(i, 1);       │ │
+│                                         │ } else {                        | │
+│                                         │     // Respawn at random corner │ │
+│                                         │     pos = pickRespawnPosition() | │ 
+│                                         │     player.x = pos.x;           | │ 
+│                                         │     player.y = pos.y;           │ │
+│                                         │     player.poweredUp = false;   │ │ 
+│                                         │     player.dashAvailable=true;  │ │
+│                                         │ }                               │ │
+│                                         └─────────────────────────────────┘ |  
+│                                                                             |
+│                                                                             |
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
-
 ---
 
 ## 9. Complete Decision Tree (All Paths)
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
+  |
+```                                                                             |
+┌──────────────────────────────────────h
+───────────────────────────────────────┐
 │                  COMPLETE MOVEMENT DECISION TREE                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
