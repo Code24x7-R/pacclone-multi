@@ -11,6 +11,11 @@
 - 4 integration tests in `tests/integration/chat.test.js` (real-time delivery, late-joiner history, non-member blocked, empty ignored) + 2 client tests added to `tests/client/lobbyProtocol.test.js` (history request + render, input enable/disable + send).
 - Files changed: `server.js` (chat state, `handleChat`, `chat`/`getChatHistory` cases), `index.html` (chat panel HTML + CSS, `appendChatMessage`, send handling, `chatMessage`/`chatHistory` cases, history request on join, disabled-until-joined).
 
+### [FEATURE] Pac-Man icon branding on lobby heading
+- Symptom: the lobby heading was plain text — no retro branding to set the tone.
+- Fix: added an inline-SVG Pac-Man character (yellow wedge with a white eye dot, mouth cut via SVG mask) to the left of the title. Wrapped title + subtitle in a flex row with the icon; added a subtle pulsing glow animation (`pacpulse`) for a lively retro feel. Title/subtitle margins reworked to flow inside the new header container.
+- Files changed: `index.html` (lobby header HTML + CSS).
+
 ### [FEATURE] About dialog shows git commit id
 - Symptom: the About dialog showed a static version + date but no way to identify which build was running.
 - Fix: the server resolves the current git commit hash at startup (`git rev-parse --short HEAD`, fallback `'unknown'`) and includes it as `commit` in the `welcome` message sent to every client. The client stores it and `getAboutBuildInfo()` appends it to the version string shown in the About footer (e.g. `v0.0.1 · Jan 15, 2026 · 67cc9a6`). Missing commit falls back gracefully (no `· unknown` segment).
