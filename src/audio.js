@@ -343,6 +343,127 @@
     );
   }
 
+  /**
+   * Weapon pickup — metallic "clang" with a rising tone.
+   */
+  function playWeaponPickup() {
+    if (isMuted) return;
+    var ctx = getContext();
+    if (!ctx) return;
+    var now = ctx.currentTime;
+    var duration = 0.15;
+
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, now);
+    osc.frequency.exponentialRampToValueAtTime(1600, now + duration);
+
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.25, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+
+  /**
+   * Pistol fire — short percussive "pop" with noise burst.
+   */
+  function playPistolFire() {
+    if (isMuted) return;
+    var ctx = getContext();
+    if (!ctx) return;
+    var now = ctx.currentTime;
+    var duration = 0.08;
+
+    // Tonal pop
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(900, now);
+    osc.frequency.exponentialRampToValueAtTime(200, now + duration);
+
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.3, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.start(now);
+    osc.stop(now + duration);
+
+    // Noise burst
+    var bufferSize = Math.floor(ctx.sampleRate * duration);
+    var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    var output = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+    var noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    var noiseGain = ctx.createGain();
+    noise.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+
+    noiseGain.gain.setValueAtTime(0, now);
+    noiseGain.gain.linearRampToValueAtTime(0.15, now + 0.005);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.start(now);
+    noise.stop(now + duration);
+  }
+
+  /**
+   * Explosion — low-frequency boom with noise burst and long decay.
+   */
+  function playExplosion() {
+    if (isMuted) return;
+    var ctx = getContext();
+    if (!ctx) return;
+    var now = ctx.currentTime;
+    var duration = 0.5;
+
+    // Low boom
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(30, now + duration);
+
+    gain.gain.setValueAtTime(0.5, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.start(now);
+    osc.stop(now + duration);
+
+    // Noise burst
+    var bufferSize = Math.floor(ctx.sampleRate * duration);
+    var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    var output = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+    var noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    var noiseGain = ctx.createGain();
+    noise.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+
+    noiseGain.gain.setValueAtTime(0.3, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.start(now);
+    noise.stop(now + duration);
+  }
+
   return {
     init: init,
     getContext: getContext,
@@ -359,5 +480,8 @@
     playExtraLife: playExtraLife,
     playHighScore: playHighScore,
     playStart: playStart,
+    playWeaponPickup: playWeaponPickup,
+    playPistolFire: playPistolFire,
+    playExplosion: playExplosion,
   };
 });

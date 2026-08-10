@@ -19,7 +19,7 @@
 - **Memory:** Use the **project-local** memory at `.pi/memory/MEMORY.md` for all project-specific context, decisions, and session notes. Do NOT write project memory to the global pi-memory system — it stays in the repo so it travels with the code.
 - **Server authority:** The server is the single source of truth. Clients send *input only* — never game state. Never trust client-reported positions, scores, or lives.
 - **Do NOT add `/* istanbul ignore next */`** to force coverage without explicit user approval.
-- **Always** refer to `docs/PLAN.md` (features) or `docs/BUGS.md` (bugs) before starting work.
+- **Always** refer to `docs/PLAN.md` (features), `docs/BUGS.md` (bugs), or `docs/PLAYER_MOVEMENT.md` (movement flow) before starting work.
 - Always run `npm run lint && npm test` before declaring a task complete.
 - Game logic changes must keep the server authoritative.
 - All game state mutations happen server-side only.
@@ -54,6 +54,7 @@ package.json           # Dependencies: express, ws, uuid
 docs/PLAN.md           # Feature roadmap
 docs/BUGS.md           # Bug tracker
 docs/PROGRESS_LOG.md   # Change log
+docs/PLAYER_MOVEMENT.md # Player movement flow diagram (this doc)
 tests/                 # Jest test suites
   server/              # Server-side game logic tests (node env)
   client/              # Client-side rendering & input tests (jsdom env)

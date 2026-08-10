@@ -69,6 +69,25 @@ describe("buildGameStatePayload", () => {
   });
 
   test("returns exactly the expected keys", () => {
+    const weapons = [{ x: 1, y: 1, type: 'pistol' }];
+    const projectiles = [{ x: 1.5, y: 1.5, direction: 'right' }];
+    const payload = buildGameStatePayload(
+      maze,
+      players,
+      ghosts,
+      pellets,
+      powerPellets,
+      GAME_STATES.IN_PROGRESS,
+      1,
+      weapons,
+      projectiles,
+    );
+    expect(Object.keys(payload).sort()).toEqual(
+      ["currentGameState", "ghosts", "level", "maze", "pellets", "players", "powerPellets", "weapons", "projectiles"].sort(),
+    );
+  });
+
+  test("weapons and projectiles default to empty arrays", () => {
     const payload = buildGameStatePayload(
       maze,
       players,
@@ -77,9 +96,8 @@ describe("buildGameStatePayload", () => {
       powerPellets,
       GAME_STATES.IN_PROGRESS,
     );
-    expect(Object.keys(payload).sort()).toEqual(
-      ["currentGameState", "ghosts", "level", "maze", "pellets", "players", "powerPellets"].sort(),
-    );
+    expect(payload.weapons).toEqual([]);
+    expect(payload.projectiles).toEqual([]);
   });
 
   test("level defaults to 1 when omitted", () => {

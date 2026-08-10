@@ -42,3 +42,5 @@
 | Power-pellet scared state (B-007 — all non-eaten ghosts turn blue, including house ghosts) | — |
 | Single-player mode (solo play, no last-man-standing win, score-based game over) | — |
 | About modal (help/about dialog with features, controls, tech stack) | — |
+| Weapon powerups (pistol + explosive, spawn when power pellets exhausted) | — |
+| Non-dead-end player spawn (B-009 — ≥2 open neighbors guaranteed) | — |

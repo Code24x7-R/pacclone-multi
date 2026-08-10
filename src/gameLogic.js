@@ -54,6 +54,31 @@ const EXTRA_LIFE_THRESHOLD = 10000;
 const DASH_TILES = 3; // How many tiles to teleport forward
 const DASH_DURATION_TICKS = 12; // ~200ms visual effect at 60 FPS
 
+// --- Weapon powerups ---
+// Weapons spawn when all regular power pellets are exhausted, giving players
+// a way to resolve PvP stalemates or clear remaining pellets faster.
+// Available in both single-player (vs ghosts) and multiplayer (vs players+ghosts).
+const WEAPON_TYPES = {
+  PISTOL: 'pistol',
+  EXPLOSIVE: 'explosive',
+};
+const WEAPON_PICKUP_DISTANCE = 0.5; // tiles — collision threshold for pickup
+const WEAPON_SPAWN_COOLDOWN_TICKS = 180; // 3 seconds between weapon spawns
+const MAX_WEAPONS_ON_BOARD = 2; // Max simultaneous weapons
+
+// Pistol: single-shot projectile that travels in the facing direction.
+// Hits the first player or ghost in its path. Consumed on fire.
+const PISTOL_PROJECTILE_SPEED = 0.25; // tiles/tick — fast but dodgeable
+const PISTOL_PROJECTILE_RANGE = 8; // tiles before despawn
+const PISTOL_HIT_RADIUS = 0.4; // tiles — collision threshold
+
+// Explosive: detonates at player position, creating a blast radius.
+// Damages all players and ghosts within EXPLOSIVE_BLAST_RADIUS.
+// Clears all pellets within EXPLOSIVE_PELLET_RADIUS (>= blast radius).
+const EXPLOSIVE_BLAST_RADIUS = 2.5; // tiles — player/ghost damage radius
+const EXPLOSIVE_PELLET_RADIUS = 3.5; // tiles — pellet clearing radius (wider)
+const EXPLOSIVE_SCORE_PELLET = 5; // points per pellet cleared by explosion
+
 const GAME_STATES = {
   LOBBY: "LOBBY",
   COUNTDOWN: "COUNTDOWN",
@@ -491,10 +516,12 @@ function clampSpriteToWall(x, y, radius, maze) {
  * @param {Array} powerPellets
  * @param {string} currentGameState - One of GAME_STATES (LOBBY, IN_PROGRESS, LEVEL_COMPLETE, GAME_OVER).
  * @param {number} [level=1] - Current level number.
- * @returns {{maze: number[][], players: Array, ghosts: Array, pellets: Array, powerPellets: Array, currentGameState: string, level: number}}
+ * @param {Array} [weapons=[]] - Active weapon pickups on the board.
+ * @param {Array} [projectiles=[]] - Active projectiles in flight.
+ * @returns {{maze: number[][], players: Array, ghosts: Array, pellets: Array, powerPellets: Array, currentGameState: string, level: number, weapons: Array, projectiles: Array}}
  */
-function buildGameStatePayload(maze, players, ghosts, pellets, powerPellets, currentGameState, level = 1) {
-  return { maze, players, ghosts, pellets, powerPellets, currentGameState, level };
+function buildGameStatePayload(maze, players, ghosts, pellets, powerPellets, currentGameState, level = 1, weapons = [], projectiles = []) {
+  return { maze, players, ghosts, pellets, powerPellets, currentGameState, level, weapons, projectiles };
 }
 
 // ---------------------------------------------------------------------------
@@ -546,6 +573,237 @@ function revertFrightenedGhosts(ghosts, normalSpeed, modeCycleMode) {
       ghost.state = modeCycleMode;
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Weapon powerups (pure). Used by server.js to spawn, pickup, and resolve
+// weapon effects when power pellets are exhausted.
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine whether weapons should spawn.
+ * Conditions: all regular pellets AND power pellets are eaten, AND
+ * no weapons currently on the board.
+ * Works for both single-player (weapons help clear ghosts) and multiplayer
+ * (weapons resolve PvP stalemates).
+ * @param {Array} pellets - Remaining regular pellets.
+ * @param {Array} powerPellets - Remaining power pellets.
+ * @param {Array} weapons - Currently active weapons on the board.
+ * @returns {boolean} True if weapons should spawn.
+ */
+function shouldSpawnWeapons(pellets, powerPellets, weapons) {
+  return pellets.length === 0 && powerPellets.length === 0 && weapons.length === 0;
+}
+
+/**
+ * Spawn a weapon at a random walkable tile.
+ * Avoids spawning on top of existing weapons or the player (single-player).
+ * @param {number[][]} maze - The maze grid.
+ * @param {Array} existingWeapons - Current weapons on the board.
+ * @param {Object} [player] - Optional player to avoid (single-player).
+ * @returns {{x: number, y: number, type: string}|null} The spawned weapon, or null.
+ */
+function spawnWeapon(maze, existingWeapons, player) {
+  const height = maze.length;
+  const width = maze[0].length;
+  const walkable = [];
+
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      if (maze[y][x] === 1) continue; // Wall
+      // Avoid existing weapons
+      if (existingWeapons.some(w => w.x === x && w.y === y)) continue;
+      // Avoid player position (single-player)
+      if (player && Math.floor(player.x) === x && Math.floor(player.y) === y) continue;
+      walkable.push({ x, y });
+    }
+  }
+
+  if (walkable.length === 0) return null;
+
+  const spot = walkable[Math.floor(Math.random() * walkable.length)];
+  // 50/50 split between pistol and explosive
+  const type = Math.random() < 0.5 ? WEAPON_TYPES.PISTOL : WEAPON_TYPES.EXPLOSIVE;
+  return { x: spot.x, y: spot.y, type };
+}
+
+/**
+ * Check if a player is close enough to pickup a weapon.
+ * Only players without a weapon can pick up.
+ * @param {Object} player - Player object { x, y, weapon }.
+ * @param {Array} weapons - Array of weapon objects (mutated).
+ * @returns {boolean} True if a weapon was picked up.
+ */
+function checkWeaponPickup(player, weapons) {
+  if (player.weapon) return false; // Already has a weapon
+
+  for (let i = weapons.length - 1; i >= 0; i--) {
+    const w = weapons[i];
+    const dist = Math.hypot(player.x - (w.x + 0.5), player.y - (w.y + 0.5));
+    if (dist < WEAPON_PICKUP_DISTANCE) {
+      player.weapon = w.type;
+      weapons.splice(i, 1);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Fire the player's pistol — creates a projectile in the facing direction.
+ * Pistol is single-shot: weapon is consumed on fire.
+ * @param {Object} player - Player object { x, y, direction, weapon }.
+ * @param {Array} projectiles - Array to push the new projectile into.
+ */
+function firePistol(player, projectiles) {
+  if (!player.direction || player.weapon !== WEAPON_TYPES.PISTOL) return;
+
+  projectiles.push({
+    x: player.x,
+    y: player.y,
+    direction: player.direction,
+    speed: PISTOL_PROJECTILE_SPEED,
+    range: PISTOL_PROJECTILE_RANGE,
+    distanceTraveled: 0,
+    ownerId: player.id,
+  });
+
+  player.weapon = null; // Consumed on fire
+}
+
+/**
+ * Detonate the player's explosive — creates a blast radius.
+ * Affects all players and ghosts within EXPLOSIVE_BLAST_RADIUS.
+ * Clears all pellets within EXPLOSIVE_PELLET_RADIUS.
+ * @param {Object} player - Player object { x, y, weapon }.
+ * @param {Array} players - All players (for damage).
+ * @param {Array} ghosts - All ghosts (for damage).
+ * @param {Array} pellets - Regular pellets (mutated — cleared in radius).
+ * @param {Array} powerPellets - Power pellets (mutated — cleared in radius).
+ * @returns {{blastX: number, blastY: number, affectedPlayers: Array, affectedGhosts: Array, affectedPellets: Array}} Blast result.
+ */
+function detonateExplosive(player, players, ghosts, pellets, powerPellets) {
+  if (player.weapon !== WEAPON_TYPES.EXPLOSIVE) return null;
+
+  const blastX = player.x;
+  const blastY = player.y;
+  const affectedPlayers = [];
+  const affectedGhosts = [];
+  const affectedPellets = [];
+
+  // Damage players within blast radius
+  for (const p of players) {
+    const dist = Math.hypot(p.x - blastX, p.y - blastY);
+    if (dist < EXPLOSIVE_BLAST_RADIUS) {
+      affectedPlayers.push(p);
+    }
+  }
+
+  // Damage ghosts within blast radius
+  for (const g of ghosts) {
+    if (g.eaten) continue; // Already eaten — skip
+    const dist = Math.hypot(g.x - blastX, g.y - blastY);
+    if (dist < EXPLOSIVE_BLAST_RADIUS) {
+      affectedGhosts.push(g);
+    }
+  }
+
+  // Clear pellets within pellet radius (wider than blast)
+  for (let i = pellets.length - 1; i >= 0; i--) {
+    const p = pellets[i];
+    const dist = Math.hypot((p.x + 0.5) - blastX, (p.y + 0.5) - blastY);
+    if (dist < EXPLOSIVE_PELLET_RADIUS) {
+      affectedPellets.push(p);
+      pellets.splice(i, 1);
+    }
+  }
+
+  // Clear power pellets within pellet radius
+  for (let i = powerPellets.length - 1; i >= 0; i--) {
+    const pp = powerPellets[i];
+    const dist = Math.hypot((pp.x + 0.5) - blastX, (pp.y + 0.5) - blastY);
+    if (dist < EXPLOSIVE_PELLET_RADIUS) {
+      powerPellets.splice(i, 1);
+    }
+  }
+
+  player.weapon = null; // Consumed on detonation
+
+  return { blastX, blastY, affectedPlayers, affectedGhosts, affectedPellets };
+}
+
+/**
+ * Update all active projectiles — move them and check collisions.
+ * @param {Array} projectiles - Active projectiles (mutated).
+ * @param {number[][]} maze - The maze grid.
+ * @param {Array} players - All players (for hit detection).
+ * @param {Array} ghosts - All ghosts (for hit detection).
+ * @returns {{hitPlayers: Array, hitGhosts: Array}} Entities hit this tick.
+ */
+function updateProjectiles(projectiles, maze, players, ghosts) {
+  const hitPlayers = [];
+  const hitGhosts = [];
+
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const proj = projectiles[i];
+
+    // Move projectile
+    const vec = { dx: 0, dy: 0 };
+    switch (proj.direction) {
+      case 'up': vec.dy = -1; break;
+      case 'down': vec.dy = 1; break;
+      case 'left': vec.dx = -1; break;
+      case 'right': vec.dx = 1; break;
+    }
+
+    proj.x += vec.dx * proj.speed;
+    proj.y += vec.dy * proj.speed;
+    proj.distanceTraveled += proj.speed;
+
+    // Check range
+    if (proj.distanceTraveled >= proj.range) {
+      projectiles.splice(i, 1);
+      continue;
+    }
+
+    // Check wall collision
+    if (isWall(proj.x, proj.y, maze)) {
+      projectiles.splice(i, 1);
+      continue;
+    }
+
+    // Check player hits (skip owner)
+    let hit = false;
+    for (const p of players) {
+      if (p.id === proj.ownerId) continue; // Don't hit self
+      const dist = Math.hypot(p.x - proj.x, p.y - proj.y);
+      if (dist < PISTOL_HIT_RADIUS) {
+        hitPlayers.push(p);
+        hit = true;
+        break;
+      }
+    }
+
+    // Check ghost hits
+    if (!hit) {
+      for (const g of ghosts) {
+        if (g.eaten) continue; // Already eaten — skip
+        const dist = Math.hypot(g.x - proj.x, g.y - proj.y);
+        if (dist < PISTOL_HIT_RADIUS) {
+          hitGhosts.push(g);
+          hit = true;
+          break;
+        }
+      }
+    }
+
+    // Remove projectile on hit
+    if (hit) {
+      projectiles.splice(i, 1);
+    }
+  }
+
+  return { hitPlayers, hitGhosts };
 }
 
 // ---------------------------------------------------------------------------
@@ -663,6 +921,24 @@ module.exports = {
   buildGameStatePayload,
   frightenGhosts,
   revertFrightenedGhosts,
+  // Weapon exports
+  WEAPON_TYPES,
+  WEAPON_PICKUP_DISTANCE,
+  WEAPON_SPAWN_COOLDOWN_TICKS,
+  MAX_WEAPONS_ON_BOARD,
+  PISTOL_PROJECTILE_SPEED,
+  PISTOL_PROJECTILE_RANGE,
+  PISTOL_HIT_RADIUS,
+  EXPLOSIVE_BLAST_RADIUS,
+  EXPLOSIVE_PELLET_RADIUS,
+  EXPLOSIVE_SCORE_PELLET,
+  shouldSpawnWeapons,
+  spawnWeapon,
+  checkWeaponPickup,
+  firePistol,
+  detonateExplosive,
+  updateProjectiles,
+  // Lobby exports
   COUNTDOWN_DURATION_MS,
   RECONNECT_GRACE_MS,
   rebuildLobbyFromMatch,

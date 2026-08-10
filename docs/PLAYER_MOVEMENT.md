@@ -9,7 +9,7 @@ This document describes the complete player movement flow from maze generation t
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         GAME LOOP (60 FPS)                                  │
-│  setInterval(gameLoop, 1000/60) — only runs when currentGameState ===      │
+│  setInterval(gameLoop, 1000/60) — only runs when currentGameState ===       │
 │  IN_PROGRESS                                                                │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -17,10 +17,10 @@ This document describes the complete player movement flow from maze generation t
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  PER-TICK PIPELINE (for each player)                                        │
 │                                                                             │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐ │
-│  │ 1. INPUT │ → │ 2. SNAP  │ → │ 3. MOVE  │ → │ 4. CLAMP │ → │ 5. EAT   │ │
-│  │ Consume  │   │ Perpend. │   │ + Wrap   │   │ to Wall  │   │ Pellets  │ │
-│  └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘ │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   │
+│  │ 1. INPUT │ → │ 2. SNAP  │ → │ 3. MOVE  │ → │ 4. CLAMP │ → │ 5. EAT   │   │
+│  │ Consume  │   │ Perpend. │   │ + Wrap   │   │ to Wall  │   │ Pellets  │   │
+│  └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘   │
 │                                                                     │       │
 │                                                                     ▼       │
 │                                                              ┌──────────┐   │
@@ -40,66 +40,66 @@ Called by `startNextLevel()` when advancing past level 1.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    MAZE GENERATION PIPELINE                      │
+│                    MAZE GENERATION PIPELINE                     │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  1. Fill grid with walls (1)                                    │
 │     ┌─────────────────────────────────────────────────────┐     │
-│     │  1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1           │     │
-│     │  1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1           │     │
-│     │  1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1           │     │
+│     │  1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1            │     │
+│     │  1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1              │     │
+│     │  1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1              │     │
 │     └─────────────────────────────────────────────────────┘     │
 │                                                                 │
 │  2. Reserve ghost house area (type 5 = reserved)                │
 │     ┌─────────────────────────────────────────────────────┐     │
-│     │  . . . . . . . . . . . . . . . . . . . . . . .     │     │
-│     │  . . . . . . . . . . . . . . . . . . . . . . .     │     │
-│     │  . . . . . . 5 5 . . . . . . . . . . . . . . .     │     │
-│     │  . . . . . . 5 5 . . . . . . . . . . . . . . .     │     │
+│     │  . . . . . . . . . . . . . . . . . . . . . . .      │     │
+│     │  . . . . . . . . . . . . . . . . . . . . . . .      │     │
+│     │  . . . . . . 5 5 . . . . . . . . . . . . . . .      │     │
+│     │  . . . . . . 5 5 . . . . . . . . . . . . . . .      │     │
 │     └─────────────────────────────────────────────────────┘     │
 │                                                                 │
 │  3. Recursive backtracking from (1,1): carve left half          │
 │     ┌─────────────────────────────────────────────────────┐     │
-│     │  # . . # . . . . . . . . . . . . . . . . . #     │     │
-│     │  # . # # # . . . . . . . . . . . . . . . . #     │     │
-│     │  . . # . . . . . . . . . . . . . . . . . . .     │     │
-│     │  # . # . . . . . . . . . . . . . . . . . . #     │     │
+│     │  # . . # . . . . . . . . . . . . . . . . . #        │     │
+│     │  # . # # # . . . . . . . . . . . . . . . . #        │     │
+│     │  . . # . . . . . . . . . . . . . . . . . . .        │     │
+│     │  # . # . . . . . . . . . . . . . . . . . . #        │     │
 │     └─────────────────────────────────────────────────────┘     │
 │                                                                 │
 │  4. Mirror left half → right half (symmetry)                    │
 │     ┌─────────────────────────────────────────────────────┐     │
-│     │  # . . # . . . . . . . . . . . . . . # . . #     │     │
-│     │  # . # # # . . . . . . . . . . . # # # . #     │     │
+│     │  # . . # . . . . . . . . . . . . . . # . . #        │     │
+│     │  # . # # # . . . . . . . . . . . . # # # . #        │     │
 │     └─────────────────────────────────────────────────────┘     │
 │                                                                 │
 │  5. Place ghost house structure (walls + gate)                  │
 │     ┌─────────────────────────────────────────────────────┐     │
-│     │  . . . . . . . . . . . . . . . . . . . . . . .     │     │
-│     │  . . . . . . . . . . . . . . . . . . . . . . .     │     │
-│     │  . . . . . . . # # # # . . . . . . . . . . .     │     │
-│     │  . . . . . . . # = = # . . . . . . . . . . .     │     │
-│     │  . . . . . . . # . . # . . . . . . . . . . .     │     │
+│     │  . . . . . . . . . . . . . . . . . . . . . . .      │     │
+│     │  . . . . . . . . . . . . . . . . . . . . . . .      │     │
+│     │  . . . . . . . # # # # . . . . . . . . . . . .      │     │
+│     │  . . . . . . . # = = # . . . . . . . . . . . .      │     │
+│     │  . . . . . . . # . . # . . . . . . . . . . . .      │     │
 │     └─────────────────────────────────────────────────────┘     │
 │                                                                 │
 │  6. Add tunnels (type 4) at rows 8 and height-1                 │
 │     ┌─────────────────────────────────────────────────────┐     │
-│     │  . . . . . . . . . . . . . . . . . . . . . . .     │     │
-│     │  4 . . . . . . . . . . . . . . . . . . . . . 4     │     │
+│     │  . . . . . . . . . . . . . . . . . . . . . . .      │     │
+│     │  4 . . . . . . . . . . . . . . . . . . . . . 4      │     │
 │     └─────────────────────────────────────────────────────┘     │
 │                                                                 │
 │  7. Place power pellets in dead-end corners (type 2)            │
 │     ┌─────────────────────────────────────────────────────┐     │
-│     │  # O # . . . . . . . . . . . . . . . # O #     │     │
+│     │  # O # . . . . . . . . . . . . . . . # O #          │     │
 │     └─────────────────────────────────────────────────────┘     │
 │                                                                 │
 │  8. Ensure start tiles walkable + non-dead-end (≥2 neighbors)   │
 │     ┌─────────────────────────────────────────────────────┐     │
-│     │  # O # . . . . . . . . . . . . . . . # O #     │     │
-│     │  . . # . . . . . . . . . . . . . . . # . .     │     │
+│     │  # O # . . . . . . . . . . . . . . . # O #          │     │
+│     │  . . # . . . . . . . . . . . . . . . # . .          │     │
 │     └─────────────────────────────────────────────────────┘     │
 │                                                                 │
-│  9. Ensure connectivity: flood fill from (1,1), carve paths      │
-│     to any unreachable pellet tiles                              │
+│  9. Ensure connectivity: flood fill from (1,1), carve paths     │
+│     to any unreachable pellet tiles                             │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -118,32 +118,32 @@ Tile Types:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        PLAYER SPAWN ASSIGNMENT                               │
+│                        PLAYER SPAWN ASSIGNMENT                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  Spawn Slots (assigned round-robin by lobby order):                         │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  Index 0: (1.5, 1.5)        — top-left corner                        │  │
-│  │  Index 1: (w-1.5, 1.5)      — top-right corner                       │  │
-│  │  Index 2: (1.5, 4.5)        — left side, 4 tiles down               │  │
-│  │  Index 3: (w-1.5, 4.5)      — right side, 4 tiles down              │  │
+│  │  Index 0: (1.5, 1.5)        — top-left corner                         │  │
+│  │  Index 1: (w-1.5, 1.5)      — top-right corner                        │  │
+│  │  Index 2: (1.5, 4.5)        — left side, 4 tiles down                 │  │
+│  │  Index 3: (w-1.5, 4.5)      — right side, 4 tiles down                │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 │  Spawn Requirements (enforced by mazeGenerator.js step 8):                  │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  ✓ Tile type ≠ 1 (wall)                                              │  │
-│  │  ✓ Tile type ≠ 6 (ghost gate)                                        │  │
-│  │  ✓ Open neighbors ≥ 2 (NOT a dead end)                               │  │
+│  │  ✓ Tile type ≠ 1 (wall)                                               │  │
+│  │  ✓ Tile type ≠ 6 (ghost gate)                                         │  │
+│  │  ✓ Open neighbors ≥ 2 (NOT a dead end)                                │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 │  Spawn Reset (per level):                                                   │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  player.x = startingPositions[i].x                                   │  │
-│  │  player.y = startingPositions[i].y                                   │  │
-│  │  player.direction = null            // No movement until input       │  │
-│  │  player.poweredUp = false                                            │  │
-│  │  player.poweredUpTicks = 0                                           │  │
-│  │  // KEEP: player.lives, player.score, player.color, player.dashAvail │  │
+│  │  player.x = startingPositions[i].x                                    │  │
+│  │  player.y = startingPositions[i].y                                    │  │
+│  │  player.direction = null            // No movement until input        │  │
+│  │  player.poweredUp = false                                             │  │
+│  │  player.poweredUpTicks = 0                                            │  │
+│  │  // KEEP: player.lives, player.score, player.color, player.dashAvail  │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -157,32 +157,33 @@ Tile Types:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                     INPUT HANDLING (per client message)                      │
+│                     INPUT HANDLING (per client message)                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  Client sends: { type: 'input', direction: 'up'|'down'|'left'|'right' }    │
+│  Client sends: { type: 'input', direction: 'up'|'down'|'left'|'right' }     │
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  if (data.direction && data.direction !== player.direction) {        │  │
-│  │      // Direction change — snap perpendicular axis to corridor       │  │
-│  │      const snapped = snapPerpendicular(player.x, player.y, dir);     │  │
-│  │      player.x = snapped.x;                                           │  │
-│  │      player.y = snapped.y;                                           │  │
-│  │  }                                                                   │  │
-│  │  player.direction = data.direction;                                  │  │
+│  │  if (data.direction && data.direction !== player.direction) {         │  │
+│  │      // Direction change — snap perpendicular axis to corridor        │  │
+│  │      const snapped = snapPerpendicular(player.x, player.y, dir);      │  │
+│  │      player.x = snapped.x;                                            │  │
+│  │      player.y = snapped.y;                                            │  │
+│  │  }                                                                    │  │
+│  │  player.direction = data.direction;                                   │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 │  snapPerpendicular() logic:                                                 │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  Vertical move (up/down):   snap X → nearest half-tile (n + 0.5)     │  │
-│  │  Horizontal move (left/right): snap Y → nearest half-tile (n + 0.5)  │  │
+│  │  Vertical move (up/down):   snap X → nearest half-tile (n + 0.5)      │  │
+│  │  Horizontal move (left/right): snap Y → nearest half-tile (n + 0.5)   │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
-│  Example: Player at (1.7, 2.3) turning to move right:                        │
+│  Example: Player at (1.7, 2.3) turning to move right:                       │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │  snapPerpendicular(1.7, 2.3, 'right')                                 │  │
-│  │  → { x: 1.7, y: Math.round(2.3 - 0.5) + 0.5 }                       │  │
-│  │  → { x: 1.7, y: 2.5 }               // Y snapped to corridor center  │  │
+│  │  → { x: 1.7, y: Math.round(2.3 - 0.5) + 0.5 }                         |  |
+│  │                                                                       |  |
+│  │  → { x: 1.7, y: 2.5 }               // Y snapped to corridor center   │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                                                             │
 │  Possible Next Moves (4 cardinal directions):                               │
@@ -190,9 +191,9 @@ Tile Types:
 │  │                        ┌─────┐                                        │  │
 │  │                        │ UP  │  nextY = y - PLAYER_SPEED              │  │
 │  │                        └──┬──┘                                        │  │
-│  │     ┌─────┐         ┌────┴────┐         ┌─────┐                      │  │
-│  │     │LEFT │ ←────── │ PLAYER  │ ──────→ │RIGHT│                      │  │
-│  │     └─────┘         └────┬────┘         └─────┘                      │  │
+│  │     ┌─────┐         ┌────┴────┐         ┌─────┐                       │  │
+│  │     │LEFT │ ←────── │ PLAYER  │ ──────→ │RIGHT│                       │  │
+│  │     └─────┘         └────┬────┘         └─────┘                       │  │
 │  │   nextX = x - SPEED      │        nextX = x + SPEED                   │  │
 │  │                        ┌──┴──┐                                        │  │
 │  │                        │DOWN │  nextY = y + PLAYER_SPEED              │  │
@@ -210,42 +211,42 @@ Tile Types:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                   MOVEMENT EXECUTION (per tick, per player)                  │
+│                   MOVEMENT EXECUTION (per tick, per player)                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  STEP 1: Compute candidate position                                  │  │
+│  │  STEP 1: Compute candidate position                                   │  │
 │  │  ┌─────────────────────────────────────────────────────────────────┐  │  │
 │  │  │  let nextX = player.x;                                          │  │  │
 │  │  │  let nextY = player.y;                                          │  │  │
 │  │  │  switch (player.direction) {                                    │  │  │
-│  │  │      case 'up':    nextY -= PLAYER_SPEED; break;  // 0.05      │  │  │
-│  │  │      case 'down':  nextY += PLAYER_SPEED; break;               │  │  │
-│  │  │      case 'left':  nextX -= PLAYER_SPEED; break;               │  │  │
-│  │  │      case 'right': nextX += PLAYER_SPEED; break;               │  │  │
+│  │  │      case 'up':    nextY -= PLAYER_SPEED; break;  // 0.05       │  │  │
+│  │  │      case 'down':  nextY += PLAYER_SPEED; break;                │  │  │
+│  │  │      case 'left':  nextX -= PLAYER_SPEED; break;                │  │  │
+│  │  │      case 'right': nextX += PLAYER_SPEED; break;                │  │  │
 │  │  │  }                                                              │  │  │
 │  │  └─────────────────────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                    │                                        │
 │                                    ▼                                        │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  STEP 2: Tunnel wrapping (BEFORE wall check)                         │  │
+│  │  STEP 2: Tunnel wrapping (BEFORE wall check)                          │  │
 │  │  ┌─────────────────────────────────────────────────────────────────┐  │  │
-│  │  │  nextX = wrapTunnelX(nextX, player.y, currentMaze);            │  │  │
+│  │  │  nextX = wrapTunnelX(nextX, player.y, currentMaze);             │  │  │
 │  │  │                                                                 │  │  │
-│  │  │  if (maze[tileY][0] === 4) {  // Tunnel row                    │  │  │
-│  │  │      if (nextX < 0)      nextX += width;   // Wrap left→right  │  │  │
-│  │  │      if (nextX >= width) nextX -= width;   // Wrap right→left  │  │  │
+│  │  │  if (maze[tileY][0] === 4) {  // Tunnel row                     │  │  │
+│  │  │      if (nextX < 0)      nextX += width;   // Wrap left→right   │  │  │
+│  │  │      if (nextX >= width) nextX -= width;   // Wrap right→left   │  │  │
 │  │  │  }                                                              │  │  │
 │  │  └─────────────────────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                    │                                        │
 │                                    ▼                                        │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  STEP 3: Wall collision check (axis-separated for sliding)          │  │
+│  │  STEP 3: Wall collision check (axis-separated for sliding)            │  │
 │  │  ┌─────────────────────────────────────────────────────────────────┐  │  │
-│  │  │  if (!isWall(nextX, player.y)) player.x = nextX; // X-axis OK  │  │  │
-│  │  │  if (!isWall(player.x, nextY)) player.y = nextY; // Y-axis OK  │  │  │
+│  │  │  if (!isWall(nextX, player.y)) player.x = nextX; // X-axis OK   │  │  │
+│  │  │  if (!isWall(player.x, nextY)) player.y = nextY; // Y-axis OK   │  │  │
 │  │  │                                                                 │  │  │
 │  │  │  isWall(x, y, maze):                                            │  │  │
 │  │  │      tileX = Math.floor(x);                                     │  │  │

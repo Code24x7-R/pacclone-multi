@@ -4,6 +4,18 @@
 
 ## 2026-08-10
 
+### [FEATURE] Weapon powerups — pistol + explosive (PvP resolution)
+- Symptom: PvP deadlock when powerups exhausted — players can't eliminate each other.
+- Solution: New weapon powerups that spawn when all power pellets are eaten.
+- Pistol: Single-shot projectile (speed 0.25 tiles/tick, range 8 tiles). Hits first player/ghost in path. Consumed on fire.
+- Explosive: Detonates at player position. Blast radius 2.5 tiles damages players/ghosts. Pellet clearing radius 3.5 tiles.
+- Spawning: When `pellets.length === 0 && powerPellets.length === 0`, spawns up to 2 weapons on board. 3-second cooldown between spawns. 50/50 pistol/explosive split.
+- Controls: Spacebar to fire (keyboard), or can be mapped to gamepad/touch.
+- Audio: New sounds — weapon pickup (metallic clang), pistol fire (pop + noise), explosion (low boom + noise decay).
+- Works in single-player (vs ghosts) and multiplayer (vs players + ghosts).
+- 41 new unit tests in `tests/server/weapons.test.js`.
+- Files changed: `src/gameLogic.js` (weapon constants + 7 functions), `src/audio.js` (3 new sounds), `server.js` (integration), `index.html` (rendering + input).
+
 ### [BUGFIX] Player gets stuck at level 2 start — dead-end starting position (B-009)
 - Symptom: Player clears level 1, level 2 starts, eats about 5 pellets, then gets stuck.
 - Root cause: The procedurally generated maze (`mazeGenerator.js`) ensures starting tiles are walkable but does NOT ensure they have ≥2 open neighbors. Tile (1,1) is often a dead end (only 1 open neighbor: down). The player starts at (1.5, 1.5), eats the power pellet, then moves down eating 4 more pellets at (1,2), (1,3), (1,4), (1,5) before hitting a wall at tile (1,6) with no alternative exit.

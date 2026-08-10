@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 // Generate a stable, unique player token (used as the player's persistent
 // identity across reconnects). 128-bit uuid — collision risk is negligible.
-const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, executePhaseDash, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod, isWall, extractPellets, PELLET_SCORE, POWER_PELLET_SCORE, PLAYER_EAT_SCORE } = require('./src/gameLogic');
+const { buildGameStatePayload, GAME_STATES, MAZE, TILE_SIZE, getLevelTransition, extraLivesEarned, updateDashState, executePhaseDash, pickRespawnPosition, snapPerpendicular, clampSpriteToWall, wrapTunnelX, frightenGhosts, revertFrightenedGhosts, COUNTDOWN_DURATION_MS, RECONNECT_GRACE_MS, rebuildLobbyFromMatch, areAllReady, togglePlayerReady, getCountdownTick, isWithinGracePeriod, isWall, extractPellets, PELLET_SCORE, POWER_PELLET_SCORE, PLAYER_EAT_SCORE, WEAPON_TYPES, WEAPON_SPAWN_COOLDOWN_TICKS, MAX_WEAPONS_ON_BOARD, EXPLOSIVE_SCORE_PELLET, shouldSpawnWeapons, spawnWeapon, checkWeaponPickup, firePistol, detonateExplosive, updateProjectiles } = require('./src/gameLogic');
 const { generateMaze } = require('./src/mazeGenerator');
 const { ghostSpeedForLevel, frightenedDurationForLevel } = require('./src/difficulty');
 const {
@@ -113,6 +113,11 @@ let ghostFrightenedTimer = 0; // ms remaining
 let ghostHouseConfig = null; // { centerX, centerY, exitX, exitY, gateX, gateY }
 let totalPelletsInLevel = 0;
 
+// Weapon state — spawns when power pellets are exhausted.
+let weapons = []; // { x, y, type: 'pistol'|'explosive' }
+let projectiles = []; // { x, y, direction, speed, range, distanceTraveled, ownerId }
+let weaponSpawnCooldown = 0; // ticks until next weapon can spawn
+
 // GAME_STATES is imported from src/gameLogic.js (single source of truth)
 let currentGameState = GAME_STATES.LOBBY;
 let lobbyPlayers = []; // Array to hold players in the lobby
@@ -171,6 +176,11 @@ function initializeGameState() {
     // Initialize scatter/chase mode cycle
     modeCycle = createModeCycle();
     ghostFrightenedTimer = 0;
+
+    // Reset weapons and projectiles
+    weapons = [];
+    projectiles = [];
+    weaponSpawnCooldown = 0;
 }
 initializeGameState();
 
@@ -210,6 +220,8 @@ function startGame() {
         dashAvailable: true, // resets on respawn
         dashing: false, // true during the brief visual effect
         dashActiveTicks: 0, // visual-effect countdown
+        // Weapon state: null = unarmed, 'pistol' | 'explosive' = armed
+        weapon: null, // picked up from weapon drops
     }));
     lobbyPlayers = []; // Clear lobby after starting game
 
@@ -288,6 +300,7 @@ function startSinglePlayer(ws) {
         dashAvailable: true,
         dashing: false,
         dashActiveTicks: 0,
+        weapon: null,
     }];
 
     // Link the requesting client to their player slot and tell them their ID.
@@ -437,6 +450,11 @@ function gameLoop() {
             if (!player.dashing) {
                 checkPlayerPellets(player, pellets, powerPellets);
             }
+
+            // Weapon pickup (only when not dashing)
+            if (!player.dashing) {
+                checkWeaponPickup(player, weapons);
+            }
         }
 
         // Player collision with other players
@@ -490,6 +508,65 @@ function gameLoop() {
             }
         });
     });
+
+    // --- Weapon spawning & projectile updates ---
+    // Spawn weapons when power pellets are exhausted.
+    if (weaponSpawnCooldown > 0) {
+        weaponSpawnCooldown--;
+    }
+    if (shouldSpawnWeapons(pellets, powerPellets, weapons) && weaponSpawnCooldown <= 0 && weapons.length < MAX_WEAPONS_ON_BOARD) {
+        // In single-player, avoid spawning on the player; in multiplayer, allow anywhere
+        const sp = players.length === 1 ? players[0] : undefined;
+        const weapon = spawnWeapon(currentMaze, weapons, sp);
+        if (weapon) {
+            weapon.id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+            weapons.push(weapon);
+            weaponSpawnCooldown = WEAPON_SPAWN_COOLDOWN_TICKS;
+            console.log(`[SERVER] Weapon spawned: ${weapon.type} at (${weapon.x},${weapon.y})`);
+        }
+    }
+
+    // Update projectiles (movement + collision)
+    const projectileHits = updateProjectiles(projectiles, currentMaze, players, ghosts);
+
+    // Resolve pistol hits on players
+    for (const hitPlayer of projectileHits.hitPlayers) {
+        hitPlayer.lives--;
+        console.log(`[SERVER] Player ${hitPlayer.name || hitPlayer.id} shot! Lives: ${hitPlayer.lives}`);
+        if (hitPlayer.lives <= 0) {
+            const clientWs = Array.from(wss.clients).find(client => client.playerId === hitPlayer.id);
+            if (clientWs) {
+                spectators.push(clientWs);
+                clientWs.send(JSON.stringify({ type: 'spectatorMode', message: 'You were shot! You are now spectating.' }));
+                clientWs.playerId = null;
+            }
+            const eatenPlayerIndex = players.findIndex(p => p.id === hitPlayer.id);
+            if (eatenPlayerIndex !== -1) {
+                players.splice(eatenPlayerIndex, 1);
+            }
+        } else {
+            // Respawn
+            const occupied = players.filter(p => p.id !== hitPlayer.id).map(p => ({ x: p.x, y: p.y }));
+            const pos = pickRespawnPosition(occupied, currentMaze);
+            hitPlayer.x = pos.x;
+            hitPlayer.y = pos.y;
+            hitPlayer.poweredUp = false;
+            hitPlayer.dashAvailable = true;
+            hitPlayer.dashing = false;
+            hitPlayer.dashActiveTicks = 0;
+            hitPlayer.weapon = null; // Lose weapon on death
+        }
+    }
+
+    // Resolve pistol hits on ghosts
+    for (const hitGhost of projectileHits.hitGhosts) {
+        if (hitGhost.eaten) continue;
+        hitGhost.eaten = true;
+        hitGhost.frightened = false;
+        hitGhost.speed = GHOST_EATEN_SPEED;
+        hitGhost.state = 'eaten';
+        console.log(`[SERVER] Ghost ${hitGhost.name} shot!`);
+    }
 
     // --- Ghost AI: mode cycling & frightened timer ---
     if (modeCycle) {
@@ -674,7 +751,7 @@ function gameLoop() {
  * Extracted so grace-period expiry and match-end can reuse it.
  */
 function broadcastGameState() {
-    const gameState = buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, currentGameState, currentLevel);
+    const gameState = buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, currentGameState, currentLevel, weapons, projectiles);
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'gameState', gameState }));
@@ -692,7 +769,7 @@ function endMatch(winner) {
     clearInterval(gameInterval);
     gameInterval = null;
 
-    const finalGameState = buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, GAME_STATES.GAME_OVER, currentLevel);
+    const finalGameState = buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, GAME_STATES.GAME_OVER, currentLevel, weapons, projectiles);
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'gameState', gameState: finalGameState }));
@@ -799,7 +876,7 @@ function startNextLevel() {
 
     // Brief pause so the client can show "Level Complete", then resume.
     currentGameState = GAME_STATES.LEVEL_COMPLETE;
-    const levelCompleteState = buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, GAME_STATES.LEVEL_COMPLETE, currentLevel);
+    const levelCompleteState = buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, GAME_STATES.LEVEL_COMPLETE, currentLevel, weapons, projectiles);
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'gameState', gameState: levelCompleteState }));
@@ -856,7 +933,7 @@ wss.on('connection', (ws) => {
                     ws.send(JSON.stringify({ type: 'playerAssigned', playerId: player.id }));
                     ws.send(JSON.stringify({
                         type: 'gameState',
-                        gameState: buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, currentGameState, currentLevel),
+                        gameState: buildGameStatePayload(currentMaze, players, ghosts, pellets, powerPellets, currentGameState, currentLevel, weapons, projectiles),
                     }));
                     broadcastGameState();
                     return;
@@ -926,6 +1003,52 @@ wss.on('connection', (ws) => {
                 }
                 // Store dash trigger flag for the game loop to consume.
                 player._dashTriggered = !!data.dash;
+
+                // Handle weapon firing.
+                if (data.fire && player.weapon) {
+                    if (player.weapon === WEAPON_TYPES.PISTOL) {
+                        firePistol(player, projectiles);
+                    } else if (player.weapon === WEAPON_TYPES.EXPLOSIVE) {
+                        const blast = detonateExplosive(player, players, ghosts, pellets, powerPellets);
+                        if (blast) {
+                            // Apply explosive damage to players
+                            for (const hitPlayer of blast.affectedPlayers) {
+                                if (hitPlayer.id === player.id) continue; // Don't self-damage
+                                hitPlayer.lives--;
+                                console.log(`[SERVER] Player ${hitPlayer.name || hitPlayer.id} caught in explosion! Lives: ${hitPlayer.lives}`);
+                                if (hitPlayer.lives <= 0) {
+                                    const clientWs = Array.from(wss.clients).find(client => client.playerId === hitPlayer.id);
+                                    if (clientWs) {
+                                        spectators.push(clientWs);
+                                        clientWs.send(JSON.stringify({ type: 'spectatorMode', message: 'You were blown up! You are now spectating.' }));
+                                        clientWs.playerId = null;
+                                    }
+                                    const idx = players.findIndex(p => p.id === hitPlayer.id);
+                                    if (idx !== -1) players.splice(idx, 1);
+                                } else {
+                                    const occupied = players.filter(p => p.id !== hitPlayer.id).map(p => ({ x: p.x, y: p.y }));
+                                    const pos = pickRespawnPosition(occupied, currentMaze);
+                                    hitPlayer.x = pos.x;
+                                    hitPlayer.y = pos.y;
+                                    hitPlayer.poweredUp = false;
+                                    hitPlayer.dashAvailable = true;
+                                    hitPlayer.weapon = null;
+                                }
+                            }
+                            // Apply explosive damage to ghosts
+                            for (const hitGhost of blast.affectedGhosts) {
+                                if (hitGhost.eaten) continue;
+                                hitGhost.eaten = true;
+                                hitGhost.frightened = false;
+                                hitGhost.speed = GHOST_EATEN_SPEED;
+                                hitGhost.state = 'eaten';
+                                console.log(`[SERVER] Ghost ${hitGhost.name} blown up!`);
+                            }
+                            // Award score for cleared pellets
+                            player.score += blast.affectedPellets.length * EXPLOSIVE_SCORE_PELLET;
+                        }
+                    }
+                }
             }
         } else if (data.type === 'startGame' && currentGameState === GAME_STATES.LOBBY) {
             // Only the host (first lobby player) may start, and only once every

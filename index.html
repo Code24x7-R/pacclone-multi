@@ -714,6 +714,7 @@
         let lastScore = 0; // for chomp sound
         let lastLives = 0; // for extra-life sound
         let lastPoweredUpState = false; // for power-up sound
+        let lastWeaponState = null; // for weapon pickup sound
         let lastGhostPositions = []; // for ghost eaten sound
         let playerLastDirs = {}; // id -> last non-null direction (for mouth facing)
         let highScores = HighScores.loadHighScores();
@@ -753,6 +754,7 @@
             lastScore = 0;
             lastLives = 0;
             lastPoweredUpState = false;
+            lastWeaponState = null;
             gameOverSoundPlayed = false;
             finalScoreRecorded = false;
             isReady = false;
@@ -1047,6 +1049,9 @@
         function playExtraLife() { ensureAudio(); AudioFX.playExtraLife(); }
         function playHighScore() { ensureAudio(); AudioFX.playHighScore(); }
         function playStart() { ensureAudio(); AudioFX.playStart(); }
+        function playWeaponPickup() { ensureAudio(); AudioFX.playWeaponPickup(); }
+        function playPistolFire() { ensureAudio(); AudioFX.playPistolFire(); }
+        function playExplosion() { ensureAudio(); AudioFX.playExplosion(); }
 
         // High score functions are provided by src/highScores.js (HighScores global).
 
@@ -1338,6 +1343,19 @@
                 }
                 return;
             }
+            // Press Space to fire weapon (if armed).
+            if (event.key === ' ' || event.code === 'Space') {
+                event.preventDefault();
+                if (myPlayerId && !isSpectating && myPlayer && myPlayer.weapon && lastDirection) {
+                    ws.send(JSON.stringify({ type: 'input', direction: lastDirection, fire: true }));
+                    if (myPlayer.weapon === 'pistol') {
+                        playPistolFire();
+                    } else if (myPlayer.weapon === 'explosive') {
+                        playExplosion();
+                    }
+                }
+                return;
+            }
             // Press 'P' to toggle the position debug overlay. This works even
             // when spectating so you can inspect any player's alignment.
             if (event.key === 'p' || event.key === 'P') {
@@ -1549,7 +1567,7 @@
         function render(gameState) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            const { maze, players, ghosts, pellets, powerPellets, level = 1 } = gameState;
+            const { maze, players, ghosts, pellets, powerPellets, level = 1, weapons = [], projectiles = [] } = gameState;
             const myPlayer = players.find(p => p.id === myPlayerId);
 
             // NEW: Sound triggers for current player
@@ -1565,6 +1583,12 @@
                     playPowerup();
                 }
                 lastPoweredUpState = myPlayer.poweredUp;
+
+                // Weapon pickup sound
+                if (myPlayer.weapon && !lastWeaponState) {
+                    playWeaponPickup();
+                }
+                lastWeaponState = myPlayer.weapon;
             }
 
             // Draw maze
@@ -1590,6 +1614,39 @@
             powerPellets.forEach(p => {
                 ctx.beginPath();
                 ctx.arc(p.x * TILE_SIZE + TILE_SIZE / 2, p.y * TILE_SIZE + TILE_SIZE / 2, 8, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw weapon pickups
+            weapons.forEach(w => {
+                const cx = w.x * TILE_SIZE + TILE_SIZE / 2;
+                const cy = w.y * TILE_SIZE + TILE_SIZE / 2;
+                if (w.type === 'pistol') {
+                    // Pistol: gray circle with inner dot
+                    ctx.fillStyle = '#888';
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#444';
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (w.type === 'explosive') {
+                    // Explosive: red circle with warning stripe
+                    ctx.fillStyle = '#c00';
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#ff0';
+                    ctx.fillRect(cx - 4, cy - 1, 8, 2);
+                }
+            });
+
+            // Draw projectiles (pistol bullets)
+            ctx.fillStyle = '#ff0';
+            projectiles.forEach(proj => {
+                ctx.beginPath();
+                ctx.arc(proj.x * TILE_SIZE, proj.y * TILE_SIZE, 3, 0, Math.PI * 2);
                 ctx.fill();
             });
 
@@ -1736,6 +1793,19 @@
                 } else {
                     ctx.fillStyle = '#888';
                     ctx.fillText('Dash used', 10, canvas.height - 10);
+                }
+
+                // Weapon indicator (below dash)
+                if (myPlayer.weapon) {
+                    ctx.font = '14px Arial';
+                    ctx.textAlign = 'left';
+                    if (myPlayer.weapon === 'pistol') {
+                        ctx.fillStyle = '#888';
+                        ctx.fillText('PISTOL [Space]', 10, canvas.height - 30);
+                    } else if (myPlayer.weapon === 'explosive') {
+                        ctx.fillStyle = '#c00';
+                        ctx.fillText('EXPLOSIVE [Space]', 10, canvas.height - 30);
+                    }
                 }
             }
 
