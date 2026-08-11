@@ -84,6 +84,8 @@ describe('Single-player button', () => {
     global.HighScores = require('../../src/highScores.js');
     global.AudioFX = require('../../src/audio.js');
     global.GhostRenderer = require('../../src/ghostRenderer.js');
+    global.TouchControls = require('../../src/touchControls.js');
+    global.RenderCache = require('../../src/renderCache.js');
 
     const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
     const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);

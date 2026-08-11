@@ -2,6 +2,21 @@
 
 <!-- Prefix each entry with [FEATURE], [BUGFIX], [REFACTOR], [INFRA], or [DOCS] -->
 
+## 2026-08-12
+
+### [FEATURE] Mobile support & performance pass (iOS / Android)
+- Goal: improve mobile UX and render performance without a mobile-first rewrite.
+- M1 Responsive lobby: `@media` queries collapse the two-column lobby to a single scrollable column below 720px and tighten name row / buttons below 480px.
+- M2 Game-over overlay cache: the expensive gradient/glow/panel (`createLinearGradient`, `measureText`, `shadowBlur`, `roundRect`) is painted once to an offscreen canvas and blitted each frame.
+- M3 Viewport/safe-area polish: viewport meta gains `maximum-scale=1, user-scalable=no, viewport-fit=cover`; `body` and the Leave button + joystick + fire button respect `env(safe-area-inset-*)`; `touch-action` set to prevent zoom/scroll during play.
+- M4 Fire button: on-screen FIRE button (touch) shown only when armed during play; sends `input {fire:true}` in the last joystick direction, filling the gap where touch players could never fire a weapon.
+- M5 Joystick refactor: adaptive sizing (`min(22vw, 140px)` clamped 90–150px) and extracted pure `joystickDirection`/`clampJoystick`/`adaptiveJoystickSize` into `src/touchControls.js` (UMD) — 25 unit tests. Inline styles moved to CSS.
+- M6 Static-layer caching: maze walls (per level) and pellets (per signature) render to offscreen canvases in `src/renderCache.js`, rebuilt only when their input changes — 18 unit tests.
+- M7 HUD font scaling: `hudFont()` scales in-game score/level/dash/weapon text by the canvas display-width ratio so it stays legible when CSS-shrunk.
+- New files: `src/touchControls.js`, `src/renderCache.js`, `tests/client/touchControls.test.js`, `tests/client/renderCache.test.js`. Existing client test fixtures updated to inject `TouchControls`/`RenderCache` globals.
+- Result: 472 tests passing, 0 new lint errors (5 pre-existing warnings unchanged), new modules at 96.6% line / 87.5% branch coverage.
+- Files changed: `index.html`, `docs/PLAN.md`, `src/touchControls.js`, `src/renderCache.js`, `tests/client/*.test.js`.
+
 ## 2026-08-10
 
 ### [FEATURE] Lobby chat — persistent messaging for joined players

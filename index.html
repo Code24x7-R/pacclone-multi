@@ -4,7 +4,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Pacclone Multi</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👻</text></svg>">
     <style>
@@ -30,6 +30,8 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
+            /* Respect notches / home indicator on iOS so UI isn't obscured. */
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
             font-family: 'Segoe UI', 'Trebuchet MS', system-ui, sans-serif;
             color: var(--text);
             overflow: hidden;
@@ -47,6 +49,59 @@
             height: auto;
             aspect-ratio: 800 / 520;
             touch-action: none;
+        }
+
+        /* --- Touch controls: virtual joystick + fire button ---
+         * Shown only on touch devices during gameplay. Sized adaptively
+         * in JS (TouchControls.adaptiveJoystickSize); these rules only
+         * handle position, shape, and safe-area insets. */
+        #joystick {
+            position: fixed;
+            bottom: max(50px, env(safe-area-inset-bottom));
+            left: max(50px, env(safe-area-inset-left));
+            width: 100px;
+            height: 100px;
+            background-color: rgba(255, 255, 255, 0.18);
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            touch-action: none;
+            z-index: 15;
+            pointer-events: auto;
+        }
+        #joystick-handle {
+            position: absolute;
+            top: 25px;
+            left: 25px;
+            width: 50px;
+            height: 50px;
+            background-color: rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        #fireButton {
+            position: fixed;
+            bottom: max(60px, env(safe-area-inset-bottom));
+            right: max(50px, env(safe-area-inset-right));
+            width: 84px;
+            height: 84px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: #000;
+            background: radial-gradient(circle at 35% 30%, #ffe600, #f5a623);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            box-shadow: 0 0 18px rgba(255, 230, 0, 0.5);
+            touch-action: manipulation;
+            user-select: none;
+            z-index: 15;
+        }
+        #fireButton:active {
+            transform: scale(0.92);
+            box-shadow: 0 0 10px rgba(255, 230, 0, 0.4);
         }
 
         /* --- Animated background dots (maze vibe) --- */
@@ -379,6 +434,55 @@
         .lobby-col-right {
             flex: 1 1 42%;
             min-height: 0;
+        }
+
+        /* --- Responsive: stack the two-column lobby on narrow screens ---
+         * On phones the 58/42 split collapses to ~170px columns, which is
+         * unusable. Below 720px we stack to a single scrollable column and
+         * tighten spacing so the whole lobby fits the viewport. */
+        @media (max-width: 720px) {
+            #lobby {
+                padding: 16px 14px 14px;
+                width: 96vw;
+                max-height: 94vh;
+            }
+            .lobby-columns {
+                flex-direction: column;
+                gap: 12px;
+            }
+            .lobby-col-left,
+            .lobby-col-right {
+                flex: 1 1 auto;
+            }
+            .lobby-title {
+                font-size: 1.7rem;
+                letter-spacing: 1.5px;
+            }
+            .lobby-subtitle {
+                font-size: 0.72rem;
+            }
+            .chat-log {
+                max-height: 220px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #lobby {
+                padding: 12px 10px 10px;
+                width: 98vw;
+                max-height: 92vh;
+            }
+            .name-row {
+                flex-direction: column;
+                gap: 6px;
+            }
+            .player-name {
+                font-size: 14px;
+            }
+            .btn {
+                padding: 9px 14px;
+                font-size: 14px;
+            }
         }
 
         /* --- Player list --- */
@@ -836,16 +940,20 @@
     </div>
 
     <canvas id="gameCanvas" width="800" height="520" style="display: none;"></canvas>
-    <button id="leaveButton" class="btn btn-leave" style="display: none; position: absolute; top: 12px; right: 12px; z-index: 10; padding: 6px 14px; font-size: 13px;">Leave Game</button>
+    <button id="leaveButton" class="btn btn-leave" style="display: none; position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 10; padding: 6px 14px; font-size: 13px; touch-action: manipulation;">Leave Game</button>
 
-    <!-- Virtual Joystick for Touch Controls (NEW) -->
-    <div id="joystick" style="display: none; position: fixed; bottom: 50px; left: 50px; width: 100px; height: 100px; background-color: rgba(255, 255, 255, 0.3); border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.5);">
-        <div id="joystick-handle" style="position: absolute; top: 25px; left: 25px; width: 50px; height: 50px; background-color: rgba(255, 255, 255, 0.7); border-radius: 50%;"></div>
+    <!-- Virtual Joystick for Touch Controls (shown on touch devices during play) -->
+    <div id="joystick" style="display: none;" aria-hidden="true">
+        <div id="joystick-handle"></div>
     </div>
+    <!-- Fire button for touch (shown on touch devices when armed during play) -->
+    <div id="fireButton" style="display: none;" aria-label="Fire weapon" role="button">FIRE</div>
 
     <script src="src/ghostRenderer.js"></script>
     <script src="src/highScores.js"></script>
     <script src="src/audio.js"></script>
+    <script src="src/touchControls.js"></script>
+    <script src="src/renderCache.js"></script>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -1231,6 +1339,30 @@
         }
 
         // --- Audio (src/audio.js — chiptune SFX) ---
+        // --- HUD font scaling ---
+        // The canvas backing store is 800px wide but CSS-scaled down on phones,
+        // which shrinks HUD text by the same ratio. Track the on-screen width
+        // and expose hudScale() so render() can scale fonts back up to remain
+        // legible. Recalibrated on resize / orientation change.
+        let canvasDisplayWidth = 800;
+        function calibrateHudScale() {
+            const rect = canvas.getBoundingClientRect();
+            canvasDisplayWidth = (rect && rect.width > 0) ? rect.width : canvas.width;
+        }
+        function hudScale() {
+            return RenderCache.hudScale(canvasDisplayWidth);
+        }
+        // Calibrate once after layout, then on every resize.
+        setTimeout(calibrateHudScale, 0);
+        window.addEventListener('resize', calibrateHudScale);
+        window.addEventListener('orientationchange', calibrateHudScale);
+
+        // Build a font string scaled so text stays legible when the canvas is
+        // CSS-shrunk on a phone. Rounds to integer px to avoid blurry text.
+        function hudFont(basePx) {
+            return Math.max(1, Math.round(basePx * hudScale())) + 'px Arial';
+        }
+
         // AudioContext must be created/resumed on a user gesture. We init on the
         // first lobby interaction; until then sounds are no-ops.
         var audioInitialized = false;
@@ -1587,6 +1719,9 @@
                         lastSnapshotTime = performance.now();
                         startRenderLoop();
 
+                        // Update touch fire-button visibility (armed state may have changed).
+                        refreshFireButton();
+
                         // Record high score once per game over (side effect lives here,
                         // overlay drawing moved into render() so it survives rAF frames).
                         if (clientGameState === 'GAME_OVER' && !finalScoreRecorded) {
@@ -1622,6 +1757,7 @@
                                                 // Only play the "eaten" sound when forced into spectating
                                                 // (ran out of lives). A voluntary lobby spectate is silent.
                                                 if (!message.voluntary) playPlayerEaten();
+                                                refreshFireButton();
                                                 break;
                                             case 'returnToLobby':
                                                 // Server has removed us from the game; return to lobby UI.
@@ -1805,80 +1941,92 @@
         }
         requestAnimationFrame(pollGamepads); // Start polling
 
-        // Touch Controls (Virtual Joystick) (NEW SECTION)
+        // --- Touch controls (virtual joystick + fire button) ------------
+        // Detected once. The joystick and fire button are shown only on touch
+        // devices and only while this client is an active player in an
+        // in-progress match.
+        const isTouchDevice = ('ontouchstart' in window) ||
+            navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
+
         const joystick = document.getElementById('joystick');
         const joystickHandle = document.getElementById('joystick-handle');
-        const joystickBaseSize = 100; // Base size of the joystick area
-        const joystickHandleSize = 50; // Size of the movable handle
-        let joystickActive = false;
-        let joystickStartX, joystickStartY;
-        let joystickCurrentX, joystickCurrentY;
+        const fireButton = document.getElementById('fireButton');
 
-        // Function to show/hide joystick based on device type (simple check)
-        function toggleJoystickVisibility() {
-            // Check for touch support
-            if ('ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0) {
-                // Joystick is initially hidden, will show on first touch
-                // We'll manage its display based on game state
+        // The handle diameter is always 50% of the base diameter. The base
+        // diameter is chosen adaptively from the viewport (TouchControls).
+        // Travel radius (max knob displacement) = (base - handle) / 2.
+        // Guard with null checks so a minimal DOM (e.g. a test fixture) that
+        // omits the touch controls doesn't crash on load.
+        let joystickBaseSize = 0;
+        if (joystick && joystickHandle) {
+            joystickBaseSize = TouchControls.adaptiveJoystickSize(window.innerWidth);
+
+            function resizeJoystick() {
+                joystickBaseSize = TouchControls.adaptiveJoystickSize(window.innerWidth);
+                joystick.style.width = joystickBaseSize + 'px';
+                joystick.style.height = joystickBaseSize + 'px';
+                const handleSize = joystickBaseSize / 2;
+                joystickHandle.style.width = handleSize + 'px';
+                joystickHandle.style.height = handleSize + 'px';
+                joystickHandle.style.left = (joystickBaseSize / 4) + 'px';
+                joystickHandle.style.top = (joystickBaseSize / 4) + 'px';
             }
+            resizeJoystick();
+            window.addEventListener('resize', resizeJoystick);
         }
-        toggleJoystickVisibility(); // Call once on load
 
         // Touch state for dash (double-tap) and joystick direction memory.
         let lastTouchDirection = null;
         const DOUBLE_TAP_MS = 300;
 
+        // Refresh the fire button's visibility based on current armed state.
+        // Called whenever game state or weapon status may have changed.
+        function refreshFireButton() {
+            if (!isTouchDevice || !fireButton) return;
+            const me = latestGameState && latestGameState.players
+                ? latestGameState.players.find(p => p.id === myPlayerId) : null;
+            const armed = clientGameState === 'IN_PROGRESS' && !isSpectating && me && !!me.weapon;
+            fireButton.style.display = armed ? 'flex' : 'none';
+        }
+
+        // --- Joystick touch handlers (canvas only) ---
+        let joystickActive = false;
+        let joystickStartX, joystickStartY;
+
         document.addEventListener('touchstart', (e) => {
-            if (!myPlayerId || clientGameState !== 'IN_PROGRESS') {
-                return; // Only process input if active player and game in progress
-            }
-            if (e.target === canvas) { // Only activate joystick if touch starts on canvas
+            if (!isTouchDevice || !myPlayerId || clientGameState !== 'IN_PROGRESS') return;
+            if (e.target === canvas) {
                 joystickActive = true;
-                joystick.style.display = 'block'; // Show joystick
-                
+                joystick.style.display = 'block';
                 const touch = e.touches[0];
                 joystickStartX = touch.clientX;
                 joystickStartY = touch.clientY;
-                
-                // Position joystick dynamically at touch start location
-                joystick.style.left = `${joystickStartX - joystickBaseSize / 2}px`;
-                joystick.style.top = `${joystickStartY - joystickBaseSize / 2}px`;
-
-                joystickHandle.style.left = `${joystickBaseSize / 4}px`;
-                joystickHandle.style.top = `${joystickBaseSize / 4}px`;
+                // Center the base on the touch origin.
+                joystick.style.left = (joystickStartX - joystickBaseSize / 2) + 'px';
+                joystick.style.top = (joystickStartY - joystickBaseSize / 2) + 'px';
+                const handleSize = joystickBaseSize / 2;
+                joystickHandle.style.left = (joystickBaseSize / 4) + 'px';
+                joystickHandle.style.top = (joystickBaseSize / 4) + 'px';
                 e.preventDefault();
             }
         }, { passive: false });
 
         document.addEventListener('touchmove', (e) => {
-            if (!joystickActive || !myPlayerId || clientGameState !== 'IN_PROGRESS') {
-                return;
-            }
+            if (!joystickActive || !myPlayerId || clientGameState !== 'IN_PROGRESS') return;
             const touch = e.touches[0];
-            joystickCurrentX = touch.clientX;
-            joystickCurrentY = touch.clientY;
+            const deltaX = touch.clientX - joystickStartX;
+            const deltaY = touch.clientY - joystickStartY;
 
-            const deltaX = joystickCurrentX - joystickStartX;
-            const deltaY = joystickCurrentY - joystickStartY;
+            const handleSize = joystickBaseSize / 2;
+            const maxDistance = joystickBaseSize / 2 - handleSize / 2;
+            const clamped = TouchControls.clampJoystick(deltaX, deltaY, maxDistance);
 
-            const maxDistance = joystickBaseSize / 2 - joystickHandleSize / 2;
-            const angle = Math.atan2(deltaY, deltaX);
-            const distance = Math.min(maxDistance, Math.hypot(deltaX, deltaY));
+            // Handle position = center offset + clamped displacement.
+            joystickHandle.style.left = (maxDistance + clamped.dx - handleSize / 2) + 'px';
+            joystickHandle.style.top = (maxDistance + clamped.dy - handleSize / 2) + 'px';
 
-            const handleX = maxDistance + distance * Math.cos(angle) - joystickHandleSize / 2;
-            const handleY = maxDistance + distance * Math.sin(angle) - joystickHandleSize / 2;
-
-            joystickHandle.style.left = `${handleX}px`;
-            joystickHandle.style.top = `${handleY}px`;
-
-            let direction = null;
-            if (distance > maxDistance * 0.5) { // Only send direction if moved enough
-                if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                    direction = deltaX > 0 ? 'right' : 'left';
-                } else {
-                    direction = deltaY > 0 ? 'down' : 'up';
-                }
-            }
+            const radius = joystickBaseSize / 2;
+            const direction = TouchControls.joystickDirection(deltaX, deltaY, radius, 0.3);
             if (direction) {
                 lastTouchDirection = direction;
                 ws.send(JSON.stringify({ type: 'input', direction }));
@@ -1888,15 +2036,15 @@
 
         document.addEventListener('touchend', () => {
             joystickActive = false;
-            joystick.style.display = 'none'; // Hide joystick
-            joystickHandle.style.left = `${joystickBaseSize / 4}px`; // Reset handle position
-            joystickHandle.style.top = `${joystickBaseSize / 4}px`;
+            joystick.style.display = 'none';
+            joystickHandle.style.left = (joystickBaseSize / 4) + 'px';
+            joystickHandle.style.top = (joystickBaseSize / 4) + 'px';
         });
 
-        // Double-tap detection for dash (touch). Uses the last joystick direction.
+        // --- Double-tap to dash (touch). Uses the last joystick direction. ---
         let lastTapTime = 0;
         document.addEventListener('touchstart', (e) => {
-            if (!myPlayerId || clientGameState !== 'IN_PROGRESS') return;
+            if (!isTouchDevice || !myPlayerId || clientGameState !== 'IN_PROGRESS') return;
             const now = Date.now();
             if (now - lastTapTime < DOUBLE_TAP_MS && lastTouchDirection) {
                 ws.send(JSON.stringify({ type: 'input', direction: lastTouchDirection, dash: true }));
@@ -1905,7 +2053,23 @@
                 lastTapTime = now;
             }
         }, { passive: false });
-        
+
+        // --- Fire button (touch). Fires in the last joystick direction. ---
+        if (fireButton) {
+            fireButton.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!myPlayerId || clientGameState !== 'IN_PROGRESS' || isSpectating) return;
+                const me = latestGameState && latestGameState.players
+                    ? latestGameState.players.find(p => p.id === myPlayerId) : null;
+                if (!me || !me.weapon) return;
+                const dir = lastTouchDirection || 'right';
+                ws.send(JSON.stringify({ type: 'input', direction: dir, fire: true }));
+                if (me.weapon === 'pistol') playPistolFire();
+                else if (me.weapon === 'explosive') playExplosion();
+            }, { passive: false });
+        }
+
         function render(gameState) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1933,34 +2097,11 @@
                 lastWeaponState = myPlayer.weapon;
             }
 
-            // Draw maze
-            for (let y = 0; y < maze.length; y++) {
-                for (let x = 0; x < maze[y].length; x++) {
-                    if (maze[y][x] === 1) { // Wall
-                        ctx.fillStyle = 'blue';
-                        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                    } else if (maze[y][x] === 6) { // Ghost house gate
-                        ctx.fillStyle = '#ff4da6';
-                        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2 - 3, TILE_SIZE, 6);
-                    }
-                }
-            }
+            // Draw maze (cached per level — only rebuilt on level change)
+            RenderCache.drawMaze(ctx, level, maze, TILE_SIZE);
 
-            // Draw pellets
-            ctx.fillStyle = 'white';
-            pellets.forEach(p => {
-                ctx.beginPath();
-                ctx.arc(p.x * TILE_SIZE + TILE_SIZE / 2, p.y * TILE_SIZE + TILE_SIZE / 2, 3, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Draw power pellets
-            ctx.fillStyle = 'orange';
-            powerPellets.forEach(p => {
-                ctx.beginPath();
-                ctx.arc(p.x * TILE_SIZE + TILE_SIZE / 2, p.y * TILE_SIZE + TILE_SIZE / 2, 8, 0, Math.PI * 2);
-                ctx.fill();
-            });
+            // Draw pellets + power pellets (cached, rebuilt only when eaten)
+            RenderCache.drawPellets(ctx, pellets, powerPellets, TILE_SIZE);
 
             // Draw weapon pickups
             weapons.forEach(w => {
@@ -2164,9 +2305,9 @@
             }
             if (myPlayer) lastLives = myPlayer.lives;
 
-            // Draw scores and lives
+            // Draw scores and lives (font scaled for mobile readability)
             ctx.fillStyle = 'white';
-            ctx.font = '20px Arial';
+            ctx.font = hudFont(20);
             players.forEach((p, index) => {
                 ctx.fillText(`Player ${index + 1}: ${p.score} Lives: ${p.lives}`, 10, 25 * (index + 1));
             });
@@ -2174,7 +2315,7 @@
             // Draw current level (top-right corner) during active play
             if (clientGameState === 'IN_PROGRESS') {
                 ctx.fillStyle = 'yellow';
-                ctx.font = '18px Arial';
+                ctx.font = hudFont(18);
                 ctx.textAlign = 'right';
                 ctx.fillText(`Level ${level}`, canvas.width - 10, 25);
                 ctx.textAlign = 'left';
@@ -2183,7 +2324,7 @@
             // Draw phase-dash status (bottom-left) for the current player.
             // Phase dash: teleport forward 3 tiles, once per life.
             if (clientGameState === 'IN_PROGRESS' && myPlayer) {
-                ctx.font = '16px Arial';
+                ctx.font = hudFont(16);
                 ctx.textAlign = 'left';
                 if (myPlayer.dashing) {
                     ctx.fillStyle = '#0ff';
@@ -2198,7 +2339,7 @@
 
                 // Weapon indicator (below dash)
                 if (myPlayer.weapon) {
-                    ctx.font = '14px Arial';
+                    ctx.font = hudFont(14);
                     ctx.textAlign = 'left';
                     if (myPlayer.weapon === 'pistol') {
                         ctx.fillStyle = '#ffcc00';
@@ -2302,38 +2443,11 @@
 
                 ctx.textAlign = 'center';
 
-                // Decorative panel: rounded rect behind the heading with a soft
-                // red→black gradient and a subtle outer glow.
-                ctx.font = '48px Arial';
-                const textW = ctx.measureText(heading).width;
-                const panelX = canvas.width / 2 - textW / 2 - 24;
-                const panelY = canvas.height / 2 - 52;
-                const panelW = textW + 48;
-                const panelH = 72;
-                ctx.save();
-                ctx.shadowColor = 'rgba(255,0,0,0.55)';
-                ctx.shadowBlur = 28;
-                const grad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
-                grad.addColorStop(0, 'rgba(60,0,0,0.85)');
-                grad.addColorStop(1, 'rgba(20,0,0,0.85)');
-                ctx.fillStyle = grad;
-                ctx.beginPath();
-                ctx.roundRect(panelX, panelY, panelW, panelH, 14);
-                ctx.fill();
-                // Border accent.
-                ctx.shadowBlur = 0;
-                ctx.strokeStyle = 'rgba(255,80,80,0.7)';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-                ctx.restore();
+                // Decorative panel + heading (cached). The gradient, glow, and
+                // measureText/roundRect work is done once and blitted each frame;
+                // only the dynamic score/badges below are drawn per-frame.
+                RenderCache.drawGameOverPanel(ctx, heading, canvas.width, canvas.height);
 
-                // Heading with a subtle glow.
-                ctx.save();
-                ctx.shadowColor = 'rgba(255,60,60,0.8)';
-                ctx.shadowBlur = 18;
-                ctx.fillStyle = '#ff4444';
-                ctx.fillText(heading, canvas.width / 2, canvas.height / 2);
-                ctx.restore();
                 // Single-player: show the final score beneath the heading.
                 if (isSinglePlayer) {
                     const myScore = myPlayer ? myPlayer.score : lastScore;

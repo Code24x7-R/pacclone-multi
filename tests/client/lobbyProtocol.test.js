@@ -125,6 +125,8 @@ describe('Lobby protocol (features A–E)', () => {
     global.HighScores = require('../../src/highScores.js');
     global.AudioFX = require('../../src/audio.js');
     global.GhostRenderer = require('../../src/ghostRenderer.js');
+    global.TouchControls = require('../../src/touchControls.js');
+    global.RenderCache = require('../../src/renderCache.js');
 
     const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
     // Grab all inline <script> blocks (no src) and take the last (main) one.

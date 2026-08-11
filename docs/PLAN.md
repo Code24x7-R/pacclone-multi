@@ -2,6 +2,20 @@
 
 ## Active Tasks
 
+### Mobile Support & Performance (iOS / Android)
+
+| # | Task | Status | Priority | Target File(s) |
+| :--- | :--- | :--- | :--- | :--- |
+| M1 | Responsive lobby layout (`@media` single-column) | ✅ Done | High | `index.html` |
+| M2 | Game-over overlay frame-cache (offscreen canvas) | ✅ Done | Medium | `index.html`, `src/renderCache.js` |
+| M3 | Viewport + safe-area + touch-action polish | ✅ Done | Medium | `index.html` |
+| M4 | Fire button for touch | ✅ Done | High | `index.html` |
+| M5 | Joystick refactor: adaptive size + extract `joystickDirection` | ✅ Done | High | `index.html`, `src/touchControls.js` |
+| M6 | Static-layer offscreen caching (maze + pellets) | ✅ Done | Medium | `index.html`, `src/renderCache.js` |
+| M7 | HUD font scaling to display width | ✅ Done | Medium | `index.html` |
+
+### Other Active
+
 | # | Task | Status | Priority | Target File(s) |
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | Add integration tests for WebSocket message handling | ⏳ Pending | Medium | `tests/integration/` |
@@ -22,25 +36,3 @@
 | 3 | Procedural maze generation + level progression | ✅ | `afd8f3c` |
 | 4 | Polish: extra lives, dash, high scores | ✅ | `42b3063` |
 | 5 | Lobby overhaul: warm rejoin, ready-up, countdown, reconnection grace | ✅ | — |
-
-## Notes
-
-- Server remains authoritative — all game state mutations happen server-side only.
-- Keep pure functions in `src/` (no I/O, no side effects).
-- Coverage target: ≥ 80% lines, ≥ 70% branches on `src/`.
-- 317 total tests pass, lint clean.
-- Duplication removed: `isWall` (server.js → gameLogic.js), `GHOST_EAT_SCORE` (single source in ghostAI.js), `extractPellets` (replaced inline loop), `getStartingPositions()` (replaced 2 hardcoded arrays), score constants (PELLET_SCORE/POWER_PELLET_SCORE/PLAYER_EAT_SCORE).
-- Dead code removed: `checkGameOver`, `createInitialState`, `randomDirection`, `moveEntity`, `distance`, `isColliding`, `isValidDirection`, `playMove`, plus 15 orphan exports from gameLogic.js and ghostAI.js.
-
-## Features Implemented (outside plan, from direct requests)
-
-| Feature | Commit |
-| :--- | :--- |
-| Return-to-lobby (leaveGame / returnToLobby messages, Escape key, leave button) | — |
-| Sprite-to-wall clamping (B-005 fix — player no longer clips into walls) | — |
-| Tunnel teleport fix (B-006 — player can reach tunnel edge and wrap) | — |
-| Power-pellet scared state (B-007 — all non-eaten ghosts turn blue, including house ghosts) | — |
-| Single-player mode (solo play, no last-man-standing win, score-based game over) | — |
-| About modal (help/about dialog with features, controls, tech stack) | — |
-| Weapon powerups (pistol + explosive, spawn when power pellets exhausted) | — |
-| Non-dead-end player spawn (B-009 — ≥2 open neighbors guaranteed) | — |
