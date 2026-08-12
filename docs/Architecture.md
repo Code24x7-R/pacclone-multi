@@ -49,6 +49,7 @@ tests/                 # Jest test suites
 ### Spectate & Chat
 - Lobby players can watch an in-progress match (`spectateGame`); `lobbyState` reports match type + participants via `inProgressMatch`.
 - Lobby chat (`chat` / `getChatHistory`) persists in a rolling in-memory history (capped at 100) and is broadcast to all clients.
+- Chat commands: a message starting with `/` is interpreted as a moderator action (e.g. `/resetleaderboard`). Unknown commands fall through to normal chat; role checks are enforced server-side.
 
 ### Weapons
 - When all pellets + power pellets are eaten, weapons spawn on random walkable tiles (50/50 pistol/explosive, 3s cooldown, max 2 on board).
@@ -91,4 +92,15 @@ tests/                 # Jest test suites
 | S → C | `chatHistory` | `{ messages: [{ name, id, text, ts }] }` |
 | S → C | `kicked` | `{ message }` |
 | S → C | `kickNotice` | `{ text }` |
+| C → S | `getLeaderboard` | `{}` |
+| S → C | `leaderboard` | `{ entries: [{ name, score, date }] }` |
+| C → S | `resetLeaderboard` | `{}` (moderator only) |
 | S → C | `error` | `{ message }` |
+
+### Roles
+
+- **Moderator:** one lobby player holds the moderator role (reported in `lobbyState.moderatorId`). The first player to join an empty lobby becomes moderator; the role transfers to the next-oldest player on departure and persists across reconnects (by token) and post-match lobby rebuilds. The moderator may reset the persistent leaderboard via the `/resetleaderboard` chat command or the `resetLeaderboard` message — both gated server-side, so a non-moderator cannot trigger a reset by faking either.
+
+### Leaderboard
+
+- The leaderboard lives on the server and persists to `data/leaderboard.json`. The server is the authoritative scorer: it records each eliminated player's score at death and each survivor's score at match end. Clients never submit scores — they only request (`getLeaderboard`) and render (`leaderboard`) the board. The board is sorted descending by score and capped at 10 entries. A moderator reset clears the board and announces the action in chat.

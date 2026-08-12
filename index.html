@@ -622,6 +622,28 @@
             padding: 10px;
         }
 
+        /* --- High scores heading + moderator reset button --- */
+        .scores-heading { display: inline-block; margin-right: 8px; }
+        .reset-leaderboard-btn {
+            font-size: 11px;
+            padding: 2px 8px;
+            vertical-align: middle;
+        }
+
+        /* --- Moderator badge (shown next to the moderator's name) --- */
+        .mod-badge {
+            display: inline-block;
+            margin-left: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            color: #000;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            border-radius: 4px;
+            padding: 1px 5px;
+            vertical-align: middle;
+            letter-spacing: 0.3px;
+        }
+
         /* --- Host status --- */
         #hostStatus {
             margin: 12px 0 0;
@@ -901,7 +923,8 @@
             </div>
 
             <div class="lobby-col lobby-col-right">
-                <div class="section-h">High Scores</div>
+                <div class="section-h scores-heading">High Scores</div>
+                <button id="resetLeaderboardBtn" class="btn btn-ghost reset-leaderboard-btn" style="display: none;" title="Moderator: reset the leaderboard">Reset</button>
                 <ol id="highScoresList" class="scores-list"></ol>
 
                 <div class="section-h" style="margin-top: 18px;">Chat</div>
@@ -986,11 +1009,20 @@
         let lastGhostPositions = []; // for ghost eaten sound
         let playerLastDirs = {}; // id -> last non-null direction (for mouth facing)
         let latestGameState = null; // latest server state (for input handler lookups)
-        let highScores = HighScores.loadHighScores();
+        // Server-side leaderboard. The server is the single source of truth:
+        // it records scores at game over and broadcasts the board. The client
+        // only renders what it receives — it never inserts scores locally.
+        let leaderboard = []; // [{ name, score, date }] from the server
         let finalScoreRecorded = false;
+        let pendingFinalScore = null; // final score awaiting the server leaderboard
+        let previousTopScore = 0; // board top score when this game started (for "new" detection)
         let gameOverSoundPlayed = false; // one-shot guard for game-over SFX
         let showNewHighScore = false; // overlay flag set on game-over
         let showHighScore = false; // overlay flag set on game-over
+        // Moderator role. Set from the moderatorId the server reports in each
+        // lobbyState; gates the reset-leaderboard button + future admin UI.
+        let isModerator = false;
+        let lastModeratorId = null; // last-seen moderator (for returnToLobby render)
         let showPosDebug = false; // press 'P' to toggle position-vs-pellet-line debug overlay
         var playerSpawnTimes = {}; // id -> timestamp of last spawn/respawn (for spawn animation)
         var playerLastPositions = {}; // id -> {x, y} last known position (for respawn detection)
@@ -1034,7 +1066,7 @@
             renderCountdown(null, 'LOBBY');
             // Re-render the lobby with the server's current player list.
             const lp = message.lobbyPlayers || [];
-            const count = renderLobbyPlayers(lp);
+            const count = renderLobbyPlayers(lp, lastModeratorId);
             renderHighScores(document.getElementById('highScoresList'));
             // Match on stable token (falls back to clientId).
             const lobbyIdentity = myToken || myPlayerId;
@@ -1110,7 +1142,7 @@
         // player's in-game color (LOBBY_SLOT_COLORS); filled slots get a
         // colored dot + name + Host/You tags; empty slots show a dashed
         // "Waiting for player..." placeholder.
-        function renderLobbyPlayers(lobbyPlayersArray) {
+        function renderLobbyPlayers(lobbyPlayersArray, moderatorId) {
             playersList.innerHTML = '';
             const lobbyCount = lobbyPlayersArray ? lobbyPlayersArray.length : 0;
             for (let i = 0; i < 4; i++) {
@@ -1134,6 +1166,15 @@
                         tag.className = 'player-tag';
                         tag.textContent = 'Host';
                         li.appendChild(tag);
+                    }
+                    // Moderator badge: a crown-style tag shown on the mod's slot.
+                    // The role is server-authoritative (moderatorId); the badge is
+                    // purely a client-side rendering hint.
+                    if (moderatorId && p.id === moderatorId) {
+                        const mod = document.createElement('span');
+                        mod.className = 'mod-badge';
+                        mod.textContent = 'MOD';
+                        li.appendChild(mod);
                     }
                     // Tag our own slot by stable token (falls back to clientId).
                     if (p.id === (myToken || myPlayerId)) {
@@ -1191,11 +1232,11 @@
         var LOBBY_MAX_SCORES = 6;
         function renderHighScores(el) {
             if (!el) return;
-            if (!highScores || highScores.length === 0) {
+            if (!leaderboard || leaderboard.length === 0) {
                 el.innerHTML = '<li class="scores-empty">No scores yet — be the first!</li>';
                 return;
             }
-            var visible = highScores.slice(0, LOBBY_MAX_SCORES);
+            var visible = leaderboard.slice(0, LOBBY_MAX_SCORES);
             el.innerHTML = visible.map((e, i) =>
                 `<li>` +
                 `<span class="score-rank">${i + 1}</span>` +
@@ -1203,6 +1244,39 @@
                 `<span class="score-val">${e.score.toLocaleString()}</span>` +
                 `</li>`
             ).join('');
+        }
+
+        // Reflect the moderator role in the UI: show/hide the reset button.
+        function refreshModeratorUi() {
+            var btn = document.getElementById('resetLeaderboardBtn');
+            if (btn) btn.style.display = isModerator ? 'inline-block' : 'none';
+        }
+
+        // Decide the end-of-game high-score overlay from the freshly-rendered
+        // server leaderboard. Called after every leaderboard update; only acts
+        // when the local player has a pending final score from a game just ended.
+        function evaluateHighScoreOverlay() {
+            if (pendingFinalScore == null) return;
+            var score = pendingFinalScore;
+            pendingFinalScore = null;
+            var name = currentPlayerName || 'Player';
+            // Find the best entry on the board that matches this player + score.
+            var matchIndex = -1;
+            for (var i = 0; i < leaderboard.length; i++) {
+                if (leaderboard[i].name === name && leaderboard[i].score === score) {
+                    matchIndex = i;
+                    break;
+                }
+            }
+            if (matchIndex === -1 || score <= 0) return;
+            if (matchIndex === 0 && score > previousTopScore) {
+                showNewHighScore = true;
+                showHighScore = false;
+                if (gameOverSoundPlayed) playHighScore();
+            } else {
+                showNewHighScore = false;
+                showHighScore = true;
+            }
         }
 
         // Reflect lobby-join state in the UI: once joined, lock the name input,
@@ -1528,6 +1602,16 @@
                 sendChat();
             });
         }
+        // Moderator-only: reset the server-side leaderboard. The server re-
+        // enforces the role, so a non-moderator request is rejected with an
+        // error; the button is also hidden unless we are the moderator.
+        var resetLeaderboardBtn = document.getElementById('resetLeaderboardBtn');
+        if (resetLeaderboardBtn) {
+            resetLeaderboardBtn.addEventListener('click', () => {
+                ensureAudio();
+                ws.send(JSON.stringify({ type: 'resetLeaderboard' }));
+            });
+        }
         if (chatInput) {
             chatInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
@@ -1577,6 +1661,10 @@
                     }
                     // Pull the persisted chat history so a late joiner sees prior messages.
                     ws.send(JSON.stringify({ type: 'getChatHistory' }));
+                    // Request the current (server-side) leaderboard. A fresh join
+                    // also gets one proactively, but reconnects only reach this
+                    // branch, so we always ask to be safe.
+                    ws.send(JSON.stringify({ type: 'getLeaderboard' }));
                     break;
                 case 'playerAssigned':
                     // Server tells us our player ID for the new game. This restores
@@ -1584,6 +1672,9 @@
                     myPlayerId = message.playerId;
                     isSpectating = false;
                     amInGame = true; // this client is a participant in the current game
+                    // Snapshot the current board top score so the end-of-game
+                    // overlay can tell a genuinely NEW high score from a repeat.
+                    previousTopScore = leaderboard.length ? leaderboard[0].score : 0;
                     console.log(`[CLIENT] Assigned player ID: ${myPlayerId}`);
                     break;
                 case 'lobbyState':
@@ -1597,10 +1688,16 @@
                         finalScoreRecorded = false;
                         isSinglePlayer = false;
                     }
+                    // Track the moderator (server-authoritative). The local client
+                    // is the moderator if its stable token matches moderatorId.
+                    var reportedModerator = message.moderatorId;
+                    isModerator = reportedModerator != null && myToken === reportedModerator;
+                    if (reportedModerator != null) lastModeratorId = reportedModerator;
+                    refreshModeratorUi();
                     // Update lobby player list — render all 4 slots color-coded.
-                    // Filled slots show the player's color, name, Host/You tag, and a
-                    // ready indicator (feature C).
-                    const lobbyCount = renderLobbyPlayers(message.lobbyPlayers);
+                    // Filled slots show the player's color, name, Host/You tag, a
+                    // moderator badge (if applicable), and a ready indicator.
+                    const lobbyCount = renderLobbyPlayers(message.lobbyPlayers, reportedModerator);
                     // Refresh high score display whenever we return to lobby.
                     renderHighScores(document.getElementById('highScoresList'));
                     // Lobby identity is the stable token, NOT the connection clientId
@@ -1722,17 +1819,14 @@
                         // Update touch fire-button visibility (armed state may have changed).
                         refreshFireButton();
 
-                        // Record high score once per game over (side effect lives here,
-                        // overlay drawing moved into render() so it survives rAF frames).
+                        // The server records the final score into the persistent
+                        // leaderboard and broadcasts the updated board. Remember our
+                        // final score so the leaderboard handler below can decide the
+                        // high-score overlay once the server's board arrives.
                         if (clientGameState === 'GAME_OVER' && !finalScoreRecorded) {
                             finalScoreRecorded = true;
                             const myFinalPlayer = message.gameState.players.find(p => p.id === myPlayerId);
-                            const finalScore = myFinalPlayer ? myFinalPlayer.score : lastScore;
-                            const previousTop = highScores.length ? highScores[0].score : 0;
-                            highScores = HighScores.insertHighScore(currentPlayerName, finalScore);
-                            showNewHighScore = finalScore > previousTop && highScores.length > 0 && highScores[0].score === finalScore && finalScore > 0;
-                            showHighScore = !showNewHighScore && finalScore > 0 && highScores.some(e => e.score === finalScore && e.name === currentPlayerName);
-                            if (showNewHighScore) playHighScore();
+                            pendingFinalScore = myFinalPlayer ? myFinalPlayer.score : lastScore;
                         }
 
                         if (clientGameState === 'LEVEL_COMPLETE') {
@@ -1773,6 +1867,13 @@
                 case 'chatMessage':
                     // A new message from any lobby player — append if present.
                     if (chatLogEl) appendChatMessage(message.message);
+                    break;
+                case 'leaderboard':
+                    // The authoritative, server-side high-score board. Render it;
+                    // if we just finished a game, decide the high-score overlay.
+                    leaderboard = message.entries || [];
+                    renderHighScores(document.getElementById('highScoresList'));
+                    evaluateHighScoreOverlay();
                     break;
                 case 'kicked':
                     // Server removed us (AFK or other reason). Reset to a fresh

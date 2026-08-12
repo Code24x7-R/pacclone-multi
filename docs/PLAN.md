@@ -14,6 +14,16 @@
 | M6 | Static-layer offscreen caching (maze + pellets) | ✅ Done | Medium | `index.html`, `src/renderCache.js` |
 | M7 | HUD font scaling to display width | ✅ Done | Medium | `index.html` |
 
+### Server Leaderboard & Moderator Role
+
+| # | Task | Status | Priority | Target File(s) |
+| :--- | :--- | :--- | :--- | :--- |
+| L1 | Create `src/leaderboard.js` module (pure: insert/sort/cap/sanitize/reset) + unit tests | ✅ Done | High | `src/leaderboard.js`, `tests/server/leaderboard.test.js` |
+| L2 | Server: load/persist leaderboard, record scores at game over, `getLeaderboard`/`resetLeaderboard` messages, broadcast | ✅ Done | High | `server.js`, `tests/integration/leaderboard.test.js` |
+| L3 | Moderator role: first-joiner assignment, transfer on leave, persist by token; chat command `/resetleaderboard` | ✅ Done | High | `server.js`, `tests/integration/moderator.test.js` |
+| L4 | Client: request/render server leaderboard, drop localStorage recording, moderator reset button + role badge, overlay from server data | ✅ Done | High | `index.html`, `tests/client/lobbyProtocol.test.js` |
+| L5 | Persistence dir + `.gitignore` + `docs/Architecture.md` protocol table | ✅ Done | Medium | `.gitignore`, `docs/Architecture.md` |
+
 ### Other Active
 
 | # | Task | Status | Priority | Target File(s) |

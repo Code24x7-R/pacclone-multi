@@ -5,8 +5,10 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
+const Leaderboard = require('./src/leaderboard');
 
 // Resolve the current git commit hash (short) for display in the client's
 // About dialog. Falls back to 'unknown' if git is unavailable or the working
@@ -149,6 +151,115 @@ const chatHistory = []; // { name, id, text, ts }
 // the player only loses by running out of lives. Set when a client sends
 // 'startSinglePlayer' and cleared when the match ends or returns to lobby.
 let isSinglePlayerMatch = false;
+
+// ---------------------------------------------------------------------------
+// Server-side leaderboard (persistent high scores)
+// ---------------------------------------------------------------------------
+// The leaderboard lives on the server so it persists across clients and
+// server restarts (written to data/leaderboard.json). The server is the
+// authoritative scorer: it records each player's final score at game over.
+// Clients never submit scores — they only request and render the board.
+const LEADERBOARD_FILE = process.env.PACCLONE_LEADERBOARD_FILE
+    || path.join(__dirname, 'data', 'leaderboard.json');
+let leaderboard = []; // [{ name, score, date }] sorted desc, capped at MAX_ENTRIES
+
+/**
+ * Load the leaderboard from disk, sanitizing whatever is on disk.
+ * Called once at startup. Falls back to an empty board if the file is
+ * missing or corrupt — the game is still fully playable.
+ */
+function loadLeaderboard() {
+    try {
+        if (!fs.existsSync(LEADERBOARD_FILE)) {
+            leaderboard = [];
+            return;
+        }
+        const raw = fs.readFileSync(LEADERBOARD_FILE, 'utf8');
+        leaderboard = Leaderboard.sanitizeEntries(JSON.parse(raw));
+    } catch (e) {
+        console.error(`[SERVER] Failed to load leaderboard: ${e.message}`);
+        leaderboard = [];
+    }
+}
+
+/**
+ * Persist the current leaderboard to disk. Best-effort: a write failure
+ * (e.g. read-only fs) must not crash the server or lose the in-memory board.
+ */
+function saveLeaderboard() {
+    try {
+        fs.mkdirSync(path.dirname(LEADERBOARD_FILE), { recursive: true });
+        fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(leaderboard));
+    } catch (e) {
+        console.error(`[SERVER] Failed to save leaderboard: ${e.message}`);
+    }
+}
+
+/**
+ * Record a single player's final score into the leaderboard, persist, and
+ * return whether the board changed (so callers can decide to broadcast).
+ * @param {{name: string, score: number}} player
+ * @returns {boolean} true if the board was modified.
+ */
+function recordScore(player) {
+    if (!player) return false;
+    const snapshot = JSON.stringify(leaderboard);
+    leaderboard = Leaderboard.insertScore(leaderboard, player.name, player.score);
+    const changed = JSON.stringify(leaderboard) !== snapshot;
+    if (changed) {
+        saveLeaderboard();
+        broadcastLeaderboard();
+    }
+    return changed;
+}
+
+/**
+ * Broadcast the current leaderboard to every connected client.
+ */
+function broadcastLeaderboard() {
+    const payload = JSON.stringify({ type: 'leaderboard', entries: leaderboard });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) client.send(payload);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Moderator role
+// ---------------------------------------------------------------------------
+// One lobby player holds the "moderator" role, granting access to admin
+// actions (e.g. resetting the leaderboard). The role is assigned to the
+// first player to join an empty lobby and, on that player's departure,
+// transferred to the next-oldest lobby player. It persists across
+// reconnects via the stable token and across lobby rebuilds (post-match).
+let moderatorToken = null; // token (=== player id) of the current moderator
+
+/**
+ * Recompute the moderator from the current lobby. If the current moderator
+ * is still present they keep the role; otherwise it passes to the longest-
+ * standing player (lobbyPlayers[0] — the host). An empty lobby clears it.
+ * Returns true if the moderator changed.
+ */
+function recomputeModerator() {
+    if (lobbyPlayers.length === 0) {
+        if (moderatorToken !== null) { moderatorToken = null; return true; }
+        return false;
+    }
+    if (moderatorToken && lobbyPlayers.some(lp => lp.id === moderatorToken)) {
+        return false; // current moderator still present
+    }
+    // Transfer to the host (longest-standing player).
+    moderatorToken = lobbyPlayers[0].id;
+    return true;
+}
+
+/**
+ * A lobby player's moderator flag, for inclusion in lobbyState.
+ * @param {string} playerId
+ * @returns {boolean}
+ */
+function isModerator(playerId) {
+    return playerId !== null && playerId !== undefined && playerId === moderatorToken;
+}
 
 // The single player's identity (token + name), captured when a single-player
 // game starts. Used to rebuild the lobby after the match ends — without it
@@ -809,6 +920,11 @@ function gameLoop() {
                                 clientWs.playerId = null;
                             }
                         }
+                        // Record the eliminated player's final score before they
+                        // leave players[]. This covers the single-player case
+                        // (where endMatch runs with an empty players[]) and
+                        // multiplayer deaths. Survivors are recorded in endMatch.
+                        recordScore(player);
                         players.splice(playerIndex, 1);
                     } else {
                         // Respawn player in a random free corner (not on top of
@@ -881,6 +997,13 @@ function endMatch(winner) {
             client.send(JSON.stringify({ type: 'gameState', gameState: finalGameState }));
         }
     });
+
+    // Record every surviving player's final score into the persistent
+    // leaderboard. The server is the authoritative scorer — it already knows
+    // each player's score, so the client never submits one. Eliminated players
+    // were already recorded at death. Done after the GAME_OVER broadcast so
+    // the client sees the final frame before the leaderboard updates.
+    for (const p of players) recordScore(p);
     // After a delay, reset to lobby.
     cancelPendingLobbyReset();
     pendingLobbyResetTimer = setTimeout(() => {
@@ -906,6 +1029,8 @@ function endMatch(winner) {
                 token: singlePlayerInfo.id,
                 ready: false,
             }];
+            // The single player keeps the moderator role across their solo match.
+            if (moderatorToken === null) moderatorToken = singlePlayerInfo.id;
         } else {
             // Warm rejoin (feature A): rebuild the lobby from the just-finished
             // match so the group stays together for a rematch. The winner is placed
@@ -1079,13 +1204,21 @@ wss.on('connection', (ws) => {
             // --- Brand-new lobby join: mint a stable token that persists across reconnects ---
             const token = crypto.randomUUID();
             const newLobbyPlayer = { id: token, name: data.name || `Player ${token.slice(-4)}`, token, ready: false, lastActivity: Date.now() };
+            const wasEmpty = lobbyPlayers.length === 0;
             lobbyPlayers.push(newLobbyPlayer);
             ws.lobbyPlayerId = token;
             ws.playerToken = token;
             ws.playerName = newLobbyPlayer.name;
+            // First player to join an empty lobby becomes the moderator.
+            if (wasEmpty) {
+                moderatorToken = token;
+                console.log(`[SERVER] ${newLobbyPlayer.name} joined as moderator.`);
+            }
             console.log(`[SERVER] ${newLobbyPlayer.name} joined the lobby.`);
             // Echo the token so the client can store it for future reconnects.
             ws.send(JSON.stringify({ type: 'lobbyJoined', token }));
+            // Send the current leaderboard so the lobby can render it immediately.
+            ws.send(JSON.stringify({ type: 'leaderboard', entries: leaderboard }));
             broadcastLobbyState();
         } else if (data.type === 'toggleReady') {
             // Toggle this player's ready flag. Identified by stable token so a
@@ -1193,6 +1326,11 @@ wss.on('connection', (ws) => {
             handleChat(ws, data);
         } else if (data.type === 'getChatHistory') {
             ws.send(JSON.stringify({ type: 'chatHistory', messages: chatHistory }));
+        } else if (data.type === 'getLeaderboard') {
+            // Client request for the current leaderboard (e.g. on lobby join).
+            ws.send(JSON.stringify({ type: 'leaderboard', entries: leaderboard }));
+        } else if (data.type === 'resetLeaderboard') {
+            handleResetLeaderboard(ws);
         }
     });
 
@@ -1204,6 +1342,9 @@ wss.on('connection', (ws) => {
             const lobbyIndex = lobbyPlayers.findIndex(lp => lp.id === ws.lobbyPlayerId);
             if (lobbyIndex !== -1) {
                 lobbyPlayers.splice(lobbyIndex, 1);
+                // If the leaving player was the moderator, the role transfers
+                // to the next player — recomputeModerator handles that.
+                recomputeModerator();
                 broadcastLobbyState();
             }
         }
@@ -1310,6 +1451,8 @@ function checkAfkPlayers() {
                 const idx = afkIndices[i];
                 const removed = players[idx];
                 console.log(`[SERVER] Removing AFK player from match: ${removed.name || removed.id} (idle ${Math.round((now - removed.lastActivity) / 1000)}s)`);
+                // Record the AFK player's final score before removing them.
+                recordScore(removed);
                 notifyAfkKick(removed.id);
                 players.splice(idx, 1);
             }
@@ -1365,6 +1508,10 @@ function handleLeaveGame(ws) {
     if (playerIndex !== -1) {
         leavingName = players[playerIndex].name;
         console.log(`[SERVER] ${leavingName || ws.playerId} left the game.`);
+        // Record the leaving player's final score BEFORE splicing them out —
+        // endMatch's own recording loop only sees players still in the array,
+        // and a voluntary leaver is removed before endMatch runs.
+        recordScore(players[playerIndex]);
         // Cancel any grace timer for this player (they're leaving on purpose).
         const timer = graceTimers.get(players[playerIndex].id);
         if (timer) { clearTimeout(timer); graceTimers.delete(players[playerIndex].id); }
@@ -1431,6 +1578,7 @@ function broadcastLobbyState() {
                 currentGameState: currentGameState,
                 countdown: countdown,
                 inProgressMatch: inProgressMatch,
+                moderatorId: moderatorToken,
             }));
         }
     });
@@ -1446,6 +1594,16 @@ function handleChat(ws, data) {
     if (!sender) return;
     const text = String(data.text || '').trim().slice(0, 200);
     if (!text) return;
+
+    // Moderator chat commands: a message starting with '/' is interpreted as
+    // an admin action rather than plain chat. The role check is enforced here
+    // (server authority) so a non-mod client cannot trigger these by faking a
+    // button click. Unknown commands fall through to normal chat.
+    if (text.charAt(0) === '/' && isModerator(sender.id)) {
+        const handled = handleChatCommand(ws, sender, text);
+        if (handled) return;
+    }
+
     const msg = { name: sender.name, id: sender.id, text, ts: Date.now() };
     chatHistory.push(msg);
     if (chatHistory.length > MAX_CHAT_HISTORY) chatHistory.shift();
@@ -1453,6 +1611,64 @@ function handleChat(ws, data) {
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) client.send(payload);
     });
+}
+
+/**
+ * Execute a moderator chat command. Returns true if the text was recognized
+ * as a command (and consumed), false if it should be treated as normal chat.
+ * @param {WebSocket} ws
+ * @param {Object} sender - The lobby player entry.
+ * @param {string} text - Full command text including the leading '/'.
+ * @returns {boolean}
+ */
+function handleChatCommand(ws, sender, text) {
+    const parts = text.slice(1).trim().split(/\s+/);
+    const cmd = (parts[0] || '').toLowerCase();
+    if (cmd === 'resetleaderboard') {
+        doResetLeaderboard(sender.name);
+        return true;
+    }
+    // Unknown command — let it pass through as a normal chat message.
+    return false;
+}
+
+/**
+ * Apply a leaderboard reset (moderator action): clear the board, persist it,
+ * and announce the change to every connected client. Shared by the chat
+ * command and the explicit resetLeaderboard message so both paths are gated
+ * by the moderator check at the call site.
+ * @param {string} moderatorName - Name to credit in the announcement.
+ */
+function doResetLeaderboard(moderatorName) {
+    leaderboard = Leaderboard.resetLeaderboard();
+    saveLeaderboard();
+    broadcastLeaderboard();
+    const notice = {
+        name: 'System',
+        id: 'system',
+        text: `${moderatorName} reset the leaderboard.`,
+        ts: Date.now(),
+    };
+    chatHistory.push(notice);
+    if (chatHistory.length > MAX_CHAT_HISTORY) chatHistory.shift();
+    const payload = JSON.stringify({ type: 'chatMessage', message: notice });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) client.send(payload);
+    });
+}
+
+/**
+ * Handle an explicit `resetLeaderboard` message (e.g. from a moderator-only
+ * UI button). Gated on the moderator role server-side.
+ * @param {WebSocket} ws
+ */
+function handleResetLeaderboard(ws) {
+    if (!ws.lobbyPlayerId || !isModerator(ws.lobbyPlayerId)) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Only the moderator can reset the leaderboard.' }));
+        return;
+    }
+    const sender = lobbyPlayers.find(lp => lp.id === ws.lobbyPlayerId);
+    doResetLeaderboard(sender ? sender.name : 'Moderator');
 }
 
 // A lobby client opts to spectate the in-progress match. Removes them from
@@ -1485,6 +1701,9 @@ function handleSpectateGame(ws) {
 
 const PORT = process.env.PORT || 8080;
 if (require.main === module) {
+  // Load the persistent leaderboard (and ensure the data dir exists).
+  loadLeaderboard();
+
   server.listen(PORT, () => {
     console.log(`[SERVER] Listening on http://localhost:${PORT}`);
   });
