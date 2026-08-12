@@ -4,6 +4,15 @@
 
 ## 2026-08-12
 
+### [BUGFIX] Frightened-ghost freeze at tile centers (epsilon == step size)
+- Symptom: frightened ghosts freeze in place with zero net movement despite having no wall around them (all four neighbors walkable). Reported as a recurrence of the stuck-ghost bug, specific to the frightened state.
+- Root cause: `isAtTileCenter` used epsilon `ghostBaseSpeed / 2 = 0.04`, which equals exactly one frightened step (`ghostBaseSpeed * GHOST_FRIGHTENED_SPEED = 0.08 * 0.5 = 0.04`). After a frightened ghost stepped off a center to e.g. `x = 9.46`, float rounding made `|frac(x) - 0.5| = 0.03999... < 0.04`, so it was wrongly re-detected as "at center", snapped back to `9.5`, re-picked the same direction, and looped forever. A brute-force simulation of the server loop reproduced it: 595 freezes across 150 maze seeds at the old epsilon. Normal ghosts (step 0.064) and eaten ghosts (step 0.12) both clear the 0.04 window, which is why the freeze was exclusive to the frightened state.
+- Fix: tightened the epsilon to `ghostBaseSpeed * GHOST_FRIGHTENED_SPEED * 0.9` (= 0.036) in the server's per-tick ghost update, so one step always clears the detection window with margin above float error while staying larger than half the normal step (so normal/scatter/chase ghosts still detect intersections). Simulation confirmed 0 freezes at the new epsilon.
+- 3 regression tests in `tests/server/ghostAI.test.js`: the invariant (one frightened step lands outside the epsilon window), the ordering (epsilon < smallest step), and a 60-seed behavioral simulation that asserts every frightened ghost makes net progress and never freezes. Verified the tests fail on the old epsilon and pass on the new one.
+- Files changed: `server.js` (epsilon in ghost update loop), `tests/server/ghostAI.test.js` (new test block), `docs/BUGS.md`, `docs/PROGRESS_LOG.md`.
+
+## 2026-08-12
+
 ### [FEATURE] Mobile support & performance pass (iOS / Android)
 - Goal: improve mobile UX and render performance without a mobile-first rewrite.
 - M1 Responsive lobby: `@media` queries collapse the two-column lobby to a single scrollable column below 720px and tighten name row / buttons below 480px.

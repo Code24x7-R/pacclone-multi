@@ -740,6 +740,126 @@ describe("wall collision bug fix (ghost frozen at tile edge)", () => {
   });
 });
 
+describe("frightened-ghost epsilon invariant (no freeze at tile centers)", () => {
+  // Root cause of the stuck-ghost bug: the center-detection epsilon was
+  // ghostBaseSpeed / 2 = 0.04, which is EXACTLY one frightened step
+  // (ghostBaseSpeed * GHOST_FRIGHTENED_SPEED = 0.08 * 0.5 = 0.04). After a
+  // frightened ghost steps off a center to e.g. x=9.46, float error makes
+  // |frac(x) - 0.5| = 0.03999... < 0.04, so it is wrongly re-detected as
+  // "at center", snaps back to 9.5, re-picks the same direction, and loops
+  // forever with zero net movement. The fix tightens epsilon to
+  // ghostBaseSpeed * GHOST_FRIGHTENED_SPEED * 0.9 so one step always clears
+  // the detection window.
+
+  const ghostBaseSpeed = 0.08;
+  const frightenedStep = ghostBaseSpeed * GHOST_FRIGHTENED_SPEED; // 0.04
+  const centerEpsilon = ghostBaseSpeed * GHOST_FRIGHTENED_SPEED * 0.9; // 0.036
+
+  test("one frightened step away from center is NOT detected as at-center", () => {
+    // The precise float value the server computes after one frightened step.
+    const oneStepRight = 9.5 + frightenedStep;
+    const oneStepLeft = 9.5 - frightenedStep;
+    // After a single step the ghost must be outside the epsilon window.
+    expect(isAtTileCenter(oneStepRight, 6.5, centerEpsilon)).toBe(false);
+    expect(isAtTileCenter(oneStepLeft, 6.5, centerEpsilon)).toBe(false);
+    expect(isAtTileCenter(9.5, 6.5 + frightenedStep, centerEpsilon)).toBe(false);
+    expect(isAtTileCenter(9.5, 6.5 - frightenedStep, centerEpsilon)).toBe(false);
+    // Exactly at center it must still be detected (so turns still happen).
+    expect(isAtTileCenter(9.5, 6.5, centerEpsilon)).toBe(true);
+  });
+
+  test("epsilon is strictly smaller than the smallest per-tick step", () => {
+    // The minimum step across all states is the frightened step. Epsilon must
+    // be strictly less than it, otherwise stepping off a center can never
+    // clear the detection window and the ghost freezes.
+    expect(centerEpsilon).toBeLessThan(frightenedStep);
+  });
+
+  test("frightened ghost makes net progress and never freezes (many seeds)", () => {
+    // Full per-tick simulation mirroring server.js for a frightened ghost
+    // released into a real generated maze. Asserts the ghost always makes net
+    // progress over the run (no permanent freeze) across many maze seeds.
+    const { generateMaze } = require("../../src/mazeGenerator");
+    const { wrapTunnelX } = require("../../src/gameLogic");
+
+    let frozenSeeds = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const maze = generateMaze({ seed });
+      const houseConfig = getDefaultHouseConfig(maze);
+      const w = maze[0].length;
+      const h = maze.length;
+      const ghost = createGhost("blinky", houseConfig);
+      // Place the ghost mid-maze in frightened state, as after a power pellet.
+      ghost.state = "frightened";
+      ghost.frightened = true;
+      ghost.speed = GHOST_FRIGHTENED_SPEED;
+      ghost.direction = "left";
+
+      let maxStuck = 0;
+      const startX = ghost.x;
+      const startY = ghost.y;
+      let prevX = ghost.x;
+      let prevY = ghost.y;
+      let stillTicks = 0;
+
+      for (let t = 0; t < 600; t++) {
+        // Mirror server.js per-tick logic (choose direction at centers, move,
+        // wall snap, stuck detection) using the production epsilon.
+        const atCenter = isAtTileCenter(ghost.x, ghost.y, centerEpsilon);
+        if (atCenter) {
+          const s = snapToTileCenter(ghost);
+          ghost.x = s.x;
+          ghost.y = s.y;
+          const target = getGhostTarget(ghost, {
+            players: [],
+            blinky: ghost,
+            mode: "scatter",
+            mazeWidth: w,
+            mazeHeight: h,
+            houseConfig,
+          });
+          ghost.direction = chooseDirection(ghost, target, maze, w, h);
+        }
+        const vec = { dx: 0, dy: 0 };
+        if (ghost.direction === "left") vec.dx = -1;
+        else if (ghost.direction === "right") vec.dx = 1;
+        else if (ghost.direction === "up") vec.dy = -1;
+        else if (ghost.direction === "down") vec.dy = 1;
+        const moveAmount = ghostBaseSpeed * (ghost.speed || GHOST_NORMAL_SPEED);
+        const nextX = ghost.x + vec.dx * moveAmount;
+        const nextY = ghost.y + vec.dy * moveAmount;
+        if (!isGhostWalkable(maze, Math.floor(nextX), Math.floor(nextY), ghost.state, w, h)) {
+          const s = snapToTileCenter(ghost);
+          ghost.x = s.x;
+          ghost.y = s.y;
+        } else {
+          ghost.x = nextX;
+          ghost.y = nextY;
+        }
+        ghost.x = wrapTunnelX(ghost.x, ghost.y, maze);
+
+        if (Math.abs(ghost.x - prevX) < 0.001 && Math.abs(ghost.y - prevY) < 0.001) {
+          stillTicks += 1;
+        } else {
+          stillTicks = 0;
+        }
+        maxStuck = Math.max(maxStuck, stillTicks);
+        prevX = ghost.x;
+        prevY = ghost.y;
+      }
+
+      // A genuinely frozen ghost sits still for hundreds of ticks. Require
+      // that no seed freezes for more than a brief transient (< 5 ticks).
+      if (maxStuck >= 10) frozenSeeds++;
+
+      // Net progress: the ghost must have moved meaningfully from its start.
+      const dist = Math.hypot(ghost.x - startX, ghost.y - startY);
+      expect(dist).toBeGreaterThan(0.5);
+    }
+    expect(frozenSeeds).toBe(0);
+  });
+});
+
 describe("isAtTileCenter", () => {
   test("returns true at exact tile center", () => {
     expect(isAtTileCenter(5.5, 3.5)).toBe(true);

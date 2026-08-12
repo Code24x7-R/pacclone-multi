@@ -692,7 +692,16 @@ function gameLoop() {
             const prevX = ghost.x;
             const prevY = ghost.y;
 
-            const atCenter = isAtTileCenter(ghost.x, ghost.y, ghostBaseSpeed / 2);
+            // Center-detection epsilon. It must be strictly smaller than the
+            // smallest per-tick step — a frightened ghost moves
+            // ghostBaseSpeed * GHOST_FRIGHTENED_SPEED — otherwise a ghost that
+            // has just stepped OFF a center lands back inside the window, is
+            // re-detected as "at center", snaps back, and freezes in place.
+            // 0.9 * that step keeps a comfortable margin above float error while
+            // staying larger than half the normal step, so normal/scatter/chase
+            // ghosts still detect intersections.
+            const centerEpsilon = ghostBaseSpeed * GHOST_FRIGHTENED_SPEED * 0.9;
+            const atCenter = isAtTileCenter(ghost.x, ghost.y, centerEpsilon);
             if (atCenter) {
                 const snapped = snapToTileCenter(ghost);
                 ghost.x = snapped.x;
